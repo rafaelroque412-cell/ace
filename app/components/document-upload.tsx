@@ -9,6 +9,14 @@ type DocumentItem = {
   file_name: string;
   file_size: number;
   document_type: string;
+  error_message: string | null;
+  metadata: {
+    chunkCount?: number;
+    extractionMethod?: string;
+    ocrPartial?: boolean;
+    pageCount?: number;
+    textLength?: number;
+  };
   source_entity: string | null;
   status: "uploaded" | "processing" | "indexed" | "error";
   created_at: string;
@@ -118,7 +126,7 @@ export function DocumentUpload() {
 
       setFile(null);
       setTitle("");
-      setMessage("PDF subido y registrado correctamente.");
+      setMessage("PDF subido, procesado e indexado correctamente.");
       await loadDocuments();
     } catch {
       setMessage("No se pudo conectar con el servidor.");
@@ -248,6 +256,18 @@ export function DocumentUpload() {
                   {document.document_type} · {formatBytes(document.file_size)} ·{" "}
                   {document.source_entity ?? "Sin entidad"}
                 </span>
+                {document.metadata?.extractionMethod ? (
+                  <span>
+                    {document.metadata.extractionMethod === "openai-ocr"
+                      ? "OCR OpenAI"
+                      : "Texto PDF"}{" "}
+                    · {document.metadata.chunkCount ?? 0} fragmentos
+                    {document.metadata.ocrPartial ? " · OCR parcial" : ""}
+                  </span>
+                ) : null}
+                {document.error_message ? (
+                  <span className="documentError">{document.error_message}</span>
+                ) : null}
               </div>
               <div className="documentActions">
                 <small data-status={document.status}>{statusLabel(document.status)}</small>

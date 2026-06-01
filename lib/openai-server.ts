@@ -11,3 +11,4 @@ export function getOpenAIClient() {
 }
 
 export const legalAnswerModel = process.env.OPENAI_LEGAL_MODEL ?? "gpt-4.1-mini";
+export const pdfOcrModel = process.env.OPENAI_PDF_OCR_MODEL ?? "gpt-4o-mini";

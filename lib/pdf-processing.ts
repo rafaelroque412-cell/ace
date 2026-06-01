@@ -1,4 +1,6 @@
 import pdfParse from "pdf-parse/lib/pdf-parse";
+import { toFile } from "openai";
+import { getOpenAIClient, pdfOcrModel } from "./openai-server";
 import { type DocumentRecord, supabaseRest } from "./supabase-server";
 import { upsertTextRecords } from "./pinecone";
 
@@ -13,6 +15,22 @@ type ChunkInsert = {
 const chunkSize = 2600;
 const chunkOverlap = 350;
 const maxChunksPerDocument = 120;
+const minExtractedTextLength = 120;
+const unusableOcrPatterns = [
+  "no puedo procesar",
+  "no puedo extraer",
+  "no puedo transcribir",
+  "puedo ayudarte con un resumen",
+  "i can't process",
+  "i cannot process",
+];
+
+type ExtractedPdfText = {
+  extractionMethod: "pdf-text" | "openai-ocr";
+  ocrPartial: boolean;
+  pageCount: number;
+  text: string;
+};
 
 function normalizeText(text: string) {
   return text
@@ -44,6 +62,96 @@ function chunkText(text: string) {
   return chunks;
 }
 
+function getOcrMaxPages() {
+  const value = Number.parseInt(process.env.OPENAI_OCR_MAX_PAGES ?? "25", 10);
+  return Number.isFinite(value) && value > 0 ? value : 25;
+}
+
+function isOpenAiPdfOcrEnabled() {
+  return process.env.OPENAI_PDF_OCR_ENABLED === "true";
+}
+
+function isUsableExtractedText(text: string) {
+  const normalized = text.toLowerCase();
+  return (
+    text.length >= minExtractedTextLength &&
+    !unusableOcrPatterns.some((pattern) => normalized.includes(pattern))
+  );
+}
+
+async function extractPdfTextWithOpenAI(file: File, pageCount: number): Promise<ExtractedPdfText> {
+  const openai = getOpenAIClient();
+  const maxPages = getOcrMaxPages();
+  const pagesToExtract = Math.min(pageCount || maxPages, maxPages);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const uploaded = await openai.files.create({
+    file: await toFile(buffer, file.name, { type: "application/pdf" }),
+    purpose: "user_data",
+  });
+
+  try {
+    const response = await openai.responses.create({
+      input: [
+        {
+          content: [
+            {
+              file_id: uploaded.id,
+              type: "input_file",
+            },
+            {
+              text: `Extrae texto OCR legible de este PDF escaneado para indexacion juridica.
+
+Alcance:
+- Procesa desde la pagina 1 hasta la pagina ${pagesToExtract}.
+- Conserva titulos, articulos, numerales, disposiciones, fechas y nombres de entidades.
+- No resumas. Devuelve texto plano.
+- Si una pagina no tiene texto legible, escribe "[pagina no legible]".
+- Separa paginas con "=== PAGINA N ===".`,
+              type: "input_text",
+            },
+          ],
+          role: "user",
+        },
+      ],
+      max_output_tokens: 12000,
+      model: pdfOcrModel,
+      temperature: 0,
+    });
+
+    return {
+      extractionMethod: "openai-ocr",
+      ocrPartial: Boolean(pageCount && pageCount > pagesToExtract),
+      pageCount,
+      text: normalizeText(response.output_text),
+    };
+  } finally {
+    await openai.files.delete(uploaded.id).catch(() => undefined);
+  }
+}
+
+async function extractPdfText(file: File): Promise<ExtractedPdfText> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const pdf = await pdfParse(buffer);
+  const text = normalizeText(pdf.text);
+
+  if (text.length >= minExtractedTextLength) {
+    return {
+      extractionMethod: "pdf-text",
+      ocrPartial: false,
+      pageCount: pdf.numpages,
+      text,
+    };
+  }
+
+  if (!isOpenAiPdfOcrEnabled()) {
+    throw new Error(
+      "El PDF no tiene texto seleccionable. Convierte el archivo con OCR o sube una version con texto antes de indexarlo.",
+    );
+  }
+
+  return extractPdfTextWithOpenAI(file, pdf.numpages);
+}
+
 export async function processPdfForSearch(document: DocumentRecord, file: File) {
   await supabaseRest(`documents?id=eq.${document.id}`, {
     body: JSON.stringify({
@@ -54,11 +162,15 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
   });
 
   try {
-    const pdf = await pdfParse(Buffer.from(await file.arrayBuffer()));
-    const text = normalizeText(pdf.text);
+    const extracted = await extractPdfText(file);
+    const text = extracted.text;
 
-    if (!text) {
-      throw new Error("No se pudo extraer texto del PDF");
+    if (!isUsableExtractedText(text)) {
+      throw new Error(
+        extracted.extractionMethod === "openai-ocr"
+          ? "El OCR experimental no devolvio texto juridico util. Convierte el PDF con OCR antes de subirlo."
+          : "No se pudo extraer texto suficiente del PDF. El archivo parece escaneado o no legible.",
+      );
     }
 
     const chunks = chunkText(text);
@@ -72,7 +184,9 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       content,
       document_id: document.id,
       metadata: {
-        pageCount: pdf.numpages,
+        extractionMethod: extracted.extractionMethod,
+        ocrPartial: extracted.ocrPartial,
+        pageCount: extracted.pageCount,
       },
       pinecone_vector_id: `${document.id}::${index}`,
     }));
@@ -102,7 +216,10 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
         metadata: {
           ...document.metadata,
           chunkCount: chunks.length,
-          pageCount: pdf.numpages,
+          extractionMethod: extracted.extractionMethod,
+          ocrMaxPages: getOcrMaxPages(),
+          ocrPartial: extracted.ocrPartial,
+          pageCount: extracted.pageCount,
           textLength: text.length,
         },
         status: "indexed",
@@ -113,7 +230,7 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
     return {
       chunkCount: chunks.length,
       document: updated,
-      pageCount: pdf.numpages,
+      pageCount: extracted.pageCount,
       textLength: text.length,
     };
   } catch (error) {
