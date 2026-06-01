@@ -93,3 +93,29 @@ export async function uploadPdfToStorage(path: string, file: File) {
 
   return response.json();
 }
+
+export async function deleteStorageObjects(bucket: string, paths: string[]) {
+  if (paths.length === 0) {
+    return;
+  }
+
+  const { serviceRoleKey, supabaseUrl } = getSupabaseServerConfig();
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}`, {
+    body: JSON.stringify({
+      prefixes: paths,
+    }),
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase Storage delete ${response.status}: ${detail}`);
+  }
+
+  return response.json();
+}

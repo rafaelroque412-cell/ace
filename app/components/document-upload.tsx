@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, RefreshCw, UploadCloud } from "lucide-react";
+import { FileText, RefreshCw, Trash2, UploadCloud } from "lucide-react";
 
 type DocumentItem = {
   id: string;
@@ -54,6 +54,7 @@ export function DocumentUpload() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentType, setDocumentType] = useState("opinion");
   const [file, setFile] = useState<File | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [sourceEntity, setSourceEntity] = useState("OECE");
@@ -123,6 +124,38 @@ export function DocumentUpload() {
       setMessage("No se pudo conectar con el servidor.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteDocument(document: DocumentItem) {
+    const confirmed = window.confirm(
+      `Eliminar "${document.title}" de Supabase Storage, Supabase DB y Pinecone?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(document.id);
+    setMessage("Eliminando documento...");
+
+    try {
+      const response = await fetch(`/api/documents/${document.id}`, {
+        method: "DELETE",
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setMessage(payload.error ?? "No se pudo eliminar el documento");
+        return;
+      }
+
+      setMessage("Documento eliminado completamente.");
+      await loadDocuments();
+    } catch {
+      setMessage("No se pudo conectar con el servidor.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -216,7 +249,18 @@ export function DocumentUpload() {
                   {document.source_entity ?? "Sin entidad"}
                 </span>
               </div>
-              <small data-status={document.status}>{statusLabel(document.status)}</small>
+              <div className="documentActions">
+                <small data-status={document.status}>{statusLabel(document.status)}</small>
+                <button
+                  aria-label={`Eliminar ${document.title}`}
+                  disabled={deletingId === document.id}
+                  onClick={() => void deleteDocument(document)}
+                  title="Eliminar documento"
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </article>
           ))
         )}

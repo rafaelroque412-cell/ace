@@ -144,3 +144,36 @@ export async function searchTextRecords(query: string, topK = 6) {
 
   return payload.result?.hits ?? [];
 }
+
+export async function deleteRecords(ids: string[]) {
+  if (ids.length === 0) {
+    return { deleted: 0 };
+  }
+
+  const { apiKey, namespace } = getPineconeConfig();
+  const index = await describePineconeIndex();
+  const response = await fetch(`https://${index.host}/vectors/delete`, {
+    body: JSON.stringify({
+      ids,
+      namespace,
+    }),
+      headers: {
+        "Api-Key": apiKey,
+        "Content-Type": "application/json",
+        "X-Pinecone-API-Version": pineconeApiVersion,
+      },
+      method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pinecone delete ${response.status}: ${await response.text()}`);
+  }
+
+  const text = await response.text();
+
+  if (!text) {
+    return { deleted: ids.length };
+  }
+
+  return JSON.parse(text) as unknown;
+}
