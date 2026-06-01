@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   UploadCloud,
 } from "lucide-react";
+import { DocumentUpload } from "./components/document-upload";
 
 const modules = [
   {
@@ -46,15 +47,6 @@ const modules = [
     icon: History,
     status: "MVP",
   },
-];
-
-const pipeline = [
-  "PDF original",
-  "Extraccion de texto",
-  "Metadata juridica",
-  "Embeddings",
-  "Pinecone",
-  "Respuesta con citas",
 ];
 
 export default function Home() {
@@ -146,25 +138,7 @@ export default function Home() {
             </form>
           </div>
 
-          <div className="uploadPanel" id="documentos">
-            <div className="panelHeader">
-              <div>
-                <p className="eyebrow">Base documental</p>
-                <h2>Carga e indexacion</h2>
-              </div>
-              <UploadCloud size={22} />
-            </div>
-            <div className="dropzone">
-              <UploadCloud size={28} />
-              <strong>Subir PDFs juridicos</strong>
-              <span>Ley, reglamento, opiniones, directivas, resoluciones y expedientes.</span>
-            </div>
-            <div className="pipeline">
-              {pipeline.map((step) => (
-                <span key={step}>{step}</span>
-              ))}
-            </div>
-          </div>
+          <DocumentUpload />
         </section>
 
         <section className="moduleGrid" id="contratos">

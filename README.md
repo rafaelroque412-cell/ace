@@ -45,6 +45,45 @@ npm run dev
 
 La aplicacion abrira en `http://localhost:3000`.
 
+## Configurar base de datos Supabase
+
+Antes de subir PDFs, ejecuta el esquema inicial:
+
+1. Abre Supabase Dashboard.
+2. Entra al proyecto.
+3. Ve a `SQL Editor`.
+4. Copia y ejecuta el contenido de `docs/supabase/schema.sql`.
+
+Ese script crea:
+
+- Tabla `documents`.
+- Tabla `document_chunks`.
+- Tabla `document_summaries`.
+- Tabla `chat_sessions`.
+- Tabla `chat_messages`.
+- Tabla `audit_logs`.
+- Bucket privado `documents` para PDFs.
+
+Luego prueba:
+
+```bash
+npm run dev
+```
+
+Y abre:
+
+```text
+http://localhost:3000/api/documents
+```
+
+Debe responder con:
+
+```json
+{
+  "documents": []
+}
+```
+
 ## Variables de entorno
 
 Las API keys privadas nunca deben exponerse en el navegador.

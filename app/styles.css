@@ -26,7 +26,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -255,21 +256,105 @@ h2 {
   padding: 0 13px;
 }
 
-.dropzone {
+.documentForm {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.filePicker {
   display: grid;
   place-items: center;
-  min-height: 208px;
-  margin: 18px;
+  min-height: 178px;
   border: 1px dashed #90aaa5;
   border-radius: 8px;
   background: #f6fbfa;
   color: var(--muted);
+  cursor: pointer;
   text-align: center;
   padding: 22px;
 }
 
-.dropzone strong {
+.filePicker strong {
   color: var(--ink);
+}
+
+.filePicker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 12px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 6px;
+}
+
+.formGrid label:first-child {
+  grid-column: 1 / -1;
+}
+
+.formGrid span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.formGrid input,
+.formGrid select {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0 12px;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.primaryButton:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.secondaryButton:hover {
+  background: #f3f7f6;
+}
+
+.formMessage {
+  margin: 0;
+  border-radius: 8px;
+  background: var(--soft);
+  color: #173d38;
+  line-height: 1.4;
+  padding: 10px 12px;
 }
 
 .pipeline {
@@ -287,6 +372,99 @@ h2 {
   font-size: 12px;
   font-weight: 700;
   padding: 6px 9px;
+}
+
+.documentList {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 16px 18px 18px;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink);
+}
+
+.listHeader span {
+  display: grid;
+  min-width: 28px;
+  min-height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.emptyState {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 13px;
+}
+
+.documentItem {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+}
+
+.documentIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--brand);
+}
+
+.documentItem strong,
+.documentItem span {
+  display: block;
+}
+
+.documentItem strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documentItem span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.documentItem small {
+  border-radius: 999px;
+  background: #eef6f4;
+  color: var(--brand);
+  font-weight: 800;
+  padding: 6px 8px;
+}
+
+.documentItem small[data-status="error"] {
+  background: #fff0ef;
+  color: #a9382f;
+}
+
+.documentItem small[data-status="processing"] {
+  background: #f3eee7;
+  color: #7b4724;
+}
+
+.documentItem small[data-status="indexed"] {
+  background: #edf7ed;
+  color: #2e6b36;
 }
 
 .moduleGrid {
@@ -384,6 +562,15 @@ h2 {
 
   .promptBox {
     grid-template-columns: 1fr;
+  }
+
+  .formGrid,
+  .documentItem {
+    grid-template-columns: 1fr;
+  }
+
+  .formActions {
+    display: grid;
   }
 
   .message {
