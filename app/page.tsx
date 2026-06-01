@@ -5,10 +5,10 @@ import {
   FileText,
   GitCompare,
   History,
-  ShieldCheck,
   UploadCloud,
 } from "lucide-react";
 import { DocumentUpload } from "./components/document-upload";
+import { LegalChat } from "./components/legal-chat";
 
 const modules = [
   {
@@ -109,35 +109,7 @@ export default function Home() {
         </section>
 
         <section className="workspace">
-          <div className="chatPanel" id="chat">
-            <div className="panelHeader">
-              <div>
-                <p className="eyebrow">Consulta legal</p>
-                <h2>Chat juridico</h2>
-              </div>
-              <ShieldCheck size={22} />
-            </div>
-
-            <div className="conversation">
-              <div className="message user">Que dice la Ley 32069 sobre impedimentos?</div>
-              <div className="message assistant">
-                El sistema respondera usando solo documentos indexados y mostrara articulos,
-                numerales, fuentes y nivel de confianza.
-              </div>
-            </div>
-
-            <form className="promptBox">
-              <input
-                aria-label="Pregunta juridica"
-                placeholder="Escribe una consulta sobre Ley 32069, reglamento u OECE..."
-              />
-              <button type="button">
-                <Bot size={18} />
-                Consultar
-              </button>
-            </form>
-          </div>
-
+          <LegalChat />
           <DocumentUpload />
         </section>
 

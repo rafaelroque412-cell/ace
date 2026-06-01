@@ -17,6 +17,18 @@ export type PineconeRecord = {
   source_entity?: string;
 };
 
+type PineconeSearchHit = {
+  _id: string;
+  _score: number;
+  chunk_id?: string;
+  chunk_index?: number;
+  document_id?: string;
+  document_type?: string;
+  source_entity?: string;
+  text?: string;
+  title?: string;
+};
+
 const pineconeApiVersion = "2026-04";
 const defaultNamespace = "legal-documents";
 
@@ -90,4 +102,45 @@ export async function upsertTextRecords(records: PineconeRecord[]) {
   }
 
   return JSON.parse(text) as unknown;
+}
+
+export async function searchTextRecords(query: string, topK = 6) {
+  const { apiKey, namespace } = getPineconeConfig();
+  const index = await describePineconeIndex();
+  const response = await fetch(
+    `https://${index.host}/records/namespaces/${encodeURIComponent(namespace)}/search`,
+    {
+      body: JSON.stringify({
+        query: {
+          inputs: {
+            text: query,
+          },
+          top_k: topK,
+        },
+        fields: [
+          "text",
+          "document_id",
+          "chunk_id",
+          "chunk_index",
+          "document_type",
+          "title",
+          "source_entity",
+        ],
+      }),
+      headers: {
+        "Api-Key": apiKey,
+        "Content-Type": "application/json",
+        "X-Pinecone-API-Version": pineconeApiVersion,
+      },
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Pinecone search ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as { result?: { hits?: PineconeSearchHit[] } };
+
+  return payload.result?.hits ?? [];
 }

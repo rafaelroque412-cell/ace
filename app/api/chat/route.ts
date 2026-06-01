@@ -1,26 +1,33 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { answerLegalQuestion, chatRequestSchema } from "@/lib/legal-chat";
 
-const chatRequestSchema = z.object({
-  question: z.string().min(5),
-  mode: z.enum(["breve", "tecnica", "informe", "checklist"]).default("tecnica"),
-});
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const payload = chatRequestSchema.safeParse(await request.json());
+  try {
+    const payload = chatRequestSchema.safeParse(await request.json());
 
-  if (!payload.success) {
+    if (!payload.success) {
+      return NextResponse.json(
+        { error: "Solicitud invalida", details: payload.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const result = await answerLegalQuestion(payload.data);
+
+    return NextResponse.json({
+      mode: payload.data.mode,
+      question: payload.data.question,
+      ...result,
+    });
+  } catch (error) {
     return NextResponse.json(
-      { error: "Solicitud invalida", details: payload.error.flatten() },
-      { status: 400 },
+      {
+        error: error instanceof Error ? error.message : "No se pudo generar la respuesta",
+      },
+      { status: 500 },
     );
   }
-
-  return NextResponse.json({
-    answer:
-      "Endpoint preparado. Siguiente paso: conectar embeddings, Pinecone y generacion OpenAI con citas verificables.",
-    mode: payload.data.mode,
-    question: payload.data.question,
-    sources: [],
-  });
 }
