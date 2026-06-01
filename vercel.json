@@ -1,0 +1,7 @@
+{
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "env": {
+    "PINECONE_INDEX_NAME": "ace-ley-32069"
+  }
+}
