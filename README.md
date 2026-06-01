@@ -91,6 +91,7 @@ Las API keys privadas nunca deben exponerse en el navegador.
 - `OPENAI_API_KEY`: clave para modelos, embeddings y generacion.
 - `PINECONE_API_KEY`: clave para busqueda vectorial.
 - `PINECONE_INDEX_NAME`: indice de Pinecone.
+- `PINECONE_NAMESPACE`: namespace donde se indexaran los fragmentos juridicos.
 - `NEXT_PUBLIC_SUPABASE_URL`: URL publica de Supabase.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: anon key para cliente.
 - `SUPABASE_SERVICE_ROLE_KEY`: service role para operaciones servidor.

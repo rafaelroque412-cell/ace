@@ -6,8 +6,10 @@ import {
   supabaseRest,
   uploadPdfToStorage,
 } from "@/lib/supabase-server";
+import { processPdfForSearch } from "@/lib/pdf-processing";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const maxPdfSize = 50 * 1024 * 1024;
 
@@ -85,7 +87,19 @@ export async function POST(request: Request) {
       method: "POST",
     });
 
-    return NextResponse.json({ document: inserted[0] }, { status: 201 });
+    const indexing = await processPdfForSearch(inserted[0], file);
+
+    return NextResponse.json(
+      {
+        document: indexing.document,
+        indexing: {
+          chunkCount: indexing.chunkCount,
+          pageCount: indexing.pageCount,
+          textLength: indexing.textLength,
+        },
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return NextResponse.json(
       {

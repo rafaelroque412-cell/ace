@@ -47,10 +47,11 @@ export function getSupabaseHeaders(prefer?: string) {
 
 export async function supabaseRest<T>(path: string, init?: RequestInit): Promise<T> {
   const { supabaseUrl } = getSupabaseServerConfig();
+  const shouldReturnRepresentation = init?.method === "POST" || init?.method === "PATCH";
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     ...init,
     headers: {
-      ...getSupabaseHeaders(init?.method === "POST" ? "return=representation" : undefined),
+      ...getSupabaseHeaders(shouldReturnRepresentation ? "return=representation" : undefined),
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
