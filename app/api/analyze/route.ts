@@ -58,8 +58,12 @@ export async function POST(request: Request) {
         supabaseRest<DocumentRow[]>(
           `documents?id=eq.${payload.documentId}&select=id,title,document_type`,
         ),
+        // Texto completo: la deteccion deterministica de clausulas del art.60 corre
+        // sobre todo el documento, asi que truncar (antes limit=80) marcaba como
+        // FALTA clausulas presentes en chunks posteriores. El limite alto es solo
+        // una red de seguridad ante documentos extremos.
         supabaseRest<ChunkRow[]>(
-          `document_chunks?document_id=eq.${payload.documentId}&select=content&order=chunk_index.asc&limit=80`,
+          `document_chunks?document_id=eq.${payload.documentId}&select=content&order=chunk_index.asc&limit=5000`,
         ),
       ]);
       const doc = docs[0];

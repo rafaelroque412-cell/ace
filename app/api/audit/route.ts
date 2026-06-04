@@ -35,13 +35,19 @@ export async function GET(request: Request) {
       query += `&entity_type=eq.${encodeURIComponent(entityType)}`;
     }
 
-    const [logs, actions] = await Promise.all([
+    const [logs, distinctActions] = await Promise.all([
       supabaseRest<AuditRow[]>(query),
-      // Acciones distintas para poblar el filtro de la UI.
-      supabaseRest<Array<{ action: string }>>("audit_logs?select=action&order=action.asc"),
+      // Acciones distintas para el filtro: agregadas en la BD (devuelve un arreglo
+      // pequeno). Fallback acotado a filas recientes si la RPC aun no esta aplicada.
+      supabaseRest<string[]>("rpc/distinct_audit_actions", { body: "{}", method: "POST" }).catch(
+        async () => {
+          const rows = await supabaseRest<Array<{ action: string }>>(
+            "audit_logs?select=action&order=created_at.desc&limit=1000",
+          );
+          return Array.from(new Set(rows.map((row) => row.action))).sort();
+        },
+      ),
     ]);
-
-    const distinctActions = Array.from(new Set(actions.map((row) => row.action))).sort();
 
     return NextResponse.json({ actions: distinctActions, logs });
   } catch (error) {

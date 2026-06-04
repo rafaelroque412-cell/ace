@@ -338,6 +338,58 @@ begin
 end;
 $$;
 
+-- Facetas del corpus agregadas en la BD (conteos por dimension), para no traer
+-- todas las filas a la app ni capar el calculo con un limit arbitrario.
+create or replace function public.corpus_facets()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with idx as (
+    select document_type, source_entity, process_type, metadata
+    from public.documents
+    where status = 'indexed'
+  )
+  select jsonb_build_object(
+    'total', (select count(*) from idx),
+    'documentType', (
+      select coalesce(jsonb_agg(jsonb_build_object('value', document_type, 'count', c) order by c desc), '[]'::jsonb)
+      from (select document_type, count(*) c from idx where document_type is not null group by document_type) t
+    ),
+    'sourceEntity', (
+      select coalesce(jsonb_agg(jsonb_build_object('value', source_entity, 'count', c) order by c desc), '[]'::jsonb)
+      from (select source_entity, count(*) c from idx where source_entity is not null group by source_entity) t
+    ),
+    'processType', (
+      select coalesce(jsonb_agg(jsonb_build_object('value', process_type, 'count', c) order by c desc), '[]'::jsonb)
+      from (select process_type, count(*) c from idx where process_type is not null group by process_type) t
+    ),
+    'year', (
+      select coalesce(jsonb_agg(jsonb_build_object('value', y, 'count', c) order by y desc), '[]'::jsonb)
+      from (select metadata->>'year' y, count(*) c from idx where metadata->>'year' is not null group by metadata->>'year') t
+    ),
+    'vigencia', (
+      select coalesce(jsonb_agg(jsonb_build_object('value', v, 'count', c) order by c desc), '[]'::jsonb)
+      from (select metadata->>'vigencia' v, count(*) c from idx where metadata->>'vigencia' is not null group by metadata->>'vigencia') t
+    )
+  );
+$$;
+
+-- Acciones distintas de auditoria, agregadas en la BD: devuelve un arreglo
+-- pequeno en vez de transferir toda la tabla para poblar el filtro (solo admin).
+create or replace function public.distinct_audit_actions()
+returns text[]
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(array_agg(distinct action order by action), '{}')
+  from public.audit_logs;
+$$;
+
 -- profiles: ver el propio o si es admin; actualizaciones solo admin
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles

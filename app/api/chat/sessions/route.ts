@@ -15,6 +15,7 @@ type ChatSessionRow = {
 
 type ChatMessageRow = {
   id: string;
+  session_id: string;
   role: "user" | "assistant" | "system";
   content: string;
   sources: unknown[];
@@ -36,26 +37,43 @@ export async function GET() {
       accessToken,
       "chat_sessions?select=id,title,metadata,created_at,updated_at&order=updated_at.desc&limit=25",
     );
-    const sessionsWithMessages = await Promise.all(
-      sessions.map(async (session) => {
-        const messages = await supabaseUserRest<ChatMessageRow[]>(
-          accessToken,
-          `chat_messages?session_id=eq.${session.id}&select=id,role,content,sources,model,metadata,created_at&order=created_at.asc`,
-        );
-        const assistantMessages = messages.filter((message) => message.role === "assistant");
-        const sourceCount = assistantMessages.reduce(
-          (total, message) => total + (Array.isArray(message.sources) ? message.sources.length : 0),
-          0,
-        );
 
-        return {
-          ...session,
-          messageCount: messages.length,
-          messages,
-          sourceCount,
-        };
-      }),
+    if (sessions.length === 0) {
+      return NextResponse.json({ sessions: [] });
+    }
+
+    // Una sola consulta para los mensajes de todas las sesiones (evita N+1); RLS
+    // sigue restringiendo a las sesiones del usuario. Se agrupan en memoria.
+    const sessionIds = sessions.map((session) => session.id);
+    const messages = await supabaseUserRest<ChatMessageRow[]>(
+      accessToken,
+      `chat_messages?session_id=in.(${sessionIds.join(",")})&select=id,session_id,role,content,sources,model,metadata,created_at&order=created_at.asc`,
     );
+
+    const messagesBySession = new Map<string, ChatMessageRow[]>();
+    for (const message of messages) {
+      const list = messagesBySession.get(message.session_id) ?? [];
+      list.push(message);
+      messagesBySession.set(message.session_id, list);
+    }
+
+    const sessionsWithMessages = sessions.map((session) => {
+      const sessionMessages = messagesBySession.get(session.id) ?? [];
+      const sourceCount = sessionMessages.reduce(
+        (total, message) =>
+          message.role === "assistant" && Array.isArray(message.sources)
+            ? total + message.sources.length
+            : total,
+        0,
+      );
+
+      return {
+        ...session,
+        messageCount: sessionMessages.length,
+        messages: sessionMessages,
+        sourceCount,
+      };
+    });
 
     return NextResponse.json({ sessions: sessionsWithMessages });
   } catch (error) {
