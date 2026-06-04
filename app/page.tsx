@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bot, FileSearch, FileText, GitCompare, History, UploadCloud } from "lucide-react";
 import { AppShell } from "./components/app-shell";
+import { getSessionUser } from "@/lib/auth";
 
 const modules = [
   {
@@ -41,15 +42,19 @@ const modules = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const user = await getSessionUser();
+
   return (
     <AppShell
       active="panel"
       action={
-        <Link className="primaryButton" href="/documentos">
-          <UploadCloud size={18} />
-          Cargar PDF
-        </Link>
+        user?.isAdmin ? (
+          <Link className="primaryButton" href="/documentos">
+            <UploadCloud size={18} />
+            Cargar PDF
+          </Link>
+        ) : undefined
       }
       eyebrow="Panel operativo"
       title="Aplicacion juridica con IA para contrataciones publicas"

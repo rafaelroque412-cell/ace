@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { UploadCloud } from "lucide-react";
 import { AppShell } from "../components/app-shell";
 import { LegalChat } from "../components/legal-chat";
@@ -14,10 +15,12 @@ export default function ChatPage() {
         </Link>
       }
       eyebrow="Consulta legal"
-      title="Chat juridico con busqueda semantica"
+      title="Chat juridico con fuentes verificables"
     >
       <section className="singleWorkspace">
-        <LegalChat />
+        <Suspense fallback={<div className="emptyState">Cargando chat...</div>}>
+          <LegalChat />
+        </Suspense>
       </section>
     </AppShell>
   );

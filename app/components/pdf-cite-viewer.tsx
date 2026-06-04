@@ -1,0 +1,212 @@
+"use client";
+
+import * as Dialog from "@radix-ui/react-dialog";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, FileSearch, LoaderCircle, X } from "lucide-react";
+
+type PdfCiteButtonProps = {
+  documentId: string;
+  page?: number | null;
+  quote?: string | null;
+  label?: string;
+};
+
+type Highlight = { left: number; top: number; width: number; height: number };
+
+const stopWords = new Set(["para", "por", "que", "con", "los", "las", "del", "una", "como", "este", "esta"]);
+
+function quoteTokens(quote: string) {
+  return new Set(
+    quote
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length >= 4 && !stopWords.has(token)),
+  );
+}
+
+export function PdfCiteButton({ documentId, page, quote, label = "Ver cita" }: PdfCiteButtonProps) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [currentPage, setCurrentPage] = useState(page && page > 0 ? page : 1);
+  const [numPages, setNumPages] = useState(1);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      setStatus("loading");
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          "pdfjs-dist/build/pdf.worker.min.mjs",
+          import.meta.url,
+        ).toString();
+
+        const response = await fetch(`/api/documents/${documentId}`);
+        if (!response.ok) {
+          throw new Error("download");
+        }
+        const data = await response.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data }).promise;
+        if (cancelled) {
+          return;
+        }
+        pdfRef.current = pdf;
+        setNumPages(pdf.numPages);
+        const startPage = Math.min(Math.max(page && page > 0 ? page : 1, 1), pdf.numPages);
+        setCurrentPage(startPage);
+        await renderPage(pdfjs, pdf, startPage);
+        if (!cancelled) {
+          setStatus("ready");
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus("error");
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function renderPage(pdfjs: any, pdf: any, pageNumber: number) {
+    const pageObj = await pdf.getPage(pageNumber);
+    const scale = 1.4;
+    const viewport = pageObj.getViewport({ scale });
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const context = canvas.getContext("2d");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await pageObj.render({ canvasContext: context, viewport }).promise;
+
+    const tokens = quote ? quoteTokens(quote) : new Set<string>();
+    if (tokens.size === 0) {
+      setHighlights([]);
+      return;
+    }
+
+    const textContent = await pageObj.getTextContent();
+    const rects: Highlight[] = [];
+    for (const item of textContent.items) {
+      const str: string = item.str ?? "";
+      if (!str.trim()) {
+        continue;
+      }
+      const normalized = str
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase();
+      const matches = Array.from(tokens).some((token) => normalized.includes(token));
+      if (!matches) {
+        continue;
+      }
+      const tx = pdfjs.Util.transform(viewport.transform, item.transform);
+      const fontHeight = Math.hypot(tx[2], tx[3]);
+      rects.push({
+        left: tx[4],
+        top: tx[5] - fontHeight,
+        width: (item.width ?? 0) * scale,
+        height: fontHeight,
+      });
+    }
+    setHighlights(rects);
+  }
+
+  async function goTo(pageNumber: number) {
+    const pdf = pdfRef.current;
+    if (!pdf || pageNumber < 1 || pageNumber > numPages) {
+      return;
+    }
+    const pdfjs = await import("pdfjs-dist");
+    setCurrentPage(pageNumber);
+    await renderPage(pdfjs, pdf, pageNumber);
+  }
+
+  const fallbackHref = `/api/documents/${documentId}${page && page > 0 ? `#page=${page}` : ""}`;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button className="secondaryButton compactButton" type="button">
+          <FileSearch size={15} />
+          {label}
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialogOverlay" />
+        <Dialog.Content className="pdfViewerContent" aria-describedby={undefined}>
+          <div className="pdfViewerBar">
+            <Dialog.Title>Cita en el documento</Dialog.Title>
+            <div className="pdfViewerControls">
+              <button className="iconButton" disabled={currentPage <= 1} onClick={() => goTo(currentPage - 1)} type="button">
+                <ChevronLeft size={16} />
+              </button>
+              <span>
+                {currentPage} / {numPages}
+              </span>
+              <button className="iconButton" disabled={currentPage >= numPages} onClick={() => goTo(currentPage + 1)} type="button">
+                <ChevronRight size={16} />
+              </button>
+              <a className="secondaryButton compactButton" href={fallbackHref} rel="noreferrer" target="_blank">
+                <ExternalLink size={15} />
+                PDF
+              </a>
+              <Dialog.Close asChild>
+                <button className="iconButton" type="button">
+                  <X size={16} />
+                </button>
+              </Dialog.Close>
+            </div>
+          </div>
+
+          <div className="pdfViewerStage">
+            {status === "loading" ? (
+              <div className="emptyState">
+                <LoaderCircle size={20} />
+                <span>Cargando documento...</span>
+              </div>
+            ) : null}
+            {status === "error" ? (
+              <div className="emptyState">
+                <span>No se pudo renderizar el visor.</span>
+                <a className="primaryButton" href={fallbackHref} rel="noreferrer" target="_blank">
+                  Abrir PDF en la página {page ?? 1}
+                </a>
+              </div>
+            ) : null}
+            <div className="pdfCanvasWrap" style={{ display: status === "ready" ? "block" : "none" }}>
+              <canvas ref={canvasRef} />
+              {highlights.map((rect, index) => (
+                <span
+                  className="pdfHighlight"
+                  key={index}
+                  style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+                />
+              ))}
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}

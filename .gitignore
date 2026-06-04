@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 .next-dev.*.log
 .DS_Store
 Thumbs.db
+
+# MCP config (contiene token de Supabase)
+.mcp.json

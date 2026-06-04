@@ -1,0 +1,95 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { ScrollText, Search } from "lucide-react";
+
+type AuditRow = {
+  id: string;
+  actor_reference: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export function AuditExplorer() {
+  const [logs, setLogs] = useState<AuditRow[]>([]);
+  const [actions, setActions] = useState<string[]>([]);
+  const [action, setAction] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (action) {
+      params.set("action", action);
+    }
+    const payload = await fetch(`/api/audit?${params.toString()}`).then((response) => response.json());
+    setLogs(payload.logs ?? []);
+    if ((payload.actions ?? []).length > 0) {
+      setActions(payload.actions);
+    }
+    setLoading(false);
+  }, [action]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return (
+    <div className="evalLayout">
+      <div className="toolPanelHeader">
+        <div>
+          <p className="eyebrow">Trazabilidad</p>
+          <h2>Registro de auditoría</h2>
+        </div>
+        <label className="auditFilter">
+          <Search size={15} />
+          <select onChange={(event) => setAction(event.target.value)} value={action}>
+            <option value="">Todas las acciones</option>
+            {actions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <section className="toolPanel">
+        <div className="auditList">
+          {loading ? (
+            <div className="emptyState">
+              <span>Cargando...</span>
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="emptyState">
+              <ScrollText size={20} />
+              <span>Sin eventos de auditoría.</span>
+            </div>
+          ) : (
+            logs.map((log) => (
+              <div className="auditEntry" key={log.id}>
+                <button
+                  className="auditRow auditRowButton"
+                  onClick={() => setExpanded((current) => (current === log.id ? null : log.id))}
+                  type="button"
+                >
+                  <span className="auditAction">{log.action}</span>
+                  <span className="auditMeta">{log.entity_type}</span>
+                  <span className="auditMeta">{log.actor_reference ?? "system"}</span>
+                  <span className="auditTime">{new Date(log.created_at).toLocaleString("es-PE")}</span>
+                </button>
+                {expanded === log.id ? (
+                  <pre className="auditDetails">{JSON.stringify(log.details, null, 2)}</pre>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}

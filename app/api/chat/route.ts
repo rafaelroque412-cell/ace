@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
 import { answerLegalQuestion, chatRequestSchema } from "@/lib/legal-chat";
 
 export const dynamic = "force-dynamic";
@@ -6,6 +7,11 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireUser();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
     const payload = chatRequestSchema.safeParse(await request.json());
 
     if (!payload.success) {
@@ -15,7 +21,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await answerLegalQuestion(payload.data);
+    const result = await answerLegalQuestion(payload.data, {
+      accessToken: auth.user.accessToken,
+      ownerId: auth.user.id,
+    });
 
     return NextResponse.json({
       mode: payload.data.mode,

@@ -1,0 +1,580 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  ExternalLink,
+  FileText,
+  Library,
+  LoaderCircle,
+  MessageSquareText,
+  ScrollText,
+  Search,
+} from "lucide-react";
+import { documentTypeLabel, processTypeLabel } from "@/lib/legal-taxonomy";
+import { PdfCiteButton } from "./pdf-cite-viewer";
+import { SaveButton } from "./save-button";
+
+type Category = "normas" | "jurisprudencia";
+
+type NormSummary = {
+  id: string;
+  title: string;
+  documentType: string;
+  sourceEntity: string | null;
+  processType: string | null;
+  status: string;
+  articleCount: number;
+  documentNumber: string | null;
+  vigencia: string | null;
+  topic: string | null;
+  year: number | null;
+  amends: string | null;
+};
+
+type Article = {
+  id: string;
+  articleNumber: string;
+  label: string | null;
+  sectionTitle: string | null;
+  ordinal: number;
+  content: string;
+  pageStart: number | null;
+  pageEnd: number | null;
+  status: string | null;
+  vigencia: string | null;
+};
+
+type Concordancia = {
+  id: string;
+  refType: string | null;
+  refDocumentNumber: string | null;
+  refArticleNumber: string | null;
+  rawText: string;
+  resolved: boolean;
+  targetDocumentId: string | null;
+  targetDocumentTitle: string | null;
+  targetArticleId: string | null;
+  targetArticleNumber: string | null;
+};
+
+type Citing = {
+  id: string;
+  sourceDocumentId: string | null;
+  sourceDocumentTitle: string | null;
+  sourceArticleId: string | null;
+  sourceArticleNumber: string | null;
+  rawText: string;
+};
+
+type NormDetail = {
+  norm: NormSummary & { summary: string | null };
+  articles: Article[];
+  concordanciasByArticle: Record<string, Concordancia[]>;
+};
+
+function isNotCurrent(vigencia?: string | null, status?: string | null) {
+  const text = `${vigencia ?? ""} ${status ?? ""}`.toLowerCase();
+  return text.includes("derog") || text.includes("modific");
+}
+
+export function NormativeBrowser() {
+  const router = useRouter();
+  const [category, setCategory] = useState<Category>("normas");
+  const [norms, setNorms] = useState<NormSummary[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<NormDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [articleFilter, setArticleFilter] = useState("");
+  const [onlyVigente, setOnlyVigente] = useState(false);
+  const [citing, setCiting] = useState<Citing[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNorms() {
+      setLoadingList(true);
+      setError("");
+
+      try {
+        const response = await fetch(`/api/norms?category=${category}`);
+        const payload = (await response.json()) as { norms?: NormSummary[]; error?: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          setError(payload.error ?? "No se pudieron cargar las normas.");
+          setNorms([]);
+          return;
+        }
+
+        setNorms(payload.norms ?? []);
+      } catch {
+        if (!cancelled) {
+          setError("No se pudo conectar con el servidor.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingList(false);
+        }
+      }
+    }
+
+    void loadNorms();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [category]);
+
+  async function selectNorm(id: string, targetArticleId?: string) {
+    setSelectedId(id);
+    setDetail(null);
+    setSelectedArticleId(null);
+    setArticleFilter("");
+    setOnlyVigente(false);
+    setLoadingDetail(true);
+
+    try {
+      const response = await fetch(`/api/norms/${id}`);
+      const payload = (await response.json()) as NormDetail & { error?: string };
+
+      if (!response.ok) {
+        setError(payload.error ?? "No se pudo cargar la norma.");
+        return;
+      }
+
+      setDetail(payload);
+      const target = targetArticleId
+        ? payload.articles.find((article) => article.id === targetArticleId)
+        : undefined;
+      setSelectedArticleId(target?.id ?? payload.articles[0]?.id ?? null);
+    } catch {
+      setError("No se pudo conectar con el servidor.");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  function navigateToArticleRef(documentId: string | null, articleId: string | null) {
+    if (!documentId) {
+      return;
+    }
+
+    if (documentId === selectedId) {
+      if (articleId) {
+        setArticleFilter("");
+        setOnlyVigente(false);
+        setSelectedArticleId(articleId);
+      }
+      return;
+    }
+
+    void selectNorm(documentId, articleId ?? undefined);
+  }
+
+  function navigateToConcordancia(concordancia: Concordancia) {
+    if (!concordancia.resolved || !concordancia.targetDocumentId) {
+      return;
+    }
+
+    navigateToArticleRef(concordancia.targetDocumentId, concordancia.targetArticleId);
+  }
+
+  const visibleArticles = useMemo(() => {
+    if (!detail) {
+      return [];
+    }
+
+    const needle = articleFilter.trim().toLowerCase();
+
+    return detail.articles.filter((article) => {
+      if (onlyVigente && isNotCurrent(article.vigencia, article.status)) {
+        return false;
+      }
+
+      if (!needle) {
+        return true;
+      }
+
+      return (
+        article.articleNumber.toLowerCase().includes(needle) ||
+        (article.label ?? "").toLowerCase().includes(needle) ||
+        article.content.toLowerCase().includes(needle)
+      );
+    });
+  }, [detail, articleFilter, onlyVigente]);
+
+  const selectedArticle = useMemo(
+    () => visibleArticles.find((article) => article.id === selectedArticleId) ?? visibleArticles[0] ?? null,
+    [visibleArticles, selectedArticleId],
+  );
+
+  const selectedArticleId2 = selectedArticle?.id ?? null;
+
+  useEffect(() => {
+    if (!selectedArticleId2) {
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`/api/norms/articles/${selectedArticleId2}/citing`)
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!cancelled) {
+          setCiting(payload.citing ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCiting([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedArticleId2]);
+
+  const articleConcordancias = selectedArticle
+    ? detail?.concordanciasByArticle?.[selectedArticle.id] ?? []
+    : [];
+
+  function sendArticleToChat(article: Article) {
+    if (!detail) {
+      return;
+    }
+
+    const prompt = `Sobre ${detail.norm.title}, articulo ${article.articleNumber}: explica su alcance y aplicacion.`;
+    const params = new URLSearchParams({ pregunta: prompt });
+
+    if (detail.norm.documentType) {
+      params.set("documentType", detail.norm.documentType);
+    }
+
+    router.push(`/chat?${params.toString()}`);
+  }
+
+  return (
+    <div className="toolPanel normBrowser">
+      <div className="toolPanelHeader">
+        <div>
+          <p className="eyebrow">Base documental</p>
+          <h2>Navegador normativo</h2>
+        </div>
+        <Library size={22} />
+      </div>
+
+      <div className="sourceTabs normCategoryTabs" role="tablist" aria-label="Categoria">
+        <button
+          aria-selected={category === "normas"}
+          onClick={() => setCategory("normas")}
+          role="tab"
+          type="button"
+        >
+          Normas
+        </button>
+        <button
+          aria-selected={category === "jurisprudencia"}
+          onClick={() => setCategory("jurisprudencia")}
+          role="tab"
+          type="button"
+        >
+          Jurisprudencia y opiniones
+        </button>
+      </div>
+
+      {error ? <p className="formMessage errorText">{error}</p> : null}
+
+      <div className="normGrid">
+        <aside className="normList" aria-label="Listado de normas">
+          {loadingList ? (
+            <div className="emptyState">
+              <LoaderCircle size={18} />
+              <span>Cargando...</span>
+            </div>
+          ) : norms.length === 0 ? (
+            <div className="emptyState">
+              <ScrollText size={18} />
+              <span>No hay documentos en esta categoria.</span>
+            </div>
+          ) : (
+            norms.map((norm) => (
+              <button
+                key={norm.id}
+                className={`normCard ${selectedId === norm.id ? "active" : ""}`}
+                onClick={() => selectNorm(norm.id)}
+                type="button"
+              >
+                <strong>{norm.title}</strong>
+                <span className="normCardMeta">
+                  {documentTypeLabel(norm.documentType)}
+                  {norm.documentNumber ? ` · ${norm.documentNumber}` : ""}
+                  {norm.year ? ` · ${norm.year}` : ""}
+                </span>
+                <span className="normCardTags">
+                  <span className="normTag">{norm.articleCount} articulo(s)</span>
+                  {norm.vigencia ? (
+                    <span className={`normTag ${isNotCurrent(norm.vigencia) ? "warn" : "ok"}`}>
+                      {norm.vigencia}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))
+          )}
+        </aside>
+
+        <section className="normDetail" aria-label="Detalle de la norma">
+          {loadingDetail ? (
+            <div className="emptyState">
+              <LoaderCircle size={20} />
+              <span>Cargando norma...</span>
+            </div>
+          ) : !detail ? (
+            <div className="emptyState">
+              <Library size={20} />
+              <strong>Selecciona una norma</strong>
+              <span>Elige un documento de la izquierda para leerlo por articulo.</span>
+            </div>
+          ) : (
+            <>
+              <header className="normDetailHeader">
+                <div>
+                  <p className="eyebrow">
+                    {documentTypeLabel(detail.norm.documentType)}
+                    {detail.norm.documentNumber ? ` · ${detail.norm.documentNumber}` : ""}
+                    {processTypeLabel(detail.norm.processType)
+                      ? ` · ${processTypeLabel(detail.norm.processType)}`
+                      : ""}
+                  </p>
+                  <h3>{detail.norm.title}</h3>
+                </div>
+                <a
+                  className="secondaryButton compactButton"
+                  href={`/api/documents/${detail.norm.id}`}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink size={15} />
+                  Abrir PDF
+                </a>
+              </header>
+
+              {detail.norm.amends ? (
+                <div className="normAmends">
+                  <AlertTriangle size={15} />
+                  <span>Relaciones de vigencia: {detail.norm.amends}</span>
+                </div>
+              ) : null}
+
+              {detail.articles.length === 0 ? (
+                <div className="normJurisprudence">
+                  {detail.norm.summary ? (
+                    <p>{detail.norm.summary}</p>
+                  ) : (
+                    <p>Este documento no tiene articulos detectados. Abre el PDF para leerlo completo.</p>
+                  )}
+                  <button
+                    className="secondaryButton compactButton"
+                    onClick={() =>
+                      router.push(
+                        `/chat?pregunta=${encodeURIComponent(`Resume y explica ${detail.norm.title}`)}`,
+                      )
+                    }
+                    type="button"
+                  >
+                    <MessageSquareText size={15} />
+                    Consultar en el chat
+                  </button>
+                </div>
+              ) : (
+                <div className="articleLayout">
+                  <div className="articleNavCol">
+                    <label className="articleSearch">
+                      <Search size={15} />
+                      <input
+                        onChange={(event) => setArticleFilter(event.target.value)}
+                        placeholder="Buscar articulo o texto"
+                        value={articleFilter}
+                      />
+                    </label>
+                    <label className="vigenteToggle">
+                      <input
+                        checked={onlyVigente}
+                        onChange={(event) => setOnlyVigente(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Solo vigente
+                    </label>
+                    <div className="articleIndex">
+                      {visibleArticles.length === 0 ? (
+                        <span className="articleIndexEmpty">Sin coincidencias</span>
+                      ) : (
+                        visibleArticles.map((article) => (
+                          <button
+                            key={article.id}
+                            className={`articleChip ${
+                              selectedArticle?.id === article.id ? "active" : ""
+                            } ${isNotCurrent(article.vigencia, article.status) ? "warn" : ""}`}
+                            onClick={() => setSelectedArticleId(article.id)}
+                            type="button"
+                          >
+                            Art. {article.articleNumber}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <article className="articleReader">
+                    {selectedArticle ? (
+                      <>
+                        <div className="articleReaderHeader">
+                          <div>
+                            {selectedArticle.sectionTitle ? (
+                              <span className="articleSection">{selectedArticle.sectionTitle}</span>
+                            ) : null}
+                            <strong>Articulo {selectedArticle.articleNumber}</strong>
+                          </div>
+                          <div className="articleBadges">
+                            {selectedArticle.pageStart ? (
+                              <span className="normTag">
+                                pag. {selectedArticle.pageStart}
+                                {selectedArticle.pageEnd && selectedArticle.pageEnd !== selectedArticle.pageStart
+                                  ? `-${selectedArticle.pageEnd}`
+                                  : ""}
+                              </span>
+                            ) : null}
+                            <span
+                              className={`normTag ${
+                                isNotCurrent(selectedArticle.vigencia, selectedArticle.status) ? "warn" : "ok"
+                              }`}
+                            >
+                              {selectedArticle.vigencia ?? selectedArticle.status ?? "vigencia s/d"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isNotCurrent(selectedArticle.vigencia, selectedArticle.status) ? (
+                          <div className="normAmends">
+                            <AlertTriangle size={15} />
+                            <span>
+                              Este articulo figura como derogado o modificado; verifica la version vigente
+                              antes de usarlo.
+                            </span>
+                          </div>
+                        ) : null}
+
+                        <p className="articleText">{selectedArticle.content}</p>
+
+                        {articleConcordancias.length > 0 || citing.length > 0 ? (
+                          <div className="concordanciaPanel">
+                            {articleConcordancias.length > 0 ? (
+                              <div className="concordanciaGroup">
+                                <strong>Concordancias</strong>
+                                <div className="concordanciaList">
+                                  {articleConcordancias.map((concordancia) =>
+                                    concordancia.resolved && concordancia.targetDocumentId ? (
+                                      <button
+                                        key={concordancia.id}
+                                        className="concordanciaChip resolved"
+                                        onClick={() => navigateToConcordancia(concordancia)}
+                                        type="button"
+                                        title={concordancia.rawText}
+                                      >
+                                        {concordancia.targetDocumentTitle ?? "Norma"}
+                                        {concordancia.targetArticleNumber
+                                          ? `, art. ${concordancia.targetArticleNumber}`
+                                          : ""}
+                                      </button>
+                                    ) : (
+                                      <span
+                                        key={concordancia.id}
+                                        className="concordanciaChip external"
+                                        title={concordancia.rawText}
+                                      >
+                                        {concordancia.rawText} · no indexada
+                                      </span>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {citing.length > 0 ? (
+                              <div className="concordanciaGroup">
+                                <strong>Citado por</strong>
+                                <div className="concordanciaList">
+                                  {citing.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      className="concordanciaChip"
+                                      onClick={() =>
+                                        navigateToArticleRef(item.sourceDocumentId, item.sourceArticleId)
+                                      }
+                                      type="button"
+                                      title={item.rawText}
+                                    >
+                                      {item.sourceDocumentTitle ?? "Norma"}
+                                      {item.sourceArticleNumber ? `, art. ${item.sourceArticleNumber}` : ""}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="sourceActions">
+                          <PdfCiteButton
+                            documentId={detail.norm.id}
+                            page={selectedArticle.pageStart}
+                            quote={selectedArticle.content}
+                          />
+                          <a
+                            className="secondaryButton compactButton"
+                            href={`/api/documents/${detail.norm.id}`}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <FileText size={15} />
+                            Abrir PDF
+                          </a>
+                          <button
+                            className="secondaryButton compactButton"
+                            onClick={() => sendArticleToChat(selectedArticle)}
+                            type="button"
+                          >
+                            <MessageSquareText size={15} />
+                            Enviar al chat
+                          </button>
+                          <SaveButton
+                            itemType="articulo"
+                            documentId={detail.norm.id}
+                            articleId={selectedArticle.id}
+                            title={`${detail.norm.title} — Art. ${selectedArticle.articleNumber}`}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="emptyState">
+                        <span>Selecciona un articulo del indice.</span>
+                      </div>
+                    )}
+                  </article>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,93 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { requireUser } from "@/lib/auth";
+import { type ClauseReference, buildContractDocx } from "@/lib/contract-generator";
+import { supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const contractSchema = z.object({
+  entity: z.string().trim().min(2),
+  object: z.string().trim().min(3),
+  processType: z.string().trim().optional().or(z.literal("")),
+  amount: z.string().trim().optional().or(z.literal("")),
+  contractorName: z.string().trim().optional().or(z.literal("")),
+  contractorRuc: z.string().trim().optional().or(z.literal("")),
+  durationDays: z.coerce.number().int().positive().optional().or(z.literal("")),
+  place: z.string().trim().optional().or(z.literal("")),
+});
+
+type ArticleRow = { article_number: string; article_label: string | null; content: string };
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 50)
+    .toLowerCase();
+}
+
+export async function POST(request: Request) {
+  try {
+    const auth = await requireUser();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
+    const payload = contractSchema.safeParse(await request.json());
+    if (!payload.success) {
+      return NextResponse.json(
+        { error: "Solicitud invalida", details: payload.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const data = payload.data;
+
+    // Referencias del corpus (art. 60/61) para fundamentar, si estan indexadas.
+    const articles = await supabaseRest<ArticleRow[]>(
+      "norma_articulos?article_number=in.(60,61)&select=article_number,article_label,content&limit=4",
+    ).catch(() => []);
+    const references: ClauseReference[] = articles.map((article) => ({
+      article: article.article_number,
+      title: article.article_label?.replace(/^articulo\s+\d+[.\-]?\s*/i, "").slice(0, 80) ?? "",
+      excerpt: article.content,
+    }));
+
+    const buffer = await buildContractDocx(
+      {
+        amount: data.amount || null,
+        contractorName: data.contractorName || null,
+        contractorRuc: data.contractorRuc || null,
+        durationDays: typeof data.durationDays === "number" ? data.durationDays : null,
+        entity: data.entity,
+        object: data.object,
+        place: data.place || null,
+        processType: data.processType || null,
+      },
+      references,
+    );
+
+    await writeAuditLog({
+      action: "contract.generate",
+      details: { entity: data.entity, object: data.object, processType: data.processType || null },
+      entityType: "contract",
+    });
+
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        "Content-Disposition": `attachment; filename="contrato-${slugify(data.object) || "borrador"}.docx"`,
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "No se pudo generar el contrato" },
+      { status: 500 },
+    );
+  }
+}

@@ -3,6 +3,7 @@ const allowedDocumentTypes = [
   "reglamento",
   "opinion",
   "directiva",
+  "bases_integradas",
   "resolucion",
   "contrato",
   "expediente",
@@ -11,12 +12,36 @@ const allowedDocumentTypes = [
 
 export type DocumentType = (typeof allowedDocumentTypes)[number];
 
+const allowedProcessTypes = [
+  "todos",
+  "licitacion_publica",
+  "concurso_publico",
+  "adjudicacion_simplificada",
+  "subasta_inversa_electronica",
+  "comparacion_precios",
+  "contratacion_directa",
+  "acuerdo_marco",
+  "seleccion_consultores_individuales",
+  "procedimiento_especial",
+  "otros",
+] as const;
+
+export type ProcessType = (typeof allowedProcessTypes)[number];
+
 export function normalizeDocumentType(value: FormDataEntryValue | null): DocumentType {
   if (typeof value !== "string") {
     return "otros";
   }
 
   return allowedDocumentTypes.includes(value as DocumentType) ? (value as DocumentType) : "otros";
+}
+
+export function normalizeProcessType(value: FormDataEntryValue | null): ProcessType | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  return allowedProcessTypes.includes(value as ProcessType) ? (value as ProcessType) : "otros";
 }
 
 export function sanitizeFileName(fileName: string) {

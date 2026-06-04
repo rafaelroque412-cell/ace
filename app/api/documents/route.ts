@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { requireEditor, requireUser } from "@/lib/auth";
 import { deleteRecords } from "@/lib/pinecone";
 import { buildStoragePath, normalizeDocumentType, normalizeProcessType } from "@/lib/documents";
 import {
@@ -32,6 +33,11 @@ function appendFilter(path: string, key: string, value?: string | null) {
 
 export async function GET() {
   try {
+    const auth = await requireUser();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
     getSupabaseServerConfig();
 
     const documents = await supabaseRest<DocumentRecord[]>(
@@ -53,6 +59,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireEditor();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -155,6 +166,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const auth = await requireEditor();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
     getSupabaseServerConfig();
 
     const payload = (await request.json().catch(() => ({}))) as {

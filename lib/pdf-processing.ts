@@ -1,21 +1,32 @@
 import pdfParse from "pdf-parse/lib/pdf-parse";
 import { toFile } from "openai";
-import { getOpenAIClient, pdfOcrModel } from "./openai-server";
+import { createHash } from "crypto";
+import { getOpenAIClient, legalAnswerModel, pdfOcrModel } from "./openai-server";
 import { type DocumentRecord, supabaseRest } from "./supabase-server";
-import { upsertTextRecords } from "./pinecone";
+import { deleteRecords, getPineconeConfig, upsertTextRecords, verifyDocumentIndexedInPinecone } from "./pinecone";
+import {
+  type RefType,
+  detectCitations,
+  extractArticleMentions,
+  normalizeNormNumber,
+} from "./legal-citations";
 
 type ChunkInsert = {
   document_id: string;
   chunk_index: number;
   content: string;
+  page_end: number | null;
+  page_start: number | null;
   pinecone_vector_id: string;
   metadata: Record<string, unknown>;
 };
 
 const chunkSize = 2600;
 const chunkOverlap = 350;
-const maxChunksPerDocument = 120;
+const chunkInsertBatchSize = 100;
+const indexingPipelineVersion = "legal-page-aware-v2";
 const minExtractedTextLength = 120;
+const analysisTextLimit = 16000;
 const unusableOcrPatterns = [
   "no puedo procesar",
   "no puedo extraer",
@@ -25,11 +36,93 @@ const unusableOcrPatterns = [
   "i cannot process",
 ];
 
+const processCatalog: Record<string, { aliases: string[]; anchors: string[]; label: string }> = {
+  acuerdo_marco: {
+    aliases: ["acuerdo marco", "catalogo electronico", "catalogos electronicos"],
+    anchors: [],
+    label: "Acuerdo marco",
+  },
+  adjudicacion_simplificada: {
+    aliases: ["adjudicacion simplificada"],
+    anchors: [],
+    label: "Adjudicacion simplificada",
+  },
+  comparacion_precios: {
+    aliases: ["comparacion de precios", "comparacion precios", "comparar precios"],
+    anchors: [
+      "articulo 144 reglamento comparacion de precios",
+      "procedimiento de seleccion comparacion de precios",
+      "unico factor de evaluacion precio",
+    ],
+    label: "Comparacion de precios",
+  },
+  concurso_publico: {
+    aliases: ["concurso publico"],
+    anchors: [],
+    label: "Concurso publico",
+  },
+  contratacion_directa: {
+    aliases: ["contratacion directa"],
+    anchors: [],
+    label: "Contratacion directa",
+  },
+  licitacion_publica: {
+    aliases: ["licitacion publica"],
+    anchors: [],
+    label: "Licitacion publica",
+  },
+  seleccion_consultores_individuales: {
+    aliases: ["consultores individuales", "seleccion de consultores individuales"],
+    anchors: [],
+    label: "Seleccion de consultores individuales",
+  },
+  subasta_inversa_electronica: {
+    aliases: ["subasta inversa electronica", "sie"],
+    anchors: [
+      "ficha tecnica subasta inversa electronica",
+      "bienes comunes subasta inversa electronica",
+    ],
+    label: "Subasta inversa electronica",
+  },
+};
+
 type ExtractedPdfText = {
   extractionMethod: "pdf-text" | "openai-ocr";
   ocrPartial: boolean;
   pageCount: number;
+  pages: Array<{ pageNumber: number; text: string }>;
   text: string;
+};
+
+type TextChunk = {
+  article: string | null;
+  content: string;
+  end: number;
+  index: number;
+  pageEnd: number | null;
+  pageStart: number | null;
+  sectionTitle: string | null;
+  start: number;
+};
+
+type ProcessingJobRecord = {
+  id: string;
+};
+
+type AiDocumentInsights = {
+  amends?: string | null;
+  confidence?: "alta" | "media" | "baja";
+  documentType?: string;
+  keyPoints?: string[];
+  number?: string | null;
+  practicalImpact?: string;
+  relatedArticles?: string[];
+  sourceEntity?: string | null;
+  status?: string | null;
+  summary?: string;
+  topic?: string | null;
+  vigencia?: string | null;
+  year?: number | null;
 };
 
 function normalizeText(text: string) {
@@ -40,26 +133,452 @@ function normalizeText(text: string) {
     .trim();
 }
 
-function chunkText(text: string) {
-  const chunks: string[] = [];
-  let cursor = 0;
+function hashText(text: string) {
+  return createHash("sha256").update(text).digest("hex");
+}
 
-  while (cursor < text.length && chunks.length < maxChunksPerDocument) {
-    const end = Math.min(cursor + chunkSize, text.length);
-    const rawChunk = text.slice(cursor, end).trim();
+function detectArticle(text: string) {
+  const match = text.match(/\b(?:art[ií]culo|art\.?)\s+([0-9]+[A-Za-z-]*)/i);
+  return match?.[1] ?? null;
+}
 
-    if (rawChunk.length > 80) {
-      chunks.push(rawChunk);
+function normalizeComparable(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectSectionTitle(text: string) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 18);
+  const heading = lines.find((line) =>
+    /^(titulo|capitulo|subcapitulo|seccion|disposicion|anexo)\b/i.test(line),
+  );
+
+  return heading?.slice(0, 180) ?? null;
+}
+
+function detectDocumentNumber(title: string, text: string) {
+  const source = `${title}\n${text.slice(0, 5000)}`;
+  const match = source.match(
+    /\b(?:ley|decreto\s+supremo|directiva|opini[oó]n|resoluci[oó]n)\s*(?:n(?:\.|°|º|ro)?\s*)?([0-9]{1,5}(?:-[0-9]{4})?(?:-[A-Z/.-]+)?)/i,
+  );
+
+  return match?.[1] ?? null;
+}
+
+function inferProcessTypeFromText(text: string) {
+  const normalized = normalizeComparable(text);
+
+  for (const [processType, config] of Object.entries(processCatalog)) {
+    if (config.aliases.some((alias) => normalized.includes(normalizeComparable(alias)))) {
+      return processType;
+    }
+  }
+
+  return null;
+}
+
+function processAliases(processType?: string | null) {
+  if (processType === "todos") {
+    return ["todos los procesos", "aplicacion general"];
+  }
+
+  return processType ? processCatalog[processType]?.aliases ?? [] : [];
+}
+
+function processAnchors(processType?: string | null) {
+  if (processType === "todos") {
+    return ["norma general aplicable a todos los procesos de contratacion publica"];
+  }
+
+  return processType ? processCatalog[processType]?.anchors ?? [] : [];
+}
+
+function sourceRole(documentType: string) {
+  return documentType === "bases_integradas" ? "operativo" : "normativo";
+}
+
+function hierarchyRank(documentType: string) {
+  const ranks: Record<string, number> = {
+    ley: 4,
+    reglamento: 3,
+    directiva: 2,
+    opinion: 1,
+    resolucion: 1,
+    bases_integradas: 0,
+  };
+
+  return ranks[documentType] ?? 0;
+}
+
+function getMetadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getMetadataNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function getInsightString(insights: AiDocumentInsights, key: keyof AiDocumentInsights) {
+  const value = insights[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeDocumentType(value: unknown) {
+  const allowed = new Set([
+    "ley",
+    "reglamento",
+    "opinion",
+    "directiva",
+    "bases_integradas",
+    "resolucion",
+    "contrato",
+    "expediente",
+    "otros",
+  ]);
+
+  return typeof value === "string" && allowed.has(value) ? value : undefined;
+}
+
+function parseJsonObject(text: string) {
+  const cleaned = text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    return {};
+  }
+
+  return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+}
+
+async function analyzeDocumentWithAi(text: string): Promise<AiDocumentInsights> {
+  try {
+    const openai = getOpenAIClient();
+    const response = await openai.responses.create({
+      input: [
+        {
+          content: `Analiza este documento juridico para una biblioteca de contrataciones publicas.
+
+Devuelve solo JSON valido, sin markdown, con estas claves:
+{
+  "documentType": "ley|reglamento|opinion|directiva|bases_integradas|resolucion|contrato|expediente|otros",
+  "sourceEntity": "entidad emisora o null",
+  "number": "numero de norma/documento o null",
+  "year": 2026,
+  "topic": "tema principal",
+  "vigencia": "vigente|derogado|modificado|desconocida",
+  "status": "vigente|derogado|modificado|desconocido",
+  "summary": "resumen ejecutivo de 5 a 8 lineas",
+  "keyPoints": ["punto clave"],
+  "relatedArticles": ["articulo o numeral"],
+  "practicalImpact": "impacto practico para el usuario",
+  "amends": "si el documento modifica o deroga otra norma/articulos, indicalo brevemente (ej: 'modifica el articulo 144 del Reglamento DS 009-2025-EF'); si no, null",
+  "confidence": "alta|media|baja"
+}
+
+Texto:
+${text.slice(0, analysisTextLimit)}`,
+          role: "user",
+        },
+      ],
+      max_output_tokens: 1400,
+      model: legalAnswerModel,
+      temperature: 0,
+    });
+    const parsed = parseJsonObject(response.output_text);
+
+    return {
+      amends: typeof parsed.amends === "string" && parsed.amends.trim() ? parsed.amends.trim() : null,
+      confidence:
+        parsed.confidence === "alta" || parsed.confidence === "media" || parsed.confidence === "baja"
+          ? parsed.confidence
+          : "baja",
+      documentType: normalizeDocumentType(parsed.documentType),
+      keyPoints: Array.isArray(parsed.keyPoints)
+        ? parsed.keyPoints.filter((item): item is string => typeof item === "string")
+        : [],
+      number: typeof parsed.number === "string" ? parsed.number : null,
+      practicalImpact: typeof parsed.practicalImpact === "string" ? parsed.practicalImpact : undefined,
+      relatedArticles: Array.isArray(parsed.relatedArticles)
+        ? parsed.relatedArticles.filter((item): item is string => typeof item === "string")
+        : [],
+      sourceEntity: typeof parsed.sourceEntity === "string" ? parsed.sourceEntity : null,
+      status: typeof parsed.status === "string" ? parsed.status : null,
+      summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
+      topic: typeof parsed.topic === "string" ? parsed.topic : null,
+      vigencia: typeof parsed.vigencia === "string" ? parsed.vigencia : null,
+      year: typeof parsed.year === "number" && Number.isFinite(parsed.year) ? parsed.year : null,
+    };
+  } catch {
+    return {
+      confidence: "baja",
+    };
+  }
+}
+
+function getMaxChunksPerDocument() {
+  const configured = process.env.PDF_MAX_CHUNKS_PER_DOCUMENT;
+
+  if (!configured) {
+    return null;
+  }
+
+  const value = Number.parseInt(configured, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function chunkPages(pages: Array<{ pageNumber: number; text: string }>) {
+  const chunks: TextChunk[] = [];
+  const maxChunksPerDocument = getMaxChunksPerDocument();
+  let buffer = "";
+  let bufferStart = 0;
+  let bufferPageStart: number | null = null;
+  let lastArticle: string | null = null;
+  let lastSectionTitle: string | null = null;
+
+  function pushChunk(content: string, start: number, end: number, pageStart: number | null, pageEnd: number | null) {
+    const rawChunk = content.trim();
+
+    if (rawChunk.length <= 80) {
+      return;
     }
 
-    if (end === text.length) {
-      break;
+    const article = detectArticle(rawChunk) ?? lastArticle;
+    const sectionTitle = detectSectionTitle(rawChunk) ?? lastSectionTitle;
+
+    if (article) {
+      lastArticle = article;
     }
 
-    cursor = Math.max(end - chunkOverlap, cursor + 1);
+    if (sectionTitle) {
+      lastSectionTitle = sectionTitle;
+    }
+
+    chunks.push({
+      article,
+      content: rawChunk,
+      end,
+      index: chunks.length,
+      pageEnd,
+      pageStart,
+      sectionTitle,
+      start,
+    });
+  }
+
+  for (const page of pages) {
+    if (maxChunksPerDocument && chunks.length >= maxChunksPerDocument) {
+      throw new Error(
+        `El PDF requiere mas de ${maxChunksPerDocument} fragmentos para indexarse completo. Aumenta PDF_MAX_CHUNKS_PER_DOCUMENT o quita ese limite.`,
+      );
+    }
+
+    const pageText = page.text.trim();
+
+    if (!pageText) {
+      continue;
+    }
+
+    if (!buffer) {
+      bufferStart = page.pageNumber;
+      bufferPageStart = page.pageNumber;
+    }
+
+    buffer = `${buffer}${buffer ? "\n\n" : ""}=== PAGINA ${page.pageNumber} ===\n${pageText}`;
+
+    while (buffer.length >= chunkSize) {
+      const splitAt = Math.max(
+        buffer.lastIndexOf("\n\n", chunkSize),
+        buffer.lastIndexOf(". ", chunkSize),
+        chunkSize,
+      );
+      const chunkContent = buffer.slice(0, splitAt);
+      pushChunk(chunkContent, bufferStart, page.pageNumber, bufferPageStart, page.pageNumber);
+      buffer = buffer.slice(Math.max(0, splitAt - chunkOverlap)).trim();
+      bufferStart = page.pageNumber;
+      bufferPageStart = page.pageNumber;
+    }
+  }
+
+  if (buffer.trim()) {
+    const lastPage = pages.at(-1)?.pageNumber ?? null;
+    pushChunk(buffer, bufferStart, lastPage ?? bufferStart, bufferPageStart, lastPage);
   }
 
   return chunks;
+}
+
+type ArticleSegment = {
+  articleNumber: string;
+  content: string;
+  ordinal: number;
+  pageEnd: number | null;
+  pageStart: number | null;
+  sectionTitle: string | null;
+  title: string;
+};
+
+// Cabecera de articulo: "Articulo N" seguido de un delimitador de titulo
+// (`.`, `-`, `º`, `°`, `)`). pdf-parse une el texto con espacios y pierde los
+// saltos de linea, asi que no se puede anclar a inicio de linea; el delimitador
+// posterior distingue una cabecera real de una referencia inline ("articulo 5
+// de la ley"). El filtro monotonico adicional descarta referencias hacia atras.
+const articleHeadingPattern = /\bart[ií]culo\s+(\d+[a-z-]*)\s*[.)\-º°]/gi;
+const maxArticleContentLength = 24000;
+
+// Segmenta el texto integro de la norma en articulos. Reusa la idea de
+// `chunkPages` (concatena paginas, mapea offsets a paginas) y detecta cabeceras
+// "Articulo N". Heuristica anti-falsos-positivos: solo abre un articulo nuevo si
+// el numero es mayor al ultimo (o es un "bis": mismo numero con sufijo de
+// letra), descartando referencias internas como "segun el articulo 5". Si la
+// norma no tiene cabeceras de articulo (bases, contratos, resoluciones) devuelve
+// una lista vacia.
+function segmentArticlesFromPages(pages: Array<{ pageNumber: number; text: string }>): ArticleSegment[] {
+  let tagged = "";
+  const pageMarks: Array<{ offset: number; page: number }> = [];
+
+  for (const page of pages) {
+    const pageText = page.text.trim();
+
+    if (!pageText) {
+      continue;
+    }
+
+    pageMarks.push({ offset: tagged.length, page: page.pageNumber });
+    tagged += `${tagged ? "\n" : ""}${pageText}\n`;
+  }
+
+  if (!tagged.trim()) {
+    return [];
+  }
+
+  const heads: Array<{ index: number; number: string }> = [];
+  let lastNumber = 0;
+  articleHeadingPattern.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = articleHeadingPattern.exec(tagged)) !== null) {
+    const raw = match[1];
+    const baseNumber = Number.parseInt(raw, 10);
+
+    if (!Number.isFinite(baseNumber)) {
+      continue;
+    }
+
+    const hasLetterSuffix = /[a-z]/i.test(raw);
+
+    if (baseNumber > lastNumber || (baseNumber === lastNumber && hasLetterSuffix)) {
+      const wordIndex = tagged.toLowerCase().indexOf("art", match.index);
+      heads.push({ index: wordIndex >= 0 ? wordIndex : match.index, number: raw });
+      lastNumber = baseNumber;
+    }
+  }
+
+  if (heads.length === 0) {
+    return [];
+  }
+
+  const pageAt = (offset: number) => {
+    let page = pageMarks[0]?.page ?? 1;
+
+    for (const mark of pageMarks) {
+      if (mark.offset <= offset) {
+        page = mark.page;
+      } else {
+        break;
+      }
+    }
+
+    return page;
+  };
+
+  const articles: ArticleSegment[] = [];
+
+  for (let index = 0; index < heads.length; index += 1) {
+    const start = heads[index].index;
+    const end = index + 1 < heads.length ? heads[index + 1].index : tagged.length;
+    const content = normalizeText(tagged.slice(start, end)).slice(0, maxArticleContentLength);
+
+    if (content.length < 30) {
+      continue;
+    }
+
+    articles.push({
+      articleNumber: heads[index].number,
+      content,
+      ordinal: articles.length,
+      pageEnd: pageAt(Math.max(start, end - 1)),
+      pageStart: pageAt(start),
+      sectionTitle: detectSectionTitle(content),
+      title: content.split("\n")[0].slice(0, 160),
+    });
+  }
+
+  return articles;
+}
+
+function buildEmbeddingText(input: {
+  article: string | null;
+  content: string;
+  documentNumber?: string | null;
+  documentType: string;
+  pageEnd: number | null;
+  pageStart: number | null;
+  processType?: string | null;
+  sectionTitle: string | null;
+  sourceEntity?: string | null;
+  title: string;
+  topic?: string | null;
+  vigencia?: string | null;
+  year?: number | null;
+}) {
+  const processType = input.processType ? processCatalog[input.processType]?.label ?? input.processType : null;
+  const header = [
+    `Documento: ${input.title}`,
+    `Tipo documental: ${input.documentType}`,
+    input.documentNumber ? `Numero: ${input.documentNumber}` : null,
+    input.sourceEntity ? `Entidad emisora: ${input.sourceEntity}` : null,
+    input.year ? `Anio: ${input.year}` : null,
+    input.vigencia ? `Vigencia: ${input.vigencia}` : null,
+    input.topic ? `Tema: ${input.topic}` : null,
+    processType ? `Tipo de proceso: ${processType}` : null,
+    processType ? `Alias del proceso: ${processAliases(input.processType).join(", ")}` : null,
+    processType ? `Anclas juridicas: ${processAnchors(input.processType).join("; ")}` : null,
+    input.article ? `Articulo: ${input.article}` : null,
+    input.sectionTitle ? `Seccion: ${input.sectionTitle}` : null,
+    input.pageStart
+      ? input.pageEnd && input.pageEnd !== input.pageStart
+        ? `Paginas: ${input.pageStart}-${input.pageEnd}`
+        : `Pagina: ${input.pageStart}`
+      : null,
+  ].filter(Boolean);
+
+  return `${header.join("\n")}\n\nTexto juridico:\n${input.content}`;
 }
 
 function getOcrMaxPages() {
@@ -79,11 +598,43 @@ function isUsableExtractedText(text: string) {
   );
 }
 
+function splitOcrPages(text: string, fallbackPageCount: number) {
+  const matches = Array.from(text.matchAll(/===\s*PAGINA\s+(\d+)\s*===/gi));
+
+  if (matches.length === 0) {
+    return [
+      {
+        pageNumber: 1,
+        text,
+      },
+    ];
+  }
+
+  return matches.map((match, index) => {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? text.length;
+    return {
+      pageNumber: Number.parseInt(match[1], 10) || index + 1,
+      text: normalizeText(text.slice(start, end)),
+    };
+  }).filter((page) => page.text || page.pageNumber <= fallbackPageCount);
+}
+
+// Devuelve los bytes del File en un Buffer con memoria PROPIA (copiada). Es
+// imprescindible: `Buffer.from(arrayBuffer)` comparte memoria con el ArrayBuffer
+// del File, y el pdf.js v1.10.100 que trae pdf-parse muta/transfiere ese buffer
+// in situ durante el parseo, corrompiendolo de forma no determinista ("Invalid
+// PDF structure" / "bad XRef entry" intermitentes). `Buffer.from(Uint8Array)`
+// copia a un buffer del pool de Node, igual que readFileSync, y es estable.
+async function readFileBytes(file: File) {
+  return Buffer.from(new Uint8Array(await file.arrayBuffer()));
+}
+
 async function extractPdfTextWithOpenAI(file: File, pageCount: number): Promise<ExtractedPdfText> {
   const openai = getOpenAIClient();
   const maxPages = getOcrMaxPages();
   const pagesToExtract = Math.min(pageCount || maxPages, maxPages);
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const buffer = await readFileBytes(file);
   const uploaded = await openai.files.create({
     file: await toFile(buffer, file.name, { type: "application/pdf" }),
     purpose: "user_data",
@@ -118,11 +669,14 @@ Alcance:
       temperature: 0,
     });
 
+    const text = normalizeText(response.output_text);
+
     return {
       extractionMethod: "openai-ocr",
       ocrPartial: Boolean(pageCount && pageCount > pagesToExtract),
       pageCount,
-      text: normalizeText(response.output_text),
+      pages: splitOcrPages(text, pageCount),
+      text,
     };
   } finally {
     await openai.files.delete(uploaded.id).catch(() => undefined);
@@ -130,8 +684,28 @@ Alcance:
 }
 
 async function extractPdfText(file: File): Promise<ExtractedPdfText> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const pdf = await pdfParse(buffer);
+  const buffer = await readFileBytes(file);
+  const pageTexts: Array<{ pageNumber: number; text: string }> = [];
+  let pageNumber = 0;
+  const pdf = await pdfParse(buffer, {
+    pagerender: async (pageData) => {
+      pageNumber += 1;
+      const textContent = await pageData.getTextContent({
+        disableCombineTextItems: false,
+        normalizeWhitespace: false,
+      });
+      const text = normalizeText(
+        textContent.items
+          .map((item: { str?: string }) => item.str ?? "")
+          .join(" "),
+      );
+      pageTexts.push({
+        pageNumber,
+        text,
+      });
+      return text;
+    },
+  });
   const text = normalizeText(pdf.text);
 
   if (text.length >= minExtractedTextLength) {
@@ -139,6 +713,15 @@ async function extractPdfText(file: File): Promise<ExtractedPdfText> {
       extractionMethod: "pdf-text",
       ocrPartial: false,
       pageCount: pdf.numpages,
+      pages:
+        pageTexts.length > 0
+          ? pageTexts
+          : [
+              {
+                pageNumber: 1,
+                text,
+              },
+            ],
       text,
     };
   }
@@ -152,7 +735,229 @@ async function extractPdfText(file: File): Promise<ExtractedPdfText> {
   return extractPdfTextWithOpenAI(file, pdf.numpages);
 }
 
+// Extrae solo el texto plano de un PDF (para analisis sin indexar). Reusa el
+// extractor con el fix de buffer y el OCR opcional.
+export async function extractPdfPlainText(file: File): Promise<{ pageCount: number; text: string }> {
+  const extracted = await extractPdfText(file);
+  return { pageCount: extracted.pageCount, text: extracted.text };
+}
+
+async function createProcessingJob(documentId: string) {
+  try {
+    const [job] = await supabaseRest<ProcessingJobRecord[]>("processing_jobs", {
+      body: JSON.stringify({
+        document_id: documentId,
+        job_type: "index_document",
+        metadata: {},
+        started_at: new Date().toISOString(),
+        status: "processing",
+      }),
+      method: "POST",
+    });
+
+    return job.id;
+  } catch {
+    return null;
+  }
+}
+
+async function updateProcessingJob(
+  jobId: string | null,
+  input: { errorMessage?: string; metadata?: Record<string, unknown>; status: "completed" | "error" },
+) {
+  if (!jobId) {
+    return;
+  }
+
+  await supabaseRest(`processing_jobs?id=eq.${jobId}`, {
+    body: JSON.stringify({
+      completed_at: new Date().toISOString(),
+      error_message: input.errorMessage ?? null,
+      metadata: input.metadata ?? {},
+      status: input.status,
+    }),
+    method: "PATCH",
+  }).catch(() => undefined);
+}
+
+async function insertChunksInBatches(chunkRows: ChunkInsert[]) {
+  const insertedChunks: Array<ChunkInsert & { id: string; pinecone_vector_id: string }> = [];
+
+  for (let index = 0; index < chunkRows.length; index += chunkInsertBatchSize) {
+    const batch = chunkRows.slice(index, index + chunkInsertBatchSize);
+    const inserted = await supabaseRest<Array<ChunkInsert & { id: string; pinecone_vector_id: string }>>(
+      "document_chunks",
+      {
+        body: JSON.stringify(batch),
+        method: "POST",
+      },
+    );
+
+    insertedChunks.push(...inserted);
+  }
+
+  return insertedChunks;
+}
+
+type InsertedArticle = { id: string; article_number: string; content: string };
+
+const refTypeToDocumentType: Record<RefType, string | null> = {
+  ley: "ley",
+  reglamento: "reglamento",
+  decreto: "reglamento",
+  directiva: "directiva",
+  opinion: "opinion",
+  interno: null,
+};
+
+// Detecta referencias cruzadas en los articulos, las resuelve contra el corpus
+// indexado (norma/articulo destino) y las persiste en norma_concordancias. Las
+// referencias a normas no indexadas quedan como externas (resolved=false).
+async function persistConcordancias(documentId: string, articles: InsertedArticle[]) {
+  await supabaseRest(`norma_concordancias?source_document_id=eq.${documentId}`, {
+    method: "DELETE",
+  }).catch(() => undefined);
+
+  if (articles.length === 0) {
+    return;
+  }
+
+  const corpus = await supabaseRest<
+    Array<{ id: string; document_type: string; metadata: Record<string, unknown> }>
+  >("documents?status=eq.indexed&select=id,document_type,metadata").catch(() => []);
+
+  const docByNumber = new Map<string, string>();
+  const docByType = new Map<string, string>();
+  for (const doc of corpus) {
+    const number =
+      getMetadataString(doc.metadata, "documentNumber") ?? getMetadataString(doc.metadata, "number");
+    if (number) {
+      docByNumber.set(normalizeNormNumber(number), doc.id);
+    }
+    if (!docByType.has(doc.document_type)) {
+      docByType.set(doc.document_type, doc.id);
+    }
+  }
+
+  const thisDocArticles = new Map<string, string>();
+  for (const article of articles) {
+    thisDocArticles.set(article.article_number, article.id);
+  }
+
+  type ConcordanciaRow = {
+    raw_text: string;
+    ref_article_number: string | null;
+    ref_document_number: string | null;
+    ref_type: RefType;
+    resolved: boolean;
+    source_article_id: string;
+    source_article_number: string;
+    source_document_id: string;
+    target_article_id: string | null;
+    target_document_id: string | null;
+  };
+
+  const rows: ConcordanciaRow[] = [];
+  const targetArticleLookups = new Set<string>();
+
+  for (const article of articles) {
+    for (const citation of detectCitations(article.content)) {
+      let targetDocId: string | undefined;
+
+      if (citation.refDocumentNumber) {
+        targetDocId = docByNumber.get(normalizeNormNumber(citation.refDocumentNumber));
+      }
+
+      if (!targetDocId) {
+        const mappedType = refTypeToDocumentType[citation.refType];
+        targetDocId = mappedType ? docByType.get(mappedType) : undefined;
+      }
+
+      if (targetDocId && citation.refArticleNumber) {
+        targetArticleLookups.add(`${targetDocId}|${citation.refArticleNumber}`);
+      }
+
+      rows.push({
+        raw_text: citation.rawText,
+        ref_article_number: citation.refArticleNumber,
+        ref_document_number: citation.refDocumentNumber,
+        ref_type: citation.refType,
+        resolved: Boolean(targetDocId),
+        source_article_id: article.id,
+        source_article_number: article.article_number,
+        source_document_id: documentId,
+        target_article_id: null,
+        target_document_id: targetDocId ?? null,
+      });
+    }
+
+    for (const number of extractArticleMentions(article.content)) {
+      if (number === article.article_number) {
+        continue;
+      }
+
+      const targetArticleId = thisDocArticles.get(number);
+
+      if (!targetArticleId) {
+        continue;
+      }
+
+      rows.push({
+        raw_text: `articulo ${number}`,
+        ref_article_number: number,
+        ref_document_number: null,
+        ref_type: "interno",
+        resolved: true,
+        source_article_id: article.id,
+        source_article_number: article.article_number,
+        source_document_id: documentId,
+        target_article_id: targetArticleId,
+        target_document_id: documentId,
+      });
+    }
+  }
+
+  if (targetArticleLookups.size > 0) {
+    const docIds = Array.from(new Set(Array.from(targetArticleLookups).map((key) => key.split("|")[0])));
+    const targetArticles = await supabaseRest<
+      Array<{ id: string; document_id: string; article_number: string }>
+    >(
+      `norma_articulos?document_id=in.(${docIds.map((id) => `"${id}"`).join(",")})&select=id,document_id,article_number`,
+    ).catch(() => []);
+    const articleIdByKey = new Map<string, string>();
+    for (const target of targetArticles) {
+      articleIdByKey.set(`${target.document_id}|${target.article_number}`, target.id);
+    }
+    for (const row of rows) {
+      if (row.ref_type !== "interno" && row.target_document_id && row.ref_article_number) {
+        row.target_article_id =
+          articleIdByKey.get(`${row.target_document_id}|${row.ref_article_number}`) ?? null;
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const deduped = rows.filter((row) => {
+    const key = `${row.source_article_id}|${row.ref_type}|${row.ref_document_number ?? ""}|${row.ref_article_number ?? ""}|${row.target_document_id ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  for (let index = 0; index < deduped.length; index += chunkInsertBatchSize) {
+    await supabaseRest("norma_concordancias", {
+      body: JSON.stringify(deduped.slice(index, index + chunkInsertBatchSize)),
+      method: "POST",
+    }).catch(() => undefined);
+  }
+}
+
 export async function processPdfForSearch(document: DocumentRecord, file: File) {
+  const jobId = await createProcessingJob(document.id);
+  let insertedVectorIds: string[] = [];
+
   await supabaseRest(`documents?id=eq.${document.id}`, {
     body: JSON.stringify({
       error_message: null,
@@ -173,58 +978,288 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       );
     }
 
-    const chunks = chunkText(text);
+    const chunks = chunkPages(extracted.pages);
+    const articleSegments = segmentArticlesFromPages(extracted.pages);
+    const insights = await analyzeDocumentWithAi(text);
+    const userDocumentType = document.document_type;
+    const documentType =
+      userDocumentType && userDocumentType !== "otros"
+        ? userDocumentType
+        : normalizeDocumentType(insights.documentType) ?? userDocumentType;
+    const sourceEntity = document.source_entity ?? insights.sourceEntity ?? null;
+    const contentHash = hashText(text);
+    const pineconeConfig = getPineconeConfig();
+    const documentNumber =
+      getInsightString(insights, "number") ??
+      getMetadataString(document.metadata, "number") ??
+      detectDocumentNumber(document.title, text);
+    const processType =
+      document.process_type ??
+      getMetadataString(document.metadata, "processType") ??
+      getMetadataString(document.metadata, "process_type") ??
+      inferProcessTypeFromText(`${document.title}\n${text.slice(0, 12000)}`) ??
+      (["ley", "reglamento"].includes(documentType) ? "todos" : null);
+    const enrichedMetadata = {
+      ...document.metadata,
+      ai: {
+        classificationConfidence: insights.confidence ?? "baja",
+        suggestedDocumentType: insights.documentType ?? null,
+        suggestedSourceEntity: insights.sourceEntity ?? null,
+      },
+      amends: insights.amends ?? null,
+      articleCount: articleSegments.length,
+      documentNumber,
+      chunkCount: chunks.length,
+      chunkInsertBatchSize,
+      contentHash,
+      extractionMethod: extracted.extractionMethod,
+      embeddingTextStrategy: "legal-context-header-plus-page-chunk",
+      hierarchyRank: hierarchyRank(documentType),
+      indexedTextComplete: true,
+      indexingPipelineVersion,
+      maxChunksPerDocument: getMaxChunksPerDocument() ?? "unlimited",
+      number: documentNumber,
+      ocrMaxPages: getOcrMaxPages(),
+      ocrPartial: extracted.ocrPartial,
+      pageCount: extracted.pageCount,
+      practicalImpact: insights.practicalImpact ?? getMetadataString(document.metadata, "practicalImpact"),
+      processAliases: processAliases(processType),
+      processAnchors: processAnchors(processType),
+      processType,
+      relatedArticles: insights.relatedArticles ?? [],
+      sourceRole: sourceRole(documentType),
+      status: insights.status ?? getMetadataString(document.metadata, "status"),
+      summary: insights.summary ?? getMetadataString(document.metadata, "summary"),
+      textLength: text.length,
+      topic: insights.topic ?? getMetadataString(document.metadata, "topic"),
+      vigencia: insights.vigencia ?? getMetadataString(document.metadata, "vigencia"),
+      year: insights.year ?? getMetadataNumber(document.metadata, "year"),
+    };
 
     if (chunks.length === 0) {
       throw new Error("El PDF no contiene suficiente texto para indexar");
     }
 
-    const chunkRows: ChunkInsert[] = chunks.map((content, index) => ({
-      chunk_index: index,
-      content,
+    const chunkRows: ChunkInsert[] = chunks.map((chunk) => ({
+      chunk_index: chunk.index,
+      content: chunk.content,
       document_id: document.id,
       metadata: {
+        article: chunk.article,
+        documentNumber,
+        documentType,
         extractionMethod: extracted.extractionMethod,
+        hierarchyRank: hierarchyRank(documentType),
+        pageEnd: chunk.pageEnd,
+        pageStart: chunk.pageStart,
         ocrPartial: extracted.ocrPartial,
         pageCount: extracted.pageCount,
+        processAliases: processAliases(processType),
+        processAnchors: processAnchors(processType),
+        processType,
+        sectionTitle: chunk.sectionTitle,
+        sourceRole: sourceRole(documentType),
       },
-      pinecone_vector_id: `${document.id}::${index}`,
+      page_end: chunk.pageEnd,
+      page_start: chunk.pageStart,
+      pinecone_vector_id: `${document.id}::${chunk.index}`,
     }));
 
-    const insertedChunks = await supabaseRest<
-      Array<ChunkInsert & { id: string; pinecone_vector_id: string }>
-    >("document_chunks", {
-      body: JSON.stringify(chunkRows),
-      method: "POST",
+    const insertedChunks = await insertChunksInBatches(chunkRows);
+
+    // Capa estructurada por articulo (navegacion tipo vLex). Es independiente de
+    // Pinecone: solo vive en Postgres para lectura/navegacion estructurada.
+    await supabaseRest(`norma_articulos?document_id=eq.${document.id}`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+
+    const insertedArticles: InsertedArticle[] = [];
+
+    if (articleSegments.length > 0) {
+      const articleRows = articleSegments.map((article) => ({
+        article_label: article.title,
+        article_number: article.articleNumber,
+        content: article.content,
+        document_id: document.id,
+        document_number: documentNumber,
+        document_type: documentType,
+        hierarchy_rank: hierarchyRank(documentType),
+        metadata: { extractionMethod: extracted.extractionMethod },
+        ordinal: article.ordinal,
+        page_end: article.pageEnd,
+        page_start: article.pageStart,
+        process_type: processType,
+        section_title: article.sectionTitle,
+        status: getMetadataString(enrichedMetadata, "status") ?? document.status,
+        vigencia: getMetadataString(enrichedMetadata, "vigencia"),
+        year: getMetadataNumber(enrichedMetadata, "year"),
+      }));
+
+      for (let index = 0; index < articleRows.length; index += chunkInsertBatchSize) {
+        const inserted = await supabaseRest<InsertedArticle[]>("norma_articulos", {
+          body: JSON.stringify(articleRows.slice(index, index + chunkInsertBatchSize)),
+          method: "POST",
+        });
+        insertedArticles.push(...inserted);
+      }
+    }
+
+    // Citador/concordancias: detecta y enlaza referencias cruzadas entre normas.
+    await persistConcordancias(document.id, insertedArticles).catch(() => undefined);
+
+    const pineconeRecords = insertedChunks.map((chunk) => ({
+      _id: chunk.pinecone_vector_id,
+      article:
+        typeof chunk.metadata.article === "string" && chunk.metadata.article
+          ? chunk.metadata.article
+          : undefined,
+      chunk_id: chunk.id,
+      chunk_index: chunk.chunk_index,
+      document_id: document.id,
+      document_type: documentType,
+      page_end: chunk.page_end ?? undefined,
+      page_start: chunk.page_start ?? undefined,
+      source_entity: sourceEntity ?? undefined,
+      source_role: sourceRole(documentType),
+      status: getMetadataString(enrichedMetadata, "status") ?? document.status,
+      text: buildEmbeddingText({
+        article:
+          typeof chunk.metadata.article === "string" && chunk.metadata.article
+            ? chunk.metadata.article
+            : null,
+        content: chunk.content,
+        documentNumber,
+        documentType,
+        pageEnd: chunk.page_end,
+        pageStart: chunk.page_start,
+        processType,
+        sectionTitle:
+          typeof chunk.metadata.sectionTitle === "string"
+            ? chunk.metadata.sectionTitle
+            : null,
+        sourceEntity,
+        title: document.title,
+        topic: getMetadataString(enrichedMetadata, "topic"),
+        vigencia: getMetadataString(enrichedMetadata, "vigencia"),
+        year: getMetadataNumber(enrichedMetadata, "year"),
+      }),
+      title: document.title,
+      process_type: processType ?? undefined,
+      section_title:
+        typeof chunk.metadata.sectionTitle === "string"
+          ? chunk.metadata.sectionTitle
+          : undefined,
+      hierarchy_rank: hierarchyRank(documentType),
+      document_number: documentNumber ?? undefined,
+      topic: getMetadataString(enrichedMetadata, "topic"),
+      vigencia: getMetadataString(enrichedMetadata, "vigencia"),
+      year: getMetadataNumber(enrichedMetadata, "year"),
+    }));
+    insertedVectorIds = pineconeRecords.map((record) => record._id);
+
+    const pineconeUpsert = await upsertTextRecords(pineconeRecords);
+    const pineconeVerification = await verifyDocumentIndexedInPinecone({
+      documentId: document.id,
+      expectedMinRecords: pineconeRecords.length,
+      query: [
+        document.title,
+        documentNumber,
+        documentType,
+        processType ? processCatalog[processType]?.label ?? processType : null,
+        getMetadataString(enrichedMetadata, "topic"),
+      ]
+        .filter(Boolean)
+        .join(" "),
     });
 
-    await upsertTextRecords(
-      insertedChunks.map((chunk) => ({
-        _id: chunk.pinecone_vector_id,
-        chunk_id: chunk.id,
-        chunk_index: chunk.chunk_index,
-        document_id: document.id,
-        document_type: document.document_type,
-        source_entity: document.source_entity ?? undefined,
-        text: chunk.content,
-        title: document.title,
-      })),
-    );
+    if (insights.summary) {
+      await supabaseRest(`document_summaries?document_id=eq.${document.id}&summary_type=eq.executive`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+      await supabaseRest("document_summaries", {
+        body: JSON.stringify({
+          content: insights.summary,
+          document_id: document.id,
+          metadata: {
+            keyPoints: insights.keyPoints ?? [],
+            practicalImpact: insights.practicalImpact ?? null,
+            relatedArticles: insights.relatedArticles ?? [],
+            topic: insights.topic ?? null,
+          },
+          model: legalAnswerModel,
+          summary_type: "executive",
+        }),
+        method: "POST",
+      }).catch(() => undefined);
+    }
 
     const [updated] = await supabaseRest<DocumentRecord[]>(`documents?id=eq.${document.id}`, {
       body: JSON.stringify({
+        document_type: documentType,
         metadata: {
-          ...document.metadata,
-          chunkCount: chunks.length,
-          extractionMethod: extracted.extractionMethod,
-          ocrMaxPages: getOcrMaxPages(),
-          ocrPartial: extracted.ocrPartial,
-          pageCount: extracted.pageCount,
-          textLength: text.length,
+          ...enrichedMetadata,
+          pinecone: {
+            batches: pineconeUpsert?.batches ?? null,
+            namespace: pineconeConfig.namespace,
+            recordCount: pineconeRecords.length,
+            upserted: pineconeUpsert?.upserted ?? pineconeRecords.length,
+            verification: pineconeVerification,
+          },
         },
+        process_type: processType,
+        source_entity: sourceEntity,
         status: "indexed",
       }),
       method: "PATCH",
+    });
+    // Boletin de novedades (Fase 4): emite eventos del feed al indexar.
+    await supabaseRest(`boletin_eventos?document_id=eq.${document.id}`, { method: "DELETE" }).catch(
+      () => undefined,
+    );
+    const boletinBase = {
+      document_id: document.id,
+      document_type: documentType,
+      process_type: processType,
+      source_entity: sourceEntity,
+      summary: getMetadataString(enrichedMetadata, "summary")?.slice(0, 400) ?? null,
+      title: document.title,
+      topic: getMetadataString(enrichedMetadata, "topic") ?? null,
+    };
+    const boletinEvents: Array<Record<string, unknown>> = [
+      { ...boletinBase, event_type: "documento_nuevo" },
+    ];
+    const amends = getMetadataString(enrichedMetadata, "amends");
+    if (amends) {
+      boletinEvents.push({ ...boletinBase, event_type: "modificatoria", summary: amends.slice(0, 400) });
+    }
+    const vigencia = (getMetadataString(enrichedMetadata, "vigencia") ?? "").toLowerCase();
+    if (vigencia.includes("derog") || vigencia.includes("modific")) {
+      boletinEvents.push({ ...boletinBase, event_type: "vigencia", summary: `Vigencia: ${vigencia}` });
+    }
+    await supabaseRest("boletin_eventos", {
+      body: JSON.stringify(boletinEvents),
+      method: "POST",
+    }).catch(() => undefined);
+
+    await updateProcessingJob(jobId, {
+      metadata: {
+        chunkCount: chunks.length,
+        chunkInsertBatchSize,
+        contentHash,
+        extractionMethod: extracted.extractionMethod,
+        indexedTextComplete: true,
+        indexingPipelineVersion,
+        pageCount: extracted.pageCount,
+        pinecone: {
+          batches: pineconeUpsert?.batches ?? null,
+          namespace: pineconeConfig.namespace,
+          recordCount: pineconeRecords.length,
+          upserted: pineconeUpsert?.upserted ?? pineconeRecords.length,
+          verification: pineconeVerification,
+        },
+        textLength: text.length,
+      },
+      status: "completed",
     });
 
     return {
@@ -234,12 +1269,31 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       textLength: text.length,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Error procesando PDF";
+
+    await deleteRecords(insertedVectorIds).catch(() => undefined);
+    await supabaseRest(`document_chunks?document_id=eq.${document.id}`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+    await supabaseRest(`norma_articulos?document_id=eq.${document.id}`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+    await supabaseRest(`norma_concordancias?source_document_id=eq.${document.id}`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+    await supabaseRest(`document_summaries?document_id=eq.${document.id}`, {
+      method: "DELETE",
+    }).catch(() => undefined);
     await supabaseRest(`documents?id=eq.${document.id}`, {
       body: JSON.stringify({
-        error_message: error instanceof Error ? error.message : "Error procesando PDF",
+        error_message: errorMessage,
         status: "error",
       }),
       method: "PATCH",
+    });
+    await updateProcessingJob(jobId, {
+      errorMessage,
+      status: "error",
     });
 
     throw error;
