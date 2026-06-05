@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, Gauge, Play, Plus, Target, Trash2 } from "lucide-react";
-import { DOCUMENT_TYPES, PROCESS_TYPES, documentTypeLabel, processTypeLabel } from "@/lib/legal-taxonomy";
+import { Activity, CheckCircle2, Gauge, MessageSquareWarning, Play, Plus, Target, Trash2 } from "lucide-react";
+import { DOCUMENT_TYPES, documentTypeLabel, processTypeLabel } from "@/lib/legal-taxonomy";
+import { processLabelFromOptions, useSettingsCatalog } from "./use-settings-catalog";
 
 type Question = {
   id: string;
   question: string;
   expected_keywords: string[];
+  expected_sources: Array<{
+    article?: string;
+    documentType?: string;
+    processType?: string;
+    titleIncludes?: string;
+  }>;
   document_type: string | null;
   process_type: string | null;
 };
@@ -26,8 +33,18 @@ type Result = {
   sufficient: boolean | null;
   sources_count: number | null;
   keyword_hit: number | null;
+  source_hit: number | null;
   score: number | null;
   feedback: string | null;
+};
+type FeedbackExample = {
+  id: string;
+  question: string;
+  answer: string | null;
+  feedback: "correct" | "incorrect";
+  expected_sources: unknown[];
+  recovered_sources: unknown[];
+  created_at: string;
 };
 
 function pct(value: number | null) {
@@ -42,15 +59,19 @@ function scoreClass(score: number | null) {
 }
 
 export function EvalDashboard() {
+  const { processTypes } = useSettingsCatalog();
+  const labelProcessType = (value?: string | null) => processLabelFromOptions(processTypes, value) ?? processTypeLabel(value);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [feedbackExamples, setFeedbackExamples] = useState<FeedbackExample[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [question, setQuestion] = useState("");
   const [keywords, setKeywords] = useState("");
+  const [expectedSources, setExpectedSources] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [processType, setProcessType] = useState("");
 
@@ -62,11 +83,14 @@ export function EvalDashboard() {
       setQuestions(payload.preguntas ?? []);
       setRuns(payload.corridas ?? []);
       setResults(payload.lastResults ?? []);
+      setFeedbackExamples(payload.feedbackExamples ?? []);
     }
     setLoading(false);
   }
 
   useEffect(() => {
+    // Initial sync with the evaluation API when the dashboard mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, []);
 
@@ -76,6 +100,7 @@ export function EvalDashboard() {
     if (!latest || latest.total === 0) return null;
     return latest.sufficientCount / latest.total;
   }, [latest]);
+  const incorrectFeedback = feedbackExamples.filter((item) => item.feedback === "incorrect").length;
 
   async function runEval() {
     setRunning(true);
@@ -96,10 +121,41 @@ export function EvalDashboard() {
     }
   }
 
+  async function seedQuestions() {
+    setError(null);
+    const response = await fetch("/api/eval", {
+      body: JSON.stringify({ action: "seed" }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setError(payload.error ?? "No se pudo cargar el set base");
+      return;
+    }
+    await reload();
+  }
+
   async function addQuestion() {
     if (question.trim().length < 8) {
       return;
     }
+
+    let parsedSources: unknown = [];
+    if (expectedSources.trim()) {
+      try {
+        parsedSources = JSON.parse(expectedSources);
+      } catch {
+        setError("Fuentes esperadas debe ser JSON valido.");
+        return;
+      }
+    }
+
+    if (!Array.isArray(parsedSources)) {
+      setError("Fuentes esperadas debe ser una lista JSON.");
+      return;
+    }
+
     await fetch("/api/eval", {
       body: JSON.stringify({
         action: "add",
@@ -108,6 +164,7 @@ export function EvalDashboard() {
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean),
+        expectedSources: parsedSources,
         processType,
         question: question.trim(),
       }),
@@ -116,6 +173,7 @@ export function EvalDashboard() {
     });
     setQuestion("");
     setKeywords("");
+    setExpectedSources("");
     setDocumentType("");
     setProcessType("");
     void reload();
@@ -154,8 +212,13 @@ export function EvalDashboard() {
         </article>
         <article className="statCard">
           <Activity size={18} />
-          <span className="statLabel">Preguntas evaluadas</span>
-          <strong>{latest?.total ?? questions.length}</strong>
+          <span className="statLabel">Feedback capturado</span>
+          <strong>{feedbackExamples.length}</strong>
+        </article>
+        <article className="statCard">
+          <MessageSquareWarning size={18} />
+          <span className="statLabel">Casos incorrectos</span>
+          <strong>{incorrectFeedback}</strong>
         </article>
       </div>
 
@@ -164,10 +227,16 @@ export function EvalDashboard() {
           <p className="eyebrow">Calidad del RAG</p>
           <h2>Última corrida</h2>
         </div>
-        <button className="primaryButton" disabled={running || questions.length === 0} onClick={runEval} type="button">
-          <Play size={16} />
-          {running ? "Corriendo..." : "Correr evaluación"}
-        </button>
+        <div className="buttonCluster">
+          <button className="secondaryButton" onClick={seedQuestions} type="button">
+            <Plus size={16} />
+            Set base
+          </button>
+          <button className="primaryButton" disabled={running || questions.length === 0} onClick={runEval} type="button">
+            <Play size={16} />
+            {running ? "Corriendo..." : "Correr evaluación"}
+          </button>
+        </div>
       </div>
 
       {error ? <p className="evalError">{error}</p> : null}
@@ -192,6 +261,7 @@ export function EvalDashboard() {
                     <span>{result.sufficient ? "Suficiente" : "Insuficiente"}</span>
                     <span>{result.sources_count ?? 0} fuentes</span>
                     <span>Términos: {pct(result.keyword_hit)}</span>
+                    <span>Fuentes esperadas: {pct(result.source_hit)}</span>
                   </div>
                   {result.feedback ? <p>{result.feedback}</p> : null}
                 </article>
@@ -220,6 +290,12 @@ export function EvalDashboard() {
                 placeholder="Términos esperados separados por coma"
                 value={keywords}
               />
+              <textarea
+                className="noteTextarea compactTextarea"
+                onChange={(event) => setExpectedSources(event.target.value)}
+                placeholder='Fuentes esperadas JSON. Ej. [{"documentType":"reglamento","article":"144"}]'
+                value={expectedSources}
+              />
               <select onChange={(event) => setDocumentType(event.target.value)} value={documentType}>
                 <option value="">Cualquier tipo documental</option>
                 {DOCUMENT_TYPES.map((item) => (
@@ -230,7 +306,7 @@ export function EvalDashboard() {
               </select>
               <select onChange={(event) => setProcessType(event.target.value)} value={processType}>
                 <option value="">Cualquier proceso</option>
-                {PROCESS_TYPES.map((item) => (
+                {processTypes.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
@@ -249,9 +325,12 @@ export function EvalDashboard() {
                     <strong>{item.question}</strong>
                     <div className="feedMeta">
                       {item.document_type ? <span>{documentTypeLabel(item.document_type)}</span> : null}
-                      {processTypeLabel(item.process_type) ? <span>{processTypeLabel(item.process_type)}</span> : null}
+                      {labelProcessType(item.process_type) ? <span>{labelProcessType(item.process_type)}</span> : null}
                       {(item.expected_keywords ?? []).length > 0 ? (
                         <span>{item.expected_keywords.length} término(s)</span>
+                      ) : null}
+                      {(item.expected_sources ?? []).length > 0 ? (
+                        <span>{item.expected_sources.length} fuente(s) esperada(s)</span>
                       ) : null}
                     </div>
                   </div>
@@ -283,6 +362,35 @@ export function EvalDashboard() {
                 </span>
                 <span>Términos {pct(run.summary.avgKeywordHit)}</span>
               </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {feedbackExamples.length > 0 ? (
+        <section className="toolPanel">
+          <div className="toolPanelHeader">
+            <div>
+              <p className="eyebrow">Memoria institucional</p>
+              <h2>Feedback reciente del chat</h2>
+            </div>
+          </div>
+          <div className="documentList">
+            {feedbackExamples.map((item) => (
+              <article className="evalResult" key={item.id}>
+                <div className="evalResultHead">
+                  <strong>{item.question}</strong>
+                  <span className={`evalScore ${item.feedback === "correct" ? "scoreGood" : "scoreBad"}`}>
+                    {item.feedback === "correct" ? "Correcta" : "Incorrecta"}
+                  </span>
+                </div>
+                <div className="feedMeta">
+                  <span>{new Date(item.created_at).toLocaleString("es-PE")}</span>
+                  <span>{item.recovered_sources?.length ?? 0} fuente(s) recuperada(s)</span>
+                  <span>{item.expected_sources?.length ?? 0} fuente(s) esperada(s)</span>
+                </div>
+                {item.answer ? <p>{item.answer.slice(0, 260)}...</p> : null}
+              </article>
             ))}
           </div>
         </section>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileText, LoaderCircle } from "lucide-react";
-import { PROCESS_TYPES } from "@/lib/legal-taxonomy";
+import { useSettingsCatalog } from "./use-settings-catalog";
 
 const initialForm = {
   entity: "",
@@ -16,6 +16,7 @@ const initialForm = {
 };
 
 export function ContractForm() {
+  const { entity: configuredEntity, processTypes } = useSettingsCatalog();
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -79,13 +80,17 @@ export function ContractForm() {
         <div className="formGrid">
           <label className="promptInput">
             <span>Entidad contratante *</span>
-            <input onChange={(event) => update("entity", event.target.value)} placeholder="Municipalidad de..." value={form.entity} />
+            <input
+              onChange={(event) => update("entity", event.target.value)}
+              placeholder="Municipalidad de..."
+              value={form.entity || configuredEntity?.name || ""}
+            />
           </label>
           <label className="promptInput">
             <span>Tipo de proceso</span>
             <select onChange={(event) => update("processType", event.target.value)} value={form.processType}>
               <option value="">Selecciona...</option>
-              {PROCESS_TYPES.map((item) => (
+              {processTypes.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>

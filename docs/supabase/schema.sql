@@ -140,6 +140,54 @@ alter table public.chat_sources add column if not exists evidence_quality numeri
 alter table public.chat_sources add column if not exists match_type text;
 alter table public.chat_sources add column if not exists metadata jsonb not null default '{}'::jsonb;
 
+create table if not exists public.entity_settings (
+  id text primary key default 'default',
+  name text not null default '',
+  ruc text not null default '' check (ruc = '' or ruc ~ '^[0-9]{11}$'),
+  executing_unit text not null default '' check (executing_unit = '' or executing_unit ~ '^[0-9]{6}$'),
+  address text not null default '',
+  government_level text not null default ''
+    check (government_level = '' or government_level in ('gobierno_nacional', 'gobierno_regional', 'gobierno_local')),
+  metadata jsonb not null default '{}'::jsonb,
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.process_type_settings (
+  code text primary key check (code ~ '^[a-z0-9_]+$'),
+  label text not null,
+  description text,
+  category text not null default 'competitivo'
+    check (category in ('competitivo', 'no_competitivo', 'contrato_menor')),
+  object text,
+  legal_basis text,
+  frequent_municipality boolean not null default false,
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  metadata jsonb not null default '{}'::jsonb,
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.process_type_settings add column if not exists category text not null default 'competitivo';
+alter table public.process_type_settings add column if not exists object text;
+alter table public.process_type_settings add column if not exists legal_basis text;
+alter table public.process_type_settings add column if not exists frequent_municipality boolean not null default false;
+
+create table if not exists public.ai_feedback_examples (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid references public.chat_messages(id) on delete set null,
+  question text not null,
+  answer text,
+  feedback text not null check (feedback in ('correct', 'incorrect')),
+  expected_sources jsonb not null default '[]'::jsonb,
+  recovered_sources jsonb not null default '[]'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.normative_comparisons (
   id uuid primary key default gen_random_uuid(),
   topic text not null,
@@ -203,8 +251,18 @@ create trigger set_chat_sessions_updated_at
 before update on public.chat_sessions
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_entity_settings_updated_at on public.entity_settings;
+create trigger set_entity_settings_updated_at
+before update on public.entity_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_process_type_settings_updated_at on public.process_type_settings;
+create trigger set_process_type_settings_updated_at
+before update on public.process_type_settings
+for each row execute function public.set_updated_at();
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('documents', 'documents', false, 52428800, array['application/pdf'])
+values ('documents', 'documents', false, 104857600, array['application/pdf'])
 on conflict (id) do update set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
@@ -218,6 +276,9 @@ alter table public.chat_sessions enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.chat_sources enable row level security;
 alter table public.chat_response_notes enable row level security;
+alter table public.entity_settings enable row level security;
+alter table public.process_type_settings enable row level security;
+alter table public.ai_feedback_examples enable row level security;
 alter table public.normative_comparisons enable row level security;
 alter table public.audit_logs enable row level security;
 
@@ -228,10 +289,19 @@ alter table public.audit_logs enable row level security;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
-  role text not null default 'user' check (role in ('user', 'editor', 'admin')),
+  role text not null default 'consulta' check (role in ('consulta', 'area_usuaria', 'dec', 'legal', 'admin')),
+  entity text,
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles
+  add constraint profiles_role_check
+  check (role in ('consulta', 'area_usuaria', 'dec', 'legal', 'admin'));
+alter table public.profiles alter column role set default 'consulta';
+alter table public.profiles add column if not exists entity text;
+alter table public.profiles add column if not exists metadata jsonb not null default '{}'::jsonb;
 alter table public.profiles enable row level security;
 
 create index if not exists idx_chat_sessions_owner on public.chat_sessions(owner_id);
@@ -246,10 +316,20 @@ as $$
 declare
   admin_count int;
 begin
-  -- El primer usuario registrado nace admin (bootstrap); el resto, user.
+  -- El primer usuario registrado nace admin (bootstrap); el resto, consulta.
   select count(*) into admin_count from public.profiles where role = 'admin';
-  insert into public.profiles (id, email, role)
-  values (new.id, new.email, case when admin_count = 0 then 'admin' else 'user' end)
+  insert into public.profiles (id, email, role, metadata)
+  values (
+    new.id,
+    new.email,
+    case when admin_count = 0 then 'admin' else 'consulta' end,
+    jsonb_build_object(
+      'role',
+      case when admin_count = 0 then 'admin' else 'consulta' end,
+      'permissionVersion',
+      'ace-role-matrix-v1'
+    )
+  )
   on conflict (id) do nothing;
   return new;
 end;
@@ -273,7 +353,7 @@ as $$
   );
 $$;
 
--- Helper de rol editor (editor o admin): gestiona el corpus, no usuarios/eval
+-- Helper de rol DEC (DEC o admin): gestiona el corpus, no usuarios/eval
 create or replace function public.is_editor()
 returns boolean
 language sql
@@ -282,7 +362,7 @@ stable
 set search_path = public
 as $$
   select exists (
-    select 1 from public.profiles where id = auth.uid() and role in ('editor', 'admin')
+    select 1 from public.profiles where id = auth.uid() and role in ('dec', 'admin')
   );
 $$;
 
@@ -329,8 +409,8 @@ begin
     'users', jsonb_build_object(
       'total', (select count(*) from public.profiles),
       'admins', (select count(*) from public.profiles where role = 'admin'),
-      'editors', (select count(*) from public.profiles where role = 'editor'),
-      'users', (select count(*) from public.profiles where role = 'user')
+      'editors', (select count(*) from public.profiles where role = 'dec'),
+      'users', (select count(*) from public.profiles where role = 'consulta')
     )
   ) into result;
 
@@ -458,6 +538,31 @@ create policy chat_response_notes_owner on public.chat_response_notes
     join public.chat_sessions s on s.id = m.session_id
     where m.id = chat_response_notes.message_id and s.owner_id = auth.uid()));
 
+drop policy if exists entity_settings_admin on public.entity_settings;
+create policy entity_settings_admin on public.entity_settings
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists process_type_settings_admin on public.process_type_settings;
+create policy process_type_settings_admin on public.process_type_settings
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists ai_feedback_examples_owner_insert on public.ai_feedback_examples;
+create policy ai_feedback_examples_owner_insert on public.ai_feedback_examples
+  for insert to authenticated
+  with check (exists (
+    select 1 from public.chat_messages m
+    join public.chat_sessions s on s.id = m.session_id
+    where m.id = ai_feedback_examples.message_id and s.owner_id = auth.uid()));
+
+drop policy if exists ai_feedback_examples_admin_select on public.ai_feedback_examples;
+create policy ai_feedback_examples_admin_select on public.ai_feedback_examples
+  for select to authenticated
+  using (public.is_admin());
+
 -- normative_comparisons: privadas por dueno
 drop policy if exists normative_comparisons_owner on public.normative_comparisons;
 create policy normative_comparisons_owner on public.normative_comparisons
@@ -537,15 +642,20 @@ create table if not exists public.norma_concordancias (
   target_document_id uuid references public.documents(id) on delete set null,
   target_article_id uuid references public.norma_articulos(id) on delete set null,
   raw_text text not null,
+  relation_type text not null default 'concordancia'
+    check (relation_type in ('modifica', 'deroga', 'reglamenta', 'complementa', 'remite', 'concordancia')),
   resolved boolean not null default false,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
+alter table public.norma_concordancias add column if not exists relation_type text not null default 'concordancia';
+
 create index if not exists idx_concordancias_source_article on public.norma_concordancias(source_article_id);
 create index if not exists idx_concordancias_source_document on public.norma_concordancias(source_document_id);
 create index if not exists idx_concordancias_target_document on public.norma_concordancias(target_document_id);
 create index if not exists idx_concordancias_target_article on public.norma_concordancias(target_article_id);
+create index if not exists idx_concordancias_relation_type on public.norma_concordancias(relation_type);
 
 alter table public.norma_concordancias enable row level security;
 
@@ -665,10 +775,12 @@ create table if not exists public.eval_preguntas (
   id uuid primary key default gen_random_uuid(),
   question text not null,
   expected_keywords text[] not null default '{}',
+  expected_sources jsonb not null default '[]'::jsonb,
   document_type text,
   process_type text,
   created_at timestamptz not null default now()
 );
+alter table public.eval_preguntas add column if not exists expected_sources jsonb not null default '[]'::jsonb;
 alter table public.eval_preguntas enable row level security;
 drop policy if exists eval_preguntas_select on public.eval_preguntas;
 create policy eval_preguntas_select on public.eval_preguntas for select to authenticated using (true);
@@ -695,13 +807,168 @@ create table if not exists public.eval_resultados (
   sufficient boolean,
   sources_count int,
   keyword_hit numeric,
+  source_hit numeric,
   score numeric,
   feedback text,
+  source_feedback jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table public.eval_resultados add column if not exists source_hit numeric;
+alter table public.eval_resultados add column if not exists source_feedback jsonb not null default '{}'::jsonb;
 create index if not exists idx_eval_resultados_corrida on public.eval_resultados(corrida_id);
 alter table public.eval_resultados enable row level security;
 drop policy if exists eval_resultados_select on public.eval_resultados;
 create policy eval_resultados_select on public.eval_resultados for select to authenticated using (true);
 drop policy if exists eval_resultados_admin_write on public.eval_resultados;
 create policy eval_resultados_admin_write on public.eval_resultados for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- ============================================================
+-- SDD "IA Contrataciones Publicas": roles ampliados (Fase A) + expedientes (Fase B)
+-- Aplicar este bloque completo a la BD live.
+-- ============================================================
+
+-- Fase A: roles del SDD. Se remapean valores antiguos y se anaden entidad/metadata.
+alter table public.profiles add column if not exists entity text;
+alter table public.profiles add column if not exists metadata jsonb not null default '{}'::jsonb;
+
+-- Remapeo de valores antiguos a la nomenclatura del SDD (idempotente).
+update public.profiles set role = 'consulta' where role = 'user';
+update public.profiles set role = 'dec' where role = 'editor';
+
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'profiles_role_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles drop constraint profiles_role_check;
+  end if;
+  alter table public.profiles add constraint profiles_role_check
+    check (role in ('consulta','area_usuaria','dec','legal','admin'));
+end $$;
+alter table public.profiles alter column role set default 'consulta';
+
+-- El primer usuario nace admin (bootstrap); el resto, consulta.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare admin_count int;
+begin
+  select count(*) into admin_count from public.profiles where role = 'admin';
+  insert into public.profiles (id, email, role, metadata)
+  values (
+    new.id,
+    new.email,
+    case when admin_count = 0 then 'admin' else 'consulta' end,
+    jsonb_build_object(
+      'role',
+      case when admin_count = 0 then 'admin' else 'consulta' end,
+      'permissionVersion',
+      'ace-role-matrix-v1'
+    )
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+-- is_editor cubre dec (gestion de corpus); is_dec/is_legal nuevas.
+create or replace function public.is_editor()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('dec','admin'));
+$$;
+
+create or replace function public.is_dec()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('dec','admin'));
+$$;
+
+create or replace function public.is_legal()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role in ('legal','admin'));
+$$;
+
+-- RNF-002: documentos de hasta 100MB.
+update storage.buckets set file_size_limit = 104857600 where id = 'documents';
+
+-- Fase B: Expediente (procedimiento) + documentos de trabajo (NO corpus),
+-- evaluaciones de ofertas y riesgos. Privados por owner (admin supervisa).
+create table if not exists public.procurement_processes (
+  id uuid primary key default gen_random_uuid(),
+  nomenclature text not null,
+  object_type text not null default 'servicios'
+    check (object_type in ('bienes','servicios','obras','consultoria')),
+  procedure_type text,
+  amount numeric,
+  entity text,
+  status text not null default 'en_preparacion'
+    check (status in ('en_preparacion','en_evaluacion','otorgado','desierto','en_ejecucion','cerrado')),
+  summary text,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.process_documents (
+  id uuid primary key default gen_random_uuid(),
+  process_id uuid not null references public.procurement_processes(id) on delete cascade,
+  library_document_id uuid references public.documents(id) on delete set null,
+  kind text not null default 'otros'
+    check (kind in ('bases','bases_integradas','oferta','contrato','acta','requerimiento','tdr','ee_tt','informe','carta','generado','otros')),
+  bidder_name text,
+  title text not null,
+  file_name text,
+  storage_bucket text,
+  storage_path text,
+  mime_type text,
+  extracted_text text,
+  status text not null default 'uploaded' check (status in ('uploaded','processing','ready','error')),
+  error_message text,
+  metadata jsonb not null default '{}'::jsonb,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.process_documents add column if not exists library_document_id uuid references public.documents(id) on delete set null;
+
+create table if not exists public.process_evaluations (
+  id uuid primary key default gen_random_uuid(),
+  process_id uuid not null references public.procurement_processes(id) on delete cascade,
+  bidder_name text,
+  result text check (result in ('cumple','no_cumple','subsanable','riesgo')),
+  matrix jsonb not null default '[]'::jsonb,
+  observations jsonb not null default '[]'::jsonb,
+  model text,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.process_risks (
+  id uuid primary key default gen_random_uuid(),
+  process_id uuid not null references public.procurement_processes(id) on delete cascade,
+  items jsonb not null default '[]'::jsonb,
+  model text,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_procurement_processes_owner on public.procurement_processes(owner_id);
+create index if not exists idx_process_documents_process on public.process_documents(process_id);
+create index if not exists idx_process_evaluations_process on public.process_evaluations(process_id);
+create index if not exists idx_process_risks_process on public.process_risks(process_id);
+
+drop trigger if exists set_procurement_processes_updated_at on public.procurement_processes;
+create trigger set_procurement_processes_updated_at before update on public.procurement_processes
+for each row execute function public.set_updated_at();
+drop trigger if exists set_process_documents_updated_at on public.process_documents;
+create trigger set_process_documents_updated_at before update on public.process_documents
+for each row execute function public.set_updated_at();
+
+-- RLS: el dueno del expediente gestiona todo; admin lee/supervisa.
+do $$
+declare t text;
+begin
+  foreach t in array array['procurement_processes','process_documents','process_evaluations','process_risks']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I_owner on public.%I', t, t);
+    execute format('create policy %I_owner on public.%I for all to authenticated using (owner_id = auth.uid() or public.is_admin()) with check (owner_id = auth.uid())', t, t);
+  end loop;
+end $$;

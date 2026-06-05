@@ -10,6 +10,12 @@ import {
   extractArticleMentions,
   normalizeNormNumber,
 } from "./legal-citations";
+import {
+  inferProcedureType,
+  procedureAliases,
+  procedureAnchors,
+  procedureLabel,
+} from "./procedure-catalog";
 
 type ChunkInsert = {
   document_id: string;
@@ -35,56 +41,6 @@ const unusableOcrPatterns = [
   "i can't process",
   "i cannot process",
 ];
-
-const processCatalog: Record<string, { aliases: string[]; anchors: string[]; label: string }> = {
-  acuerdo_marco: {
-    aliases: ["acuerdo marco", "catalogo electronico", "catalogos electronicos"],
-    anchors: [],
-    label: "Acuerdo marco",
-  },
-  adjudicacion_simplificada: {
-    aliases: ["adjudicacion simplificada"],
-    anchors: [],
-    label: "Adjudicacion simplificada",
-  },
-  comparacion_precios: {
-    aliases: ["comparacion de precios", "comparacion precios", "comparar precios"],
-    anchors: [
-      "articulo 144 reglamento comparacion de precios",
-      "procedimiento de seleccion comparacion de precios",
-      "unico factor de evaluacion precio",
-    ],
-    label: "Comparacion de precios",
-  },
-  concurso_publico: {
-    aliases: ["concurso publico"],
-    anchors: [],
-    label: "Concurso publico",
-  },
-  contratacion_directa: {
-    aliases: ["contratacion directa"],
-    anchors: [],
-    label: "Contratacion directa",
-  },
-  licitacion_publica: {
-    aliases: ["licitacion publica"],
-    anchors: [],
-    label: "Licitacion publica",
-  },
-  seleccion_consultores_individuales: {
-    aliases: ["consultores individuales", "seleccion de consultores individuales"],
-    anchors: [],
-    label: "Seleccion de consultores individuales",
-  },
-  subasta_inversa_electronica: {
-    aliases: ["subasta inversa electronica", "sie"],
-    anchors: [
-      "ficha tecnica subasta inversa electronica",
-      "bienes comunes subasta inversa electronica",
-    ],
-    label: "Subasta inversa electronica",
-  },
-};
 
 type ExtractedPdfText = {
   extractionMethod: "pdf-text" | "openai-ocr";
@@ -123,6 +79,16 @@ type AiDocumentInsights = {
   topic?: string | null;
   vigencia?: string | null;
   year?: number | null;
+};
+
+type StructuredLegalMetadata = {
+  articles: string[];
+  dispositions: string[];
+  issuer: string | null;
+  numerals: string[];
+  processType: string | null;
+  relations: Array<{ relationType: "modifica" | "deroga" | "reglamenta" | "complementa" | "remite"; text: string }>;
+  validitySignals: string[];
 };
 
 function normalizeText(text: string) {
@@ -174,32 +140,94 @@ function detectDocumentNumber(title: string, text: string) {
   return match?.[1] ?? null;
 }
 
-function inferProcessTypeFromText(text: string) {
-  const normalized = normalizeComparable(text);
+function uniqueLimited(values: string[], limit: number) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).slice(0, limit);
+}
 
-  for (const [processType, config] of Object.entries(processCatalog)) {
-    if (config.aliases.some((alias) => normalized.includes(normalizeComparable(alias)))) {
-      return processType;
+function extractRegexMatches(text: string, pattern: RegExp, groupIndex = 0, limit = 30) {
+  return uniqueLimited(
+    Array.from(text.matchAll(pattern))
+      .map((match) => match[groupIndex] ?? match[0])
+      .filter(Boolean),
+    limit,
+  );
+}
+
+function detectIssuer(text: string) {
+  const header = text.slice(0, 6000);
+  const candidates = [
+    /(?:ministerio|organismo|oece|osce|per[uú])[^.\n]{0,120}/i,
+    /(?:decreto\s+supremo|directiva|resoluci[oó]n)[^.\n]{0,160}(?:ministerio|oece|osce|mef)[^.\n]{0,80}/i,
+  ];
+
+  for (const pattern of candidates) {
+    const match = header.match(pattern);
+    if (match?.[0]) {
+      return normalizeText(match[0]).slice(0, 180);
     }
   }
 
   return null;
 }
 
-function processAliases(processType?: string | null) {
-  if (processType === "todos") {
-    return ["todos los procesos", "aplicacion general"];
-  }
+function extractStructuredLegalMetadata(text: string): StructuredLegalMetadata {
+  const articles = extractRegexMatches(text, /\b(?:art[ií]culo|art\.?)\s+([0-9]+[A-Za-z-]*)/gi, 1, 80);
+  const numerals = extractRegexMatches(text, /\b([0-9]{1,3}(?:\.[0-9]{1,3}){1,4})\b/g, 1, 80);
+  const dispositions = extractRegexMatches(
+    text,
+    /\b(?:disposici[oó]n\s+(?:complementaria\s+)?(?:final|transitoria|modificatoria)|anexo|cap[ií]tulo|t[ií]tulo)\s+[^.\n]{0,160}/gi,
+    0,
+    40,
+  );
+  const validitySignals = extractRegexMatches(
+    text,
+    /\b(?:vigente|derogad[ao]s?|modificad[ao]s?|dej[ao]\s+sin\s+efecto|entr[ao]\s+en\s+vigencia|modifica(?:se)?|deroga(?:se)?)\b[^.\n]{0,180}/gi,
+    0,
+    40,
+  );
+  const relationPatterns: Array<[StructuredLegalMetadata["relations"][number]["relationType"], RegExp]> = [
+    ["modifica", /\bmodifica(?:se)?\b[^.\n]{0,220}/gi],
+    ["deroga", /\bderoga(?:se)?\b[^.\n]{0,220}/gi],
+    ["reglamenta", /\breglamenta\b[^.\n]{0,220}/gi],
+    ["complementa", /\bcomplementa\b[^.\n]{0,220}/gi],
+    ["remite", /\b(?:remite|conforme\s+al|de\s+acuerdo\s+con)\b[^.\n]{0,220}/gi],
+  ];
+  const relations = relationPatterns.flatMap(([relationType, pattern]) =>
+    extractRegexMatches(text, pattern, 0, 12).map((match) => ({
+      relationType,
+      text: normalizeText(match).slice(0, 260),
+    })),
+  );
 
-  return processType ? processCatalog[processType]?.aliases ?? [] : [];
+  return {
+    articles,
+    dispositions,
+    issuer: detectIssuer(text),
+    numerals,
+    processType: inferProcessTypeFromText(text.slice(0, 25000)),
+    relations: uniqueLimited(relations.map((relation) => `${relation.relationType}|${relation.text}`), 50).map(
+      (value) => {
+        const [relationType, ...rest] = value.split("|");
+        return {
+          relationType: relationType as StructuredLegalMetadata["relations"][number]["relationType"],
+          text: rest.join("|"),
+        };
+      },
+    ),
+    validitySignals,
+  };
+}
+
+function inferProcessTypeFromText(text: string) {
+  return inferProcedureType(text);
+}
+
+function processAliases(processType?: string | null) {
+  return procedureAliases(processType);
 }
 
 function processAnchors(processType?: string | null) {
-  if (processType === "todos") {
-    return ["norma general aplicable a todos los procesos de contratacion publica"];
-  }
-
-  return processType ? processCatalog[processType]?.anchors ?? [] : [];
+  return procedureAnchors(processType);
 }
 
 function sourceRole(documentType: string) {
@@ -557,7 +585,7 @@ function buildEmbeddingText(input: {
   vigencia?: string | null;
   year?: number | null;
 }) {
-  const processType = input.processType ? processCatalog[input.processType]?.label ?? input.processType : null;
+  const processType = input.processType ? procedureLabel(input.processType) || input.processType : null;
   const header = [
     `Documento: ${input.title}`,
     `Tipo documental: ${input.documentType}`,
@@ -810,6 +838,18 @@ const refTypeToDocumentType: Record<RefType, string | null> = {
   interno: null,
 };
 
+function classifyNormRelation(rawText: string): string {
+  const text = normalizeComparable(rawText);
+
+  if (text.includes("modifica")) return "modifica";
+  if (text.includes("deroga") || text.includes("deja sin efecto")) return "deroga";
+  if (text.includes("reglamenta")) return "reglamenta";
+  if (text.includes("complementa")) return "complementa";
+  if (text.includes("conforme") || text.includes("de acuerdo") || text.includes("remite")) return "remite";
+
+  return "concordancia";
+}
+
 // Detecta referencias cruzadas en los articulos, las resuelve contra el corpus
 // indexado (norma/articulo destino) y las persiste en norma_concordancias. Las
 // referencias a normas no indexadas quedan como externas (resolved=false).
@@ -846,6 +886,7 @@ async function persistConcordancias(documentId: string, articles: InsertedArticl
 
   type ConcordanciaRow = {
     raw_text: string;
+    relation_type: string;
     ref_article_number: string | null;
     ref_document_number: string | null;
     ref_type: RefType;
@@ -879,6 +920,7 @@ async function persistConcordancias(documentId: string, articles: InsertedArticl
 
       rows.push({
         raw_text: citation.rawText,
+        relation_type: classifyNormRelation(citation.rawText),
         ref_article_number: citation.refArticleNumber,
         ref_document_number: citation.refDocumentNumber,
         ref_type: citation.refType,
@@ -904,6 +946,7 @@ async function persistConcordancias(documentId: string, articles: InsertedArticl
 
       rows.push({
         raw_text: `articulo ${number}`,
+        relation_type: "concordancia",
         ref_article_number: number,
         ref_document_number: null,
         ref_type: "interno",
@@ -980,13 +1023,14 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
 
     const chunks = chunkPages(extracted.pages);
     const articleSegments = segmentArticlesFromPages(extracted.pages);
+    const structured = extractStructuredLegalMetadata(text);
     const insights = await analyzeDocumentWithAi(text);
     const userDocumentType = document.document_type;
     const documentType =
       userDocumentType && userDocumentType !== "otros"
         ? userDocumentType
         : normalizeDocumentType(insights.documentType) ?? userDocumentType;
-    const sourceEntity = document.source_entity ?? insights.sourceEntity ?? null;
+    const sourceEntity = document.source_entity ?? insights.sourceEntity ?? structured.issuer ?? null;
     const contentHash = hashText(text);
     const pineconeConfig = getPineconeConfig();
     const documentNumber =
@@ -998,6 +1042,7 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       getMetadataString(document.metadata, "processType") ??
       getMetadataString(document.metadata, "process_type") ??
       inferProcessTypeFromText(`${document.title}\n${text.slice(0, 12000)}`) ??
+      structured.processType ??
       (["ley", "reglamento"].includes(documentType) ? "todos" : null);
     const enrichedMetadata = {
       ...document.metadata,
@@ -1008,6 +1053,12 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       },
       amends: insights.amends ?? null,
       articleCount: articleSegments.length,
+      detectedArticles: structured.articles,
+      detectedDispositions: structured.dispositions,
+      detectedIssuer: structured.issuer,
+      detectedNumerals: structured.numerals,
+      detectedRelations: structured.relations,
+      detectedValiditySignals: structured.validitySignals,
       documentNumber,
       chunkCount: chunks.length,
       chunkInsertBatchSize,
@@ -1027,6 +1078,7 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       processAnchors: processAnchors(processType),
       processType,
       relatedArticles: insights.relatedArticles ?? [],
+      structuredExtractionVersion: "legal-structure-v1",
       sourceRole: sourceRole(documentType),
       status: insights.status ?? getMetadataString(document.metadata, "status"),
       summary: insights.summary ?? getMetadataString(document.metadata, "summary"),
@@ -1165,7 +1217,7 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
         document.title,
         documentNumber,
         documentType,
-        processType ? processCatalog[processType]?.label ?? processType : null,
+        processType ? procedureLabel(processType) || processType : null,
         getMetadataString(enrichedMetadata, "topic"),
       ]
         .filter(Boolean)

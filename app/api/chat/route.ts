@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { answerLegalQuestion, chatRequestSchema } from "@/lib/legal-chat";
+import { chatRequestSchema, streamLegalAnswer } from "@/lib/legal-chat";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Recuperacion hibrida + rerank + redaccion con OpenAI pueden tardar; evita que
+// Vercel corte la respuesta con su timeout por defecto.
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -21,15 +24,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await answerLegalQuestion(payload.data, {
+    // Respuesta en streaming: una linea JSON (NDJSON) por evento
+    // (meta -> delta... -> done). El cliente la lee incrementalmente.
+    const encoder = new TextEncoder();
+    const events = streamLegalAnswer(payload.data, {
       accessToken: auth.user.accessToken,
+      actorReference: auth.user.email ?? auth.user.id,
+      entity: auth.user.entity,
       ownerId: auth.user.id,
+      role: auth.user.role,
     });
 
-    return NextResponse.json({
-      mode: payload.data.mode,
-      question: payload.data.question,
-      ...result,
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const event of events) {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          }
+        } catch (error) {
+          controller.enqueue(
+            encoder.encode(
+              `${JSON.stringify({
+                type: "error",
+                error: error instanceof Error ? error.message : "No se pudo generar la respuesta",
+              })}\n`,
+            ),
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Cache-Control": "no-store, no-transform",
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        // Evita el buffering de proxies para que el streaming llegue en vivo.
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (error) {
     return NextResponse.json(

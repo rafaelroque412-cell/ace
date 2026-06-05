@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bot } from "lucide-react";
 import { AppShell } from "../components/app-shell";
 import { ChatHistory } from "../components/chat-history";
+import { LegalActivity } from "../components/legal-activity";
 
 export default function HistorialPage() {
   return (
@@ -14,9 +15,10 @@ export default function HistorialPage() {
         </Link>
       }
       eyebrow="Auditoria"
-      title="Historial de consultas y fuentes usadas"
+      title="Actividad jurídica, consultas y fuentes usadas"
     >
-      <section className="singleWorkspace">
+      <section className="activityWorkspace">
+        <LegalActivity />
         <ChatHistory />
       </section>
     </AppShell>

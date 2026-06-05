@@ -41,8 +41,58 @@ export const PROCESS_TYPES: TaxonomyOption[] = [
   { label: "Otros", value: "otros" },
 ];
 
+// Expedientes (SDD): tipo de objeto, estado y clases de documento de trabajo.
+export const OBJECT_TYPES: TaxonomyOption[] = [
+  { label: "Bienes", value: "bienes" },
+  { label: "Servicios", value: "servicios" },
+  { label: "Obras", value: "obras" },
+  { label: "Consultoría", value: "consultoria" },
+];
+
+export const PROCESS_STATUSES: TaxonomyOption[] = [
+  { label: "En preparación", value: "en_preparacion" },
+  { label: "En evaluación", value: "en_evaluacion" },
+  { label: "Otorgado", value: "otorgado" },
+  { label: "Desierto", value: "desierto" },
+  { label: "En ejecución", value: "en_ejecucion" },
+  { label: "Cerrado", value: "cerrado" },
+];
+
+export const PROCESS_DOC_KINDS: TaxonomyOption[] = [
+  { label: "Bases", value: "bases" },
+  { label: "Bases integradas", value: "bases_integradas" },
+  { label: "Oferta de postor", value: "oferta" },
+  { label: "Contrato", value: "contrato" },
+  { label: "Acta", value: "acta" },
+  { label: "Requerimiento", value: "requerimiento" },
+  { label: "Términos de referencia", value: "tdr" },
+  { label: "Especificaciones técnicas", value: "ee_tt" },
+  { label: "Informe", value: "informe" },
+  { label: "Carta", value: "carta" },
+  { label: "Documento generado", value: "generado" },
+  { label: "Otros", value: "otros" },
+];
+
 const documentTypeLabels = new Map(DOCUMENT_TYPES.map((item) => [item.value, item.label]));
 const processTypeLabels = new Map(PROCESS_TYPES.map((item) => [item.value, item.label]));
+const objectTypeLabels = new Map(OBJECT_TYPES.map((item) => [item.value, item.label]));
+const processStatusLabels = new Map(PROCESS_STATUSES.map((item) => [item.value, item.label]));
+const processDocKindLabels = new Map(PROCESS_DOC_KINDS.map((item) => [item.value, item.label]));
+
+export function objectTypeLabel(value?: string | null): string {
+  if (!value) return "Sin objeto";
+  return objectTypeLabels.get(value) ?? value;
+}
+
+export function processStatusLabel(value?: string | null): string {
+  if (!value) return "Sin estado";
+  return processStatusLabels.get(value) ?? value;
+}
+
+export function processDocKindLabel(value?: string | null): string {
+  if (!value) return "Otros";
+  return processDocKindLabels.get(value) ?? value;
+}
 
 export function documentTypeLabel(value?: string | null): string {
   if (!value) {

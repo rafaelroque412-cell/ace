@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Database,
   FileText,
   FolderTree,
@@ -12,6 +13,7 @@ import {
   Play,
   RefreshCw,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 
 type Metrics = {
@@ -38,6 +40,88 @@ type Activity = {
   details: Record<string, unknown>;
   created_at: string;
 };
+type VerificationCheck = {
+  code: string;
+  detail: string;
+  label: string;
+  pass: boolean;
+};
+type OperationalVerification = {
+  checkedAt: string;
+  ok: boolean;
+  summary: { failed: number; passed: number; total: number };
+  roles: {
+    checks: VerificationCheck[];
+    matrix: Array<{ allowedRoles: string[]; menu: string; requirement: string }>;
+    missingRoles: string[];
+    profilesByRole: Array<{ count: number; label: string; role: string }>;
+    totalProfiles: number;
+  };
+  corpus: {
+    corpusReady: boolean;
+    criticalSearches: Array<{
+      code: string;
+      expected: string;
+      pass: boolean;
+      recovered: Array<{
+        article: string | null;
+        documentTitle: string;
+        documentType: string;
+        pageStart: number | null;
+        processType: string | null;
+        score: number;
+      }>;
+    }>;
+    requirements: VerificationCheck[];
+  };
+  endToEnd: {
+    checks: VerificationCheck[];
+    latestIndexed: {
+      pageCount: number | null;
+      pineconeVerified: boolean;
+      processType: string | null;
+      title: string;
+      type: string;
+      updatedAt: string;
+    } | null;
+    searchPreview: Array<{
+      article: string | null;
+      documentTitle: string;
+      documentType: string;
+      pageStart: number | null;
+      processType: string | null;
+      score: number;
+    }>;
+  };
+};
+type UsageSummary = {
+  actions: Array<{ action: string; count: number }>;
+  chat: {
+    assistantMessages: number;
+    confidence: { alta: number; baja: number; media: number };
+    feedback: { correct: number; incorrect: number; notes: number };
+    userMessages: number;
+  };
+  days: Array<{ count: number; day: string }>;
+  since: string;
+};
+
+function CheckList({ checks }: { checks: VerificationCheck[] }) {
+  return (
+    <div className="ruleList">
+      {checks.map((check) => (
+        <article className="ruleItem" data-tone={check.pass ? "ok" : "warn"} key={check.code}>
+          <div>
+            {check.pass ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+            <strong>{check.label}</strong>
+            <span>{check.code}</span>
+          </div>
+          <small>{check.detail}</small>
+        </article>
+      ))}
+    </div>
+  );
+}
 
 export function MetricsDashboard() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -46,16 +130,26 @@ export function MetricsDashboard() {
   const [loading, setLoading] = useState(true);
   const [draining, setDraining] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verification, setVerification] = useState<OperationalVerification | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   async function reload() {
-    const payload = await fetch("/api/metrics").then((response) => response.json());
+    const [payload, usagePayload] = await Promise.all([
+      fetch("/api/metrics").then((response) => response.json()),
+      fetch("/api/usage").then((response) => response.json()).catch(() => null),
+    ]);
     setMetrics(payload.metrics ?? null);
     setErrors(payload.recentErrors ?? []);
     setActivity(payload.recentActivity ?? []);
+    setUsage(usagePayload?.chat ? usagePayload : null);
     setLoading(false);
   }
 
   useEffect(() => {
+    // Initial sync with the metrics API when the dashboard mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, []);
 
@@ -76,6 +170,24 @@ export function MetricsDashboard() {
       await reload();
     } finally {
       setDraining(false);
+    }
+  }
+
+  async function runVerification() {
+    setVerifying(true);
+    setVerificationError(null);
+    try {
+      const response = await fetch("/api/system/verify", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) {
+        setVerificationError(payload.error ?? "No se pudo ejecutar la verificación.");
+        return;
+      }
+      setVerification(payload);
+    } catch {
+      setVerificationError("No se pudo conectar con la verificación operativa.");
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -152,6 +264,103 @@ export function MetricsDashboard() {
         {message ? <p className="metricMessage">{message}</p> : null}
       </section>
 
+      <section className="toolPanel">
+        <div className="toolPanelHeader">
+          <div>
+            <p className="eyebrow">Verificación operativa</p>
+            <h2>{verification ? (verification.ok ? "Sistema verificado" : "Requiere atención") : "Roles, corpus y flujo end-to-end"}</h2>
+          </div>
+          <button className="primaryButton" disabled={verifying} onClick={runVerification} type="button">
+            {verifying ? <LoaderCircle size={16} /> : <ShieldCheck size={16} />}
+            {verifying ? "Verificando..." : "Ejecutar verificación"}
+          </button>
+        </div>
+        <p className="metricMessage">
+          Ejecuta una prueba autenticada como admin: revisa matriz de roles, corpus crítico
+          (Reglamento art. 144 y Directiva SIE) y un dry-run de búsqueda + chat sin guardar historial.
+        </p>
+        {verificationError ? <p className="evalError">{verificationError}</p> : null}
+        {verification ? (
+          <div className="operationalVerify">
+            <div className="sourceCoverage">
+              <span data-ready={verification.ok}>Resultado: {verification.ok ? "ok" : "pendiente"}</span>
+              <span data-ready={verification.summary.failed === 0}>
+                Checks: {verification.summary.passed}/{verification.summary.total}
+              </span>
+              <span data-ready={verification.corpus.corpusReady}>
+                Corpus: {verification.corpus.corpusReady ? "listo" : "requiere ajustes"}
+              </span>
+              <span data-ready={verification.roles.missingRoles.length === 0}>
+                Roles: {verification.roles.totalProfiles} usuario(s)
+              </span>
+            </div>
+
+            <div className="verifyGrid">
+              <section>
+                <h3>Permisos por rol</h3>
+                <CheckList checks={verification.roles.checks} />
+                <div className="sourceMetaGrid">
+                  {verification.roles.profilesByRole.map((role) => (
+                    <span key={role.role}>
+                      {role.label}: {role.count}
+                    </span>
+                  ))}
+                </div>
+                <div className="ruleList">
+                  {verification.roles.matrix.map((item) => (
+                    <article className="ruleItem" data-tone="ok" key={item.menu}>
+                      <div>
+                        <ShieldCheck size={17} />
+                        <strong>{item.requirement}</strong>
+                      </div>
+                      <small>
+                        {item.menu} · roles: {item.allowedRoles.join(", ")}
+                      </small>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Flujo end-to-end</h3>
+                <CheckList checks={verification.endToEnd.checks} />
+                {verification.endToEnd.latestIndexed ? (
+                  <div className="evidenceCard">
+                    <strong>Último documento indexado</strong>
+                    <span>{verification.endToEnd.latestIndexed.title}</span>
+                    <small>
+                      {verification.endToEnd.latestIndexed.type} · {verification.endToEnd.latestIndexed.pageCount ?? 0} página(s) · Pinecone{" "}
+                      {verification.endToEnd.latestIndexed.pineconeVerified ? "verificado" : "pendiente"}
+                    </small>
+                  </div>
+                ) : null}
+              </section>
+            </div>
+
+            <section>
+              <h3>Corpus crítico</h3>
+              <CheckList checks={verification.corpus.requirements} />
+              <div className="criticalSearchList">
+                {verification.corpus.criticalSearches.map((item) => (
+                  <article className="sourceCard" key={item.code}>
+                    <strong>
+                      {item.pass ? "OK" : "Falta"} · {item.expected}
+                    </strong>
+                    {item.recovered.map((source) => (
+                      <span key={`${item.code}-${source.documentTitle}-${source.article}-${source.pageStart}`}>
+                        {source.documentTitle} · {source.documentType}
+                        {source.article ? ` · art. ${source.article}` : ""}
+                        {source.pageStart ? ` · pág. ${source.pageStart}` : ""}
+                      </span>
+                    ))}
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </section>
+
       <div className="evalGrid">
         <section className="toolPanel">
           <div className="toolPanelHeader">
@@ -195,6 +404,53 @@ export function MetricsDashboard() {
           </div>
         </aside>
       </div>
+
+      {usage ? (
+        <section className="toolPanel">
+          <div className="toolPanelHeader">
+            <div>
+              <p className="eyebrow">Uso del sistema</p>
+              <h2>Señales de adopción y calidad</h2>
+            </div>
+            <button className="secondaryButton compactButton" onClick={reload} type="button">
+              <RefreshCw size={15} />
+              Actualizar uso
+            </button>
+          </div>
+          <div className="sourceCoverage">
+            <span data-ready={usage.chat.userMessages > 0}>Preguntas: {usage.chat.userMessages}</span>
+            <span data-ready={usage.chat.assistantMessages > 0}>Respuestas: {usage.chat.assistantMessages}</span>
+            <span data-ready={usage.chat.feedback.correct > 0}>Correctas: {usage.chat.feedback.correct}</span>
+            <span data-ready={usage.chat.feedback.incorrect === 0}>Incorrectas: {usage.chat.feedback.incorrect}</span>
+            <span data-ready={usage.chat.feedback.notes > 0}>Notas: {usage.chat.feedback.notes}</span>
+            <span data-ready={usage.chat.confidence.baja === 0}>Baja confianza: {usage.chat.confidence.baja}</span>
+          </div>
+          <div className="verifyGrid">
+            <section>
+              <h3>Acciones frecuentes</h3>
+              <div className="auditList">
+                {usage.actions.map((item) => (
+                  <div className="auditRow" key={item.action}>
+                    <span className="auditAction">{item.action}</span>
+                    <span className="auditMeta">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section>
+              <h3>Actividad diaria</h3>
+              <div className="auditList">
+                {usage.days.slice(-10).map((item) => (
+                  <div className="auditRow" key={item.day}>
+                    <span className="auditAction">{item.day}</span>
+                    <span className="auditMeta">{item.count} evento(s)</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

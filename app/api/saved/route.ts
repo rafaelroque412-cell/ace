@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const savedSchema = z.object({
-  itemType: z.enum(["documento", "articulo", "mensaje"]),
+  itemType: z.enum(["documento", "articulo", "mensaje", "validacion", "analisis"]),
   title: z.string().trim().min(1).max(300),
   documentId: z.string().uuid().optional().or(z.literal("")),
   articleId: z.string().uuid().optional().or(z.literal("")),
@@ -23,7 +23,7 @@ export async function GET() {
   }
   const items = await supabaseUserRest(
     auth.user.accessToken,
-    "guardados?select=id,carpeta_id,item_type,document_id,article_id,message_id,title,note,created_at&order=created_at.desc",
+    "guardados?select=id,carpeta_id,item_type,document_id,article_id,message_id,title,note,metadata,created_at&order=created_at.desc",
   );
   return NextResponse.json({ items });
 }

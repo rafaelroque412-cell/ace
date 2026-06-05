@@ -35,6 +35,17 @@ invocación serverless muere a mitad, el documento queda atascado en `uploaded` 
   considera muerto y se re-encola. Cada corrida procesa `INDEXING_DRAIN_BATCH` (def. 3).
 - El estado del documento (`status` + `updated_at`) **es** la cola; `processing_jobs`
   es el log detallado.
+- Worker Node opcional para entornos fuera de Vercel:
+  ```bash
+  npm run worker:indexing:once
+  npm run worker:indexing
+  ```
+  Variables:
+  ```bash
+  ACE_APP_URL=http://127.0.0.1:3000
+  CRON_SECRET=<mismo secreto configurado en la app>
+  INDEXING_WORKER_INTERVAL_MS=30000
+  ```
 
 ### Variables de entorno
 ```
@@ -107,3 +118,100 @@ lote, varios son toggles del dashboard, no SQL de la app):
 - Revisar funciones `SECURITY DEFINER` expuestas vía RPC (`handle_new_user` puede
   revocar `execute` a `anon`/`authenticated`; `is_admin`/`is_editor` deben conservar
   `execute` porque las usan las políticas RLS).
+
+## 8. Pruebas operativas de prioridad alta
+
+### Desde la UI
+
+Con sesión `admin`, abrir **Monitoreo → Verificación operativa → Ejecutar verificación**.
+
+La prueba valida:
+
+- Matriz de permisos por rol y existencia de usuarios para `consulta`, `area_usuaria`,
+  `dec`, `legal` y `admin`.
+- Corpus crítico: Ley 32069, Reglamento D.S. 009-2025-EF, modificatoria
+  D.S. 001-2026-EF, Directiva SIE, páginas, artículos y vectores Pinecone.
+- Flujo end-to-end seguro: Storage → chunks → Pinecone → búsqueda crítica →
+  chat dry-run con fuentes, sin guardar historial.
+
+### Desde consola
+
+Prueba pública básica:
+
+```bash
+npm run test:operational
+```
+
+Prueba completa autenticada:
+
+```bash
+set ACE_SESSION_COOKIE=<cookie de una sesión admin>
+npm run test:operational
+```
+
+La cookie puede copiarse de una sesión admin del navegador local. La prueba no sube PDFs
+ni ensucia el corpus; usa documentos ya cargados y ejecuta el chat con `persist=false`.
+
+### Casos mínimos esperados
+
+- `Comparación de Precios` debe recuperar **Reglamento artículo 144**.
+- Si el Reglamento fue modificado, debe recuperarse o detectarse la modificatoria
+  **D.S. N.° 001-2026-EF**.
+- `Subasta Inversa Electrónica` debe recuperar una **Directiva SIE** aplicable.
+- Ley y Reglamento deben estar clasificados con proceso `todos`.
+- Directivas y bases deben estar clasificadas por tipo de proceso cuando corresponda.
+
+## 9. Inteligencia jurídica del corpus
+
+ACE usa una matriz normativa por procedimiento en `lib/procedure-catalog.ts`.
+Esa matriz define fuentes requeridas, críticas y operativas para cada tipo de
+proceso. La misma matriz se usa en Chat, Búsqueda, Validar, Analiza, verificación
+de corpus y evaluación continua.
+
+Reglas clave implementadas:
+
+- Las respuestas del Chat se fundamentan en Ley, Reglamento, Directivas y Opiniones.
+- Las bases integradas son apoyo operativo; no sustituyen fundamento normativo.
+- Comparación de Precios exige Reglamento artículo 144 cuando la consulta pide
+  requisitos o procedencia.
+- SIE exige Reglamento aplicable y Directiva SIE.
+- Contratación Directa exige causal normativa en Ley o Reglamento.
+- La confianza baja/media/alta se calcula con fuentes críticas, artículo, página,
+  vigencia, jerarquía normativa, coincidencia literal y calidad de evidencia.
+
+## 10. Extracción estructurada y grafo normativo
+
+Durante la indexación de PDF se guardan metadatos estructurados:
+
+- artículos detectados,
+- numerales,
+- disposiciones,
+- entidad emisora probable,
+- señales de vigencia,
+- relaciones normativas detectadas.
+
+La tabla `norma_concordancias` clasifica relaciones como:
+
+- `modifica`,
+- `deroga`,
+- `reglamenta`,
+- `complementa`,
+- `remite`,
+- `concordancia`.
+
+Esto alimenta el menú Normas y permite mostrar advertencias de vigencia o
+modificatorias con mayor precisión.
+
+## 11. Memoria de feedback y evaluación
+
+Cuando un usuario marca una respuesta del Chat como correcta o incorrecta, ACE
+registra un ejemplo en `ai_feedback_examples`. Esto no entrena automáticamente al
+modelo; sirve para auditoría, revisión humana y generación de casos de evaluación.
+
+El menú Evaluación permite:
+
+- sembrar preguntas base,
+- correr pruebas del RAG,
+- revisar fuentes esperadas,
+- ver feedback reciente del Chat,
+- detectar regresiones cuando el corpus o prompts cambian.

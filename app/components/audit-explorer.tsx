@@ -35,6 +35,8 @@ export function AuditExplorer() {
   }, [action]);
 
   useEffect(() => {
+    // Initial sync with the audit API when the explorer mounts or the action filter changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, [reload]);
 

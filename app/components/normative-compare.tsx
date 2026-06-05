@@ -2,6 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ExternalLink,
@@ -12,9 +13,9 @@ import {
 } from "lucide-react";
 import {
   DOCUMENT_TYPES,
-  PROCESS_TYPES,
   processTypeLabel,
 } from "@/lib/legal-taxonomy";
+import { processLabelFromOptions, useSettingsCatalog, withBlankProcessOption } from "./use-settings-catalog";
 
 type CompareSource = {
   article: string | null;
@@ -76,7 +77,6 @@ type SelectedReference = {
 };
 
 const documentTypes = [{ label: "Todos", value: "" }, ...DOCUMENT_TYPES];
-const processTypes = [{ label: "Todos", value: "" }, ...PROCESS_TYPES];
 
 const exampleTopics = [
   "Requisitos de la comparacion de precios",
@@ -213,12 +213,14 @@ function ComparisonContent({
 function SideEditor({
   documents,
   onChange,
+  processTypes,
   side,
   title,
   value,
 }: {
   documents: DocumentOption[];
   onChange: (next: SideState) => void;
+  processTypes: Array<{ label: string; value: string }>;
   side: "A" | "B";
   title: string;
   value: SideState;
@@ -321,10 +323,25 @@ function EvidencePanel({
 }
 
 export function NormativeCompare() {
+  const searchParams = useSearchParams();
+  const { processTypes: configuredProcessTypes } = useSettingsCatalog();
+  const processTypes = withBlankProcessOption(configuredProcessTypes);
+  const labelProcessType = (value?: string | null) =>
+    processLabelFromOptions(configuredProcessTypes, value) ?? processTypeLabel(value);
   const [documents, setDocuments] = useState<DocumentOption[]>([]);
-  const [sideA, setSideA] = useState<SideState>(emptySide("Ley 32069"));
-  const [sideB, setSideB] = useState<SideState>(emptySide("Reglamento"));
-  const [topic, setTopic] = useState("");
+  const [sideA, setSideA] = useState<SideState>({
+    ...emptySide("Ley 32069"),
+    documentId: searchParams.get("documentIdA") ?? "",
+    documentType: searchParams.get("documentTypeA") ?? "",
+    processType: searchParams.get("processType") ?? "",
+  });
+  const [sideB, setSideB] = useState<SideState>({
+    ...emptySide("Reglamento"),
+    documentId: searchParams.get("documentIdB") ?? "",
+    documentType: searchParams.get("documentTypeB") ?? "",
+    processType: searchParams.get("processType") ?? "",
+  });
+  const [topic, setTopic] = useState(searchParams.get("topic") ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [response, setResponse] = useState<CompareResponse | null>(null);
@@ -407,8 +424,8 @@ export function NormativeCompare() {
 
       <form className="toolBody" onSubmit={submitComparison}>
         <div className="compareColumns">
-          <SideEditor documents={documents} onChange={setSideA} side="A" title="Norma A" value={sideA} />
-          <SideEditor documents={documents} onChange={setSideB} side="B" title="Norma B" value={sideB} />
+          <SideEditor documents={documents} onChange={setSideA} processTypes={processTypes} side="A" title="Norma A" value={sideA} />
+          <SideEditor documents={documents} onChange={setSideB} processTypes={processTypes} side="B" title="Norma B" value={sideB} />
         </div>
 
         <label className="promptInput">
@@ -505,8 +522,8 @@ export function NormativeCompare() {
                   <div className="sourceModalMeta">
                     <span>{selectedReference.source.documentType}</span>
                     <span>{selectedReference.source.sourceEntity ?? "Sin entidad"}</span>
-                    {processTypeLabel(selectedReference.source.processType) ? (
-                      <span>{processTypeLabel(selectedReference.source.processType)}</span>
+                    {labelProcessType(selectedReference.source.processType) ? (
+                      <span>{labelProcessType(selectedReference.source.processType)}</span>
                     ) : null}
                     {selectedReference.source.vigencia ? <span>Vigencia {selectedReference.source.vigencia}</span> : null}
                     <span>Calidad {selectedReference.source.evidenceQuality.toFixed(2)}</span>

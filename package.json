@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app next.config.ts eslint.config.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:operational": "node scripts/operational-smoke-test.mjs",
+    "worker:indexing": "node scripts/indexing-worker.mjs",
+    "worker:indexing:once": "node scripts/indexing-worker.mjs --once"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

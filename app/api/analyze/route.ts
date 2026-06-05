@@ -2,16 +2,30 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { analyzeLegalDocument } from "@/lib/legal-analysis";
 import { extractPdfPlainText } from "@/lib/pdf-processing";
-import { supabaseRest, supabaseUserRest } from "@/lib/supabase-server";
+import { institutionalAuditDetails, supabaseRest, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
+import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const maxPdfSize = 50 * 1024 * 1024;
 const minTextLength = 120;
 
 type DocumentRow = { id: string; title: string; document_type: string };
 type ChunkRow = { content: string };
+type ProcessRow = { id: string; nomenclature: string; procedure_type: string | null };
+
+export async function GET() {
+  const auth = await requireUser();
+  if ("error" in auth) {
+    return auth.error;
+  }
+
+  const items = await supabaseUserRest(
+    auth.user.accessToken,
+    "document_analyses?select=id,source,document_id,title,result,model,created_at&order=created_at.desc&limit=30",
+  );
+  return NextResponse.json({ items });
+}
 
 export async function POST(request: Request) {
   try {
@@ -24,6 +38,9 @@ export async function POST(request: Request) {
     let text = "";
     let title: string | undefined;
     let documentType: string | undefined;
+    let documentKind: string | undefined;
+    let processType: string | undefined;
+    let processId: string | null = null;
     let source: "upload" | "indexed" = "upload";
     let documentId: string | null = null;
 
@@ -37,16 +54,27 @@ export async function POST(request: Request) {
       if (file.type !== "application/pdf") {
         return NextResponse.json({ error: "Solo se permiten archivos PDF" }, { status: 400 });
       }
-      if (file.size > maxPdfSize) {
-        return NextResponse.json({ error: "El PDF supera el limite de 50 MB" }, { status: 400 });
+      if (file.size > maxPdfSizeBytes) {
+        return NextResponse.json({ error: `El PDF supera el limite de ${maxPdfSizeLabel}` }, { status: 400 });
       }
 
       const titleValue = formData.get("title");
+      const documentKindValue = formData.get("documentKind");
+      const processTypeValue = formData.get("processType");
+      const processIdValue = formData.get("processId");
       title = typeof titleValue === "string" && titleValue.trim() ? titleValue.trim() : file.name;
+      documentKind = typeof documentKindValue === "string" && documentKindValue.trim() ? documentKindValue.trim() : undefined;
+      processType = typeof processTypeValue === "string" && processTypeValue.trim() ? processTypeValue.trim() : undefined;
+      processId = typeof processIdValue === "string" && processIdValue.trim() ? processIdValue.trim() : null;
       const extracted = await extractPdfPlainText(file);
       text = extracted.text;
     } else {
-      const payload = (await request.json().catch(() => ({}))) as { documentId?: string };
+      const payload = (await request.json().catch(() => ({}))) as {
+        documentId?: string;
+        documentKind?: string;
+        processId?: string;
+        processType?: string;
+      };
 
       if (!payload.documentId) {
         return NextResponse.json({ error: "Falta documentId o archivo" }, { status: 400 });
@@ -54,6 +82,9 @@ export async function POST(request: Request) {
 
       source = "indexed";
       documentId = payload.documentId;
+      documentKind = payload.documentKind;
+      processType = payload.processType;
+      processId = payload.processId ?? null;
       const [docs, chunks] = await Promise.all([
         supabaseRest<DocumentRow[]>(
           `documents?id=eq.${payload.documentId}&select=id,title,document_type`,
@@ -72,7 +103,16 @@ export async function POST(request: Request) {
       }
       title = doc.title;
       documentType = doc.document_type;
+      documentKind = documentKind || doc.document_type;
       text = chunks.map((chunk) => chunk.content).join("\n\n");
+    }
+
+    if (processId && !processType) {
+      const [process] = await supabaseUserRest<ProcessRow[]>(
+        auth.user.accessToken,
+        `procurement_processes?id=eq.${processId}&select=id,nomenclature,procedure_type&limit=1`,
+      );
+      processType = process?.procedure_type ?? undefined;
     }
 
     if (text.trim().length < minTextLength) {
@@ -82,26 +122,97 @@ export async function POST(request: Request) {
       );
     }
 
-    const analysis = await analyzeLegalDocument({ text, title, documentType });
+    const analysis = await analyzeLegalDocument({ documentKind, documentType, processType, text, title });
+
+    const result = {
+      checklist: analysis.checklist,
+      clausulas: analysis.clausulas,
+      confidence: analysis.confidence,
+      confidenceReason: analysis.confidenceReason,
+      coverage: analysis.coverage,
+      criticalSources: analysis.criticalSources,
+      documentKind,
+      findings: analysis.findings,
+      normasAplicables: analysis.normasAplicables,
+      processId,
+      processType,
+      recomendaciones: analysis.recomendaciones,
+      resumen: analysis.resumen,
+      riesgos: analysis.riesgos,
+      sources: analysis.sources,
+    };
 
     await supabaseUserRest(auth.user.accessToken, "document_analyses", {
       body: JSON.stringify({
         document_id: documentId,
         model: analysis.model,
         owner_id: auth.user.id,
-        result: {
-          clausulas: analysis.clausulas,
-          confidence: analysis.confidence,
-          normasAplicables: analysis.normasAplicables,
-          recomendaciones: analysis.recomendaciones,
-          resumen: analysis.resumen,
-          riesgos: analysis.riesgos,
-        },
+        result,
         source,
         title,
       }),
       method: "POST",
     }).catch(() => undefined);
+
+    if (processId) {
+      await supabaseUserRest(auth.user.accessToken, "process_evaluations", {
+        body: JSON.stringify({
+          matrix: analysis.checklist,
+          model: analysis.model,
+          observations: analysis.findings.length ? analysis.findings : analysis.riesgos,
+          owner_id: auth.user.id,
+          process_id: processId,
+          result:
+            analysis.findings.some((finding) => finding.category === "incumplimiento" && finding.severity === "alto") ||
+            analysis.criticalSources.some((item) => !item.ok)
+              ? "riesgo"
+              : "cumple",
+        }),
+        method: "POST",
+      }).catch(() => undefined);
+    }
+
+    await writeAuditLog({
+      action: "document.analyze",
+      actorReference: auth.user.email ?? auth.user.id,
+      details: {
+        ...institutionalAuditDetails({
+          conclusion: analysis.confidence,
+          documentId,
+          entity: auth.user.entity,
+          processId,
+          processType,
+          role: auth.user.role,
+          sources: analysis.sources,
+          userEmail: auth.user.email,
+          userId: auth.user.id,
+        }),
+        confidence: analysis.confidence,
+        documentId,
+        documentKind,
+        processId,
+        processType,
+        source,
+        sources: analysis.sources.map((item) => ({
+          article: item.article,
+          documentId: item.documentId,
+          documentType: item.documentType,
+          pageStart: item.pageStart,
+        })),
+        title,
+        user: { id: auth.user.id, role: auth.user.role },
+      },
+      entityId: documentId ?? undefined,
+      entityType: "document_analysis",
+      module: "analizar",
+      processType,
+      user: {
+        email: auth.user.email,
+        entity: auth.user.entity,
+        id: auth.user.id,
+        role: auth.user.role,
+      },
+    });
 
     return NextResponse.json({ analysis, title });
   } catch (error) {

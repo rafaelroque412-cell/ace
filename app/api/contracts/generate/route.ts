@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { type ClauseReference, buildContractDocx } from "@/lib/contract-generator";
+import { getSettingsCatalog } from "@/lib/settings-catalog";
 import { supabaseRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const contractSchema = z.object({
-  entity: z.string().trim().min(2),
+  entity: z.string().trim().optional().or(z.literal("")),
   object: z.string().trim().min(3),
   processType: z.string().trim().optional().or(z.literal("")),
   amount: z.string().trim().optional().or(z.literal("")),
@@ -46,6 +47,12 @@ export async function POST(request: Request) {
     }
 
     const data = payload.data;
+    const catalog = await getSettingsCatalog(auth.user).catch(() => null);
+    const effectiveEntity = data.entity || catalog?.entity.name || auth.user.entity || "";
+
+    if (effectiveEntity.trim().length < 2) {
+      return NextResponse.json({ error: "Configura o ingresa la entidad contratante." }, { status: 400 });
+    }
 
     // Referencias del corpus (art. 60/61) para fundamentar, si estan indexadas.
     const articles = await supabaseRest<ArticleRow[]>(
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
         contractorName: data.contractorName || null,
         contractorRuc: data.contractorRuc || null,
         durationDays: typeof data.durationDays === "number" ? data.durationDays : null,
-        entity: data.entity,
+        entity: effectiveEntity,
         object: data.object,
         place: data.place || null,
         processType: data.processType || null,
@@ -73,8 +80,16 @@ export async function POST(request: Request) {
 
     await writeAuditLog({
       action: "contract.generate",
-      details: { entity: data.entity, object: data.object, processType: data.processType || null },
+      details: { entity: effectiveEntity, object: data.object, processType: data.processType || null },
       entityType: "contract",
+      module: "contratos",
+      processType: data.processType || null,
+      user: {
+        email: auth.user.email,
+        entity: effectiveEntity,
+        id: auth.user.id,
+        role: auth.user.role,
+      },
     });
 
     return new Response(new Uint8Array(buffer), {

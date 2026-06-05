@@ -68,8 +68,10 @@ function lastAssistantMessage(messages: HistoryMessage[]) {
 
 export function ChatHistory() {
   const [filter, setFilter] = useState<"all" | "correct" | "incorrect" | "notes">("all");
+  const [confidenceFilter, setConfidenceFilter] = useState<"all" | "alta" | "media" | "baja">("all");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const totalSources = useMemo(
     () => sessions.reduce((total, session) => total + session.sourceCount, 0),
@@ -79,22 +81,28 @@ export function ChatHistory() {
     () =>
       sessions.filter((session) => {
         const assistantMessages = session.messages.filter((message) => message.role === "assistant");
+        const assistant = lastAssistantMessage(session.messages);
+        const confidence = assistant?.metadata.assessment?.confidence ?? assistant?.metadata.confidence ?? "baja";
+        const text = `${firstUserQuestion(session.messages)} ${assistant?.content ?? ""}`.toLowerCase();
 
         if (filter === "correct") {
-          return assistantMessages.some((message) => message.metadata.feedback === "correct");
+          if (!assistantMessages.some((message) => message.metadata.feedback === "correct")) return false;
         }
 
         if (filter === "incorrect") {
-          return assistantMessages.some((message) => message.metadata.feedback === "incorrect");
+          if (!assistantMessages.some((message) => message.metadata.feedback === "incorrect")) return false;
         }
 
         if (filter === "notes") {
-          return assistantMessages.some((message) => Boolean(message.metadata.note));
+          if (!assistantMessages.some((message) => Boolean(message.metadata.note))) return false;
         }
+
+        if (confidenceFilter !== "all" && confidence !== confidenceFilter) return false;
+        if (query.trim() && !text.includes(query.trim().toLowerCase())) return false;
 
         return true;
       }),
-    [filter, sessions],
+    [confidenceFilter, filter, query, sessions],
   );
   const correctCount = useMemo(
     () =>
@@ -196,6 +204,29 @@ export function ChatHistory() {
         <button aria-selected={filter === "notes"} onClick={() => setFilter("notes")} role="tab" type="button">
           <NotebookText size={14} /> Notas <span>{notesCount}</span>
         </button>
+      </div>
+
+      <div className="historyFilters">
+        <label>
+          <span>Buscar</span>
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Pregunta, tema o texto de respuesta"
+            value={query}
+          />
+        </label>
+        <label>
+          <span>Confianza</span>
+          <select
+            onChange={(event) => setConfidenceFilter(event.target.value as typeof confidenceFilter)}
+            value={confidenceFilter}
+          >
+            <option value="all">Todas</option>
+            <option value="alta">Alta</option>
+            <option value="media">Media</option>
+            <option value="baja">Baja</option>
+          </select>
+        </label>
       </div>
 
       <div className="documentList">

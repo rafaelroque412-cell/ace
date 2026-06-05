@@ -1,16 +1,32 @@
 import { z } from "zod";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { type SearchFilters, rerankWithModel, searchTextRecords } from "./pinecone";
-import { supabaseRest, supabaseUserRest, writeAuditLog } from "./supabase-server";
+import {
+  assessProcedureSourceCoverage,
+  inferProcedureType,
+  normativeDocumentTypes,
+  normalizeProcedureText,
+  procedureAliases,
+  procedureAnchors,
+  procedureCatalog,
+  procedureLabel,
+  procedureSourceRequirements,
+  sourceMatchesRequirement,
+  procedureTextIncludes,
+} from "./procedure-catalog";
+import { institutionalAuditDetails, supabaseRest, supabaseUserRest, writeAuditLog } from "./supabase-server";
 
 // Contexto del usuario autenticado para escribir/leer datos privados del chat
 // con su JWT (RLS). No proviene del body del cliente.
 export type ChatAuthContext = {
   accessToken: string;
+  actorReference?: string;
+  entity?: string | null;
   ownerId: string;
   // Cuando es false, no se persiste el intercambio (sesion/mensajes/fuentes/auditoria).
   // Lo usa el evaluador continuo para no ensuciar el historial del chat. Por defecto persiste.
   persist?: boolean;
+  role?: string;
 };
 
 const legalSearchFiltersSchema = z.object({
@@ -91,6 +107,7 @@ export type SourceAssessment = {
   reason: string;
   evidenceWarnings: string[];
   evidenceQuality: number;
+  procedureCoverage?: ReturnType<typeof assessProcedureSourceCoverage>;
   coverage: {
     bases: boolean;
     directiva: boolean;
@@ -121,53 +138,13 @@ type ChatMessageInsertRecord = {
 };
 
 const answerDocumentTypes = new Set(["ley", "reglamento", "directiva", "opinion"]);
+const normativeDocumentTypeSet = new Set<string>(normativeDocumentTypes);
 const normativePriority: Record<string, number> = {
   ley: 4,
   reglamento: 3,
   directiva: 2,
   opinion: 1,
   bases_integradas: 0,
-};
-
-const processTypeCatalog: Record<string, { aliases: string[]; anchors?: string[]; label: string }> = {
-  acuerdo_marco: {
-    aliases: ["acuerdo marco", "catalogo electronico", "catalogos electronicos"],
-    label: "Acuerdo marco",
-  },
-  adjudicacion_simplificada: {
-    aliases: ["adjudicacion simplificada"],
-    label: "Adjudicacion simplificada",
-  },
-  comparacion_precios: {
-    aliases: ["comparacion de precios", "comparacion precios", "comparar precios"],
-    anchors: [
-      "Ley 32069 articulo 4 definiciones comparacion de precios procedimiento de seleccion competitivo unico factor de evaluacion precio",
-      "Reglamento Decreto Supremo 009-2025-EF articulo 144 comparacion de precios condiciones utilizacion",
-      "Decreto Supremo 001-2026-EF articulo 144 comparacion de precios modificacion vigente",
-      "bases estandar comparacion de precios articulo 144 reglamento admision calificacion evaluacion otorgamiento buena pro",
-    ],
-    label: "Comparacion de precios",
-  },
-  concurso_publico: {
-    aliases: ["concurso publico"],
-    label: "Concurso publico",
-  },
-  contratacion_directa: {
-    aliases: ["contratacion directa"],
-    label: "Contratacion directa",
-  },
-  licitacion_publica: {
-    aliases: ["licitacion publica"],
-    label: "Licitacion publica",
-  },
-  seleccion_consultores_individuales: {
-    aliases: ["consultores individuales", "seleccion de consultores individuales"],
-    label: "Seleccion de consultores individuales",
-  },
-  subasta_inversa_electronica: {
-    aliases: ["subasta inversa electronica", "sie"],
-    label: "Subasta inversa electronica",
-  },
 };
 
 function uniqueValues(values: Array<string | undefined>) {
@@ -207,28 +184,15 @@ function normalizeChatAnswerFilters(filters?: z.infer<typeof legalSearchFiltersS
 }
 
 function inferProcessTypeFromQuestion(question: string) {
-  const normalized = normalizeComparable(question);
-
-  for (const [processType, config] of Object.entries(processTypeCatalog)) {
-    if (config.aliases.some((alias) => normalized.includes(normalizeComparable(alias)))) {
-      return processType;
-    }
-  }
-
-  return null;
+  return inferProcedureType(question);
 }
 
 function processTypeLabel(processType?: string | null) {
-  if (processType === "todos") {
-    return "Todos los procesos";
-  }
-
-  return processType ? processTypeCatalog[processType]?.label ?? processType.replaceAll("_", " ") : "";
+  return procedureLabel(processType);
 }
 
 function buildProcessAnchoredQuery(question: string, processType?: string | null) {
-  const config = processType ? processTypeCatalog[processType] : null;
-  return [question, ...(config?.aliases ?? []), ...(config?.anchors ?? [])].join(" ");
+  return [question, ...procedureAliases(processType), ...procedureAnchors(processType)].join(" ");
 }
 
 function isRequirementsQuestion(question: string) {
@@ -252,21 +216,7 @@ function hasSpecificProcessRegulationSource(sources: LegalSource[], processType?
     return true;
   }
 
-  return sources.some((source) => {
-    if (!sourceSupportsProcess(source, processType)) {
-      return false;
-    }
-
-    if (source.documentType === "directiva" || source.documentType === "opinion") {
-      return true;
-    }
-
-    if (processType === "comparacion_precios") {
-      return source.documentType === "reglamento" && source.article === "144";
-    }
-
-    return source.documentType === "reglamento";
-  });
+  return assessProcedureSourceCoverage(processType, sources).missingCritical.length === 0;
 }
 
 function sourceSupportsProcess(source: LegalSource, processType?: string | null) {
@@ -278,31 +228,39 @@ function sourceSupportsProcess(source: LegalSource, processType?: string | null)
     return true;
   }
 
-  const config = processTypeCatalog[processType];
+  const config = procedureCatalog[processType];
 
   if (!config) {
     return false;
   }
 
-  const sourceText = normalizeComparable(
+  const sourceText = normalizeProcedureText(
     `${source.documentTitle} ${source.topic ?? ""} ${source.citation} ${source.excerpt}`,
   );
 
-  const supportsAlias = config.aliases.some((alias) => sourceText.includes(normalizeComparable(alias)));
-  const supportsAnchor =
-    processType === "comparacion_precios" &&
-    ((source.documentType === "ley" &&
-      source.article === "4" &&
-      (sourceText.includes("comparacion") || sourceText.includes("precio"))) ||
-      (source.documentType === "reglamento" &&
-        source.article === "144" &&
-        (sourceText.includes("comparacion") || sourceText.includes("precio"))));
+  const supportsAlias = config.aliases.some((alias) => procedureTextIncludes(sourceText, alias));
+  const supportsAnchor = config.anchors.some((anchor) => {
+    const anchorTokens = normalizeProcedureText(anchor)
+      .split(" ")
+      .filter((token) => token.length > 4);
+    const matched = anchorTokens.filter((token) => sourceText.includes(token));
+    return anchorTokens.length > 0 && matched.length / anchorTokens.length >= 0.45;
+  });
 
-  return supportsAlias || supportsAnchor;
+  const requirementRule = config.requirementRule;
+  const supportsRequirementRule =
+    requirementRule &&
+    source.documentType === requirementRule.documentType &&
+    (!requirementRule.article || source.article === requirementRule.article);
+  const supportsMatrixRequirement = procedureSourceRequirements(processType).some((requirement) =>
+    sourceMatchesRequirement(source, requirement),
+  );
+
+  return supportsAlias || supportsAnchor || Boolean(supportsRequirementRule) || supportsMatrixRequirement;
 }
 
 function filterAnswerSources(sources: LegalSource[]) {
-  return sources.filter((source) => answerDocumentTypes.has(source.documentType));
+  return sources.filter((source) => normativeDocumentTypeSet.has(source.documentType) && answerDocumentTypes.has(source.documentType));
 }
 
 function selectHierarchicalAnswerSources(candidates: LegalSource[], topK: number) {
@@ -732,15 +690,19 @@ function buildProcessRegulationMissingAnswer(input: {
         )
         .join("\n")
     : "- No se recupero una fuente legal trazable suficiente sobre este proceso.";
+  const procedureCoverage = assessProcedureSourceCoverage(input.processType, input.sources);
+  const missing = procedureCoverage.missingCritical.length
+    ? procedureCoverage.missingCritical
+    : procedureCoverage.missing;
 
   return `**Respuesta breve**
 1. No puedo detallar requisitos concretos de ${processTypeLabel(
     input.processType,
-  )} con sustento suficiente porque no se recupero el Reglamento o la fuente especifica que regula sus condiciones de uso. ${lawSources.length ? "[F1]" : ""}
+  )} con sustento suficiente porque no se recupero la fuente critica que regula sus condiciones de uso. ${lawSources.length ? "[F1]" : ""}
 
 **Mapa normativo**
 ${lawLines}
-- Reglamento: no se recupero una fuente normativa especifica suficiente para extraer requisitos de procedencia, cuantia, condiciones de mercado, numero de ofertas u otros extremos.
+- Fuentes criticas faltantes: ${missing.length ? missing.join(", ") : "fuente normativa especifica del procedimiento"}.
 - Bases: pueden servir como esquema operativo en Consultas, pero no sustituyen el fundamento normativo.
 
 **Como verificarlo**
@@ -809,8 +771,20 @@ function evidenceQualityScore(source: LegalSource, query: string) {
   const hasVigencia = source.vigencia ? 0.04 : 0;
   const normativeBoost = (normativePriority[source.documentType] ?? 0) * 0.025;
   const requestedProcessType = inferProcessTypeFromQuestion(query);
+  const requirements = procedureSourceRequirements(requestedProcessType);
+  const criticalSourceBoost = requirements.some(
+    (requirement) => requirement.critical && sourceMatchesRequirement(source, requirement),
+  )
+    ? 0.14
+    : 0;
+  const optionalSourcePenalty = requirements.some(
+    (requirement) => requirement.optional && sourceMatchesRequirement(source, requirement),
+  )
+    ? -0.03
+    : 0;
   const processBoost = requestedProcessType && sourceSupportsProcess(source, requestedProcessType) ? 0.07 : 0;
   const processMismatchPenalty = requestedProcessType && !sourceSupportsProcess(source, requestedProcessType) ? -0.25 : 0;
+  const basesPenalty = source.documentType === "bases_integradas" ? -0.22 : 0;
   const nonCurrentPenalty = isNotCurrentSource(source) ? -0.12 : 0;
   const oldOpinionPenalty = isOldOpinion(source) ? -0.08 : 0;
   const lexical = lexicalCoverage(query, `${source.documentTitle} ${source.topic ?? ""} ${source.excerpt}`);
@@ -827,8 +801,11 @@ function evidenceQualityScore(source: LegalSource, query: string) {
         hasTopic +
         hasVigencia +
         normativeBoost +
+        criticalSourceBoost +
+        optionalSourcePenalty +
         processBoost +
         processMismatchPenalty +
+        basesPenalty +
         nonCurrentPenalty +
         oldOpinionPenalty,
     ),
@@ -891,7 +868,7 @@ function buildHistoryContext(messages: ChatMessageRecord[]) {
 
 function assessSources(
   sources: LegalSource[],
-  options?: { queryUsed?: string; scope?: SourceAssessment["scope"] },
+  options?: { processType?: string | null; queryUsed?: string; scope?: SourceAssessment["scope"] },
 ): SourceAssessment {
   const queryTokens = tokenizeEvidenceText(options?.queryUsed ?? "");
   const evidenceText = tokenizeEvidenceText(
@@ -905,6 +882,8 @@ function assessSources(
     queryTokens.length > 0 ? matchedQueryTokens.length / Math.max(queryTokens.length, 1) : 0;
   const topScore = sources[0]?.score ?? 0;
   const coverage = buildCoverage(sources);
+  const inferredProcessType = options?.processType || (options?.queryUsed ? inferProcessTypeFromQuestion(options.queryUsed) : null);
+  const procedureCoverage = assessProcedureSourceCoverage(inferredProcessType, sources);
   const averageScore =
     sources.length > 0
       ? sources.reduce((total, source) => total + source.score, 0) / sources.length
@@ -921,11 +900,22 @@ function assessSources(
   const nonCurrentSources = sources.filter(isNotCurrentSource);
   const oldOpinions = sources.filter(isOldOpinion);
   const scope = options?.scope ?? "unknown";
+  const requestedArticle = detectRequestedArticle(options?.queryUsed ?? "");
+  const exactArticleSource = requestedArticle
+    ? sources.find(
+        (source) =>
+          source.article === requestedArticle &&
+          Boolean(source.pageStart) &&
+          source.evidenceQuality >= 0.52 &&
+          (source.score >= 0.5 || source.lexicalScore >= 0.35),
+      )
+    : null;
   const sufficient =
     scope !== "off_topic" &&
-    sources.length >= 2 &&
+    !procedureCoverage.basesOnly &&
+    (sources.length >= 2 || Boolean(exactArticleSource)) &&
     uniqueDocuments >= 1 &&
-    hasMeaningfulText &&
+    (hasMeaningfulText || Boolean(exactArticleSource)) &&
     hasTraceableCitation &&
     (hasSemanticSignal || hasLexicalSignal || averageEvidenceQuality >= 0.45);
 
@@ -933,6 +923,7 @@ function assessSources(
 
   if (
     sufficient &&
+    procedureCoverage.missingCritical.length === 0 &&
     sources.length >= 4 &&
     topScore >= 0.65 &&
     lexicalScore >= 0.55 &&
@@ -941,17 +932,31 @@ function assessSources(
     confidence = "alta";
   } else if (
     sufficient &&
-    (topScore >= 0.48 || averageScore >= 0.38 || (sources.length >= 3 && lexicalScore >= 0.45))
+    procedureCoverage.missingCritical.length === 0 &&
+    (topScore >= 0.48 ||
+      averageScore >= 0.38 ||
+      (sources.length >= 3 && lexicalScore >= 0.45) ||
+      Boolean(exactArticleSource))
   ) {
     confidence = "media";
   }
 
   const evidenceWarnings = [
     scope === "off_topic" ? "La pregunta no parece pertenecer al ambito juridico/documental configurado." : null,
-    sources.length < 2 ? "Hay menos de dos fragmentos utiles recuperados." : null,
+    sources.length < 2 && !exactArticleSource ? "Hay menos de dos fragmentos utiles recuperados." : null,
+    procedureCoverage.basesOnly
+      ? "Solo se recuperaron bases integradas; son apoyo operativo y no fundamento normativo suficiente."
+      : null,
+    procedureCoverage.missingCritical.length > 0
+      ? `Faltan fuentes criticas del procedimiento: ${procedureCoverage.missingCritical.join(", ")}.`
+      : null,
+    procedureCoverage.warnings.length > 0 ? procedureCoverage.warnings.join(" ") : null,
+    exactArticleSource
+      ? "La consulta fue sustentada en un articulo exacto recuperado con pagina identificada; aun asi revise el texto completo del articulo antes de decidir."
+      : null,
     !hasTraceableCitation ? "Las fuentes recuperadas no tienen pagina o articulo identificable." : null,
-    !hasSemanticSignal ? "La similitud semantica no es fuerte." : null,
-    !hasLexicalSignal ? "La coincidencia literal con la consulta es limitada." : null,
+    !hasSemanticSignal && !exactArticleSource ? "La similitud semantica no es fuerte." : null,
+    !hasLexicalSignal && !exactArticleSource ? "La coincidencia literal con la consulta es limitada." : null,
     nonCurrentSources.length > 0
       ? "Existen fuentes marcadas como derogadas, modificadas o no plenamente vigentes; revisar vigencia antes de usar la respuesta."
       : null,
@@ -969,6 +974,7 @@ function assessSources(
     coverage,
     evidenceQuality: averageEvidenceQuality,
     evidenceWarnings,
+    procedureCoverage,
     sufficient,
     topScore,
     lexicalScore,
@@ -1095,6 +1101,7 @@ export async function searchLegalSources(
   if (vectorIds.length === 0 && lexicalChunks.length === 0) {
     return {
       assessment: assessSources([], {
+        processType: filters.processType,
         queryUsed,
         scope: isLikelyLegalProcurementQuestion(input.query) ? "legal" : "unknown",
       }),
@@ -1144,6 +1151,7 @@ export async function searchLegalSources(
 
   return {
     assessment: assessSources(sources, {
+      processType: filters.processType,
       queryUsed,
       scope: isLikelyLegalProcurementQuestion(input.query) ? "legal" : "unknown",
     }),
@@ -1153,13 +1161,16 @@ export async function searchLegalSources(
 
 async function persistChatExchange(input: {
   accessToken: string;
+  actorReference?: string;
   answer: string;
   assessment: SourceAssessment;
+  entity?: string | null;
   filters?: z.infer<typeof legalSearchFiltersSchema>;
   mode: string;
   model: string;
   ownerId: string;
   question: string;
+  role?: string;
   sessionId?: string;
   sources: LegalSource[];
 }) {
@@ -1261,7 +1272,22 @@ async function persistChatExchange(input: {
 
   await writeAuditLog({
     action: "chat.message",
+    actorReference: input.actorReference,
     details: {
+      ...institutionalAuditDetails({
+        conclusion: input.assessment.sufficient ? "respuesta_con_fuentes_suficientes" : "respuesta_requiere_revision",
+        entity: input.entity ?? null,
+        processType: input.filters?.processType ?? null,
+        query: input.question,
+        role: input.role ?? null,
+        sources: input.sources,
+        userId: input.ownerId,
+      }),
+      actor: {
+        entity: input.entity ?? null,
+        id: input.ownerId,
+        role: input.role ?? null,
+      },
       confidence: input.assessment.confidence,
       evidenceQuality: input.assessment.evidenceQuality,
       evidenceWarnings: input.assessment.evidenceWarnings,
@@ -1272,6 +1298,14 @@ async function persistChatExchange(input: {
     },
     entityId: sessionId,
     entityType: "chat_session",
+    module: "chat",
+    processType: input.filters?.processType ?? null,
+    user: {
+      email: input.actorReference ?? null,
+      entity: input.entity ?? null,
+      id: input.ownerId,
+      role: input.role ?? null,
+    },
   });
 
   return {
@@ -1280,18 +1314,57 @@ async function persistChatExchange(input: {
   };
 }
 
-export async function answerLegalQuestion(
+type ChatFilters = z.infer<typeof legalSearchFiltersSchema>;
+
+type GenerationParams = {
+  input: Array<{ content: string; role: "system" | "user" }>;
+  max_output_tokens: number;
+  model: string;
+  temperature: number;
+};
+
+type PreparedAnswer =
+  | {
+      status: "final";
+      answer: string;
+      model: string;
+      assessment: SourceAssessment;
+      sources: LegalSource[];
+      chatFilters: ChatFilters;
+    }
+  | {
+      status: "generate";
+      generationParams: GenerationParams;
+      assessment: SourceAssessment;
+      sources: LegalSource[];
+      chatFilters: ChatFilters;
+    };
+
+export type ChatStreamEvent =
+  | { type: "meta"; sources: LegalSource[]; assessment: SourceAssessment; confidence: SourceAssessment["confidence"] }
+  | { type: "delta"; text: string }
+  | { type: "done"; sessionId: string | null; messageId: string | null; model: string }
+  | { type: "error"; error: string };
+
+// Persiste el intercambio salvo que el llamador lo desactive (evaluador continuo).
+async function maybePersist(auth: ChatAuthContext, args: Parameters<typeof persistChatExchange>[0]) {
+  if (auth.persist === false) {
+    return { assistantMessageId: null as string | null, sessionId: args.sessionId ?? null };
+  }
+  return persistChatExchange({
+    ...args,
+    actorReference: auth.actorReference,
+    entity: auth.entity,
+    role: auth.role,
+  });
+}
+
+// Fase comun de recuperacion + gating. Devuelve una respuesta final determinista
+// (guards/gates) o los parametros listos para generar con el modelo.
+async function prepareLegalAnswer(
   input: z.infer<typeof chatRequestSchema>,
   auth: ChatAuthContext,
-) {
-  // Persiste el intercambio salvo que el llamador pida lo contrario (evaluador continuo).
-  async function persistOrSkip(args: Parameters<typeof persistChatExchange>[0]) {
-    if (auth.persist === false) {
-      return { assistantMessageId: null as string | null, sessionId: args.sessionId ?? null };
-    }
-    return persistChatExchange(args);
-  }
-
+): Promise<PreparedAnswer> {
   const likelyLegal = isLikelyLegalProcurementQuestion(input.question);
   const inferredProcessType = inferProcessTypeFromQuestion(input.question);
   const normalizedChatFilters = normalizeChatAnswerFilters(input.filters);
@@ -1303,33 +1376,18 @@ export async function answerLegalQuestion(
 
   if (!likelyLegal && !input.sessionId) {
     const assessment = assessSources([], {
+      processType: requestedProcessType,
       queryUsed: normalizeQuestionForSearch(input.question),
       scope: "off_topic",
     });
-    const answer =
-      "Esta consulta parece estar fuera del alcance de ACE IA Juridica. Puedo ayudarte con contrataciones publicas, Ley 32069, reglamento, opiniones, directivas, resoluciones OECE y documentos juridicos indexados.";
-    const model = "scope-guard";
-    const persisted = await persistOrSkip({
-      accessToken: auth.accessToken,
-      ownerId: auth.ownerId,
-      answer,
-      assessment,
-      filters: chatFilters,
-      mode: input.mode,
-      model,
-      question: input.question,
-      sessionId: input.sessionId,
-      sources: [],
-    });
-
     return {
-      answer,
+      status: "final",
+      answer:
+        "Esta consulta parece estar fuera del alcance de ACE IA Juridica. Puedo ayudarte con contrataciones publicas, Ley 32069, reglamento, opiniones, directivas, resoluciones OECE y documentos juridicos indexados.",
+      model: "scope-guard",
       assessment,
-      confidence: assessment.confidence,
-      messageId: persisted.assistantMessageId,
-      model,
-      sessionId: persisted.sessionId,
       sources: [],
+      chatFilters,
     };
   }
 
@@ -1383,6 +1441,7 @@ export async function answerLegalQuestion(
   );
   const sources = selectHierarchicalAnswerSources(candidateSources, 8);
   const assessment = assessSources(sources, {
+    processType: requestedProcessType,
     queryUsed: searchResult.assessment.queryUsed,
     scope: searchResult.assessment.scope,
   });
@@ -1414,43 +1473,28 @@ export async function answerLegalQuestion(
     !hasSpecificProcessRegulationSource(sources, requestedProcessType);
 
   if (missingSpecificRegulation) {
+    const requirementMessage = procedureCatalog[requestedProcessType]?.requirementRule?.message;
     assessment.sufficient = false;
     assessment.confidence = "baja";
-    assessment.reason = `No hay fuente reglamentaria especifica suficiente para responder requisitos de ${processTypeLabel(
-      requestedProcessType,
-    )}.`;
+    assessment.reason =
+      requirementMessage ??
+      `No hay fuente reglamentaria, directiva u opinion especifica suficiente para responder requisitos de ${processTypeLabel(
+        requestedProcessType,
+      )}.`;
     assessment.evidenceWarnings = [
       ...assessment.evidenceWarnings,
-      `Para requisitos de ${processTypeLabel(
-        requestedProcessType,
-      )}, la evidencia debe incluir Reglamento aplicable, directiva u opinion especifica; la Ley sola no basta si remite al Reglamento.`,
+      requirementMessage ??
+        `Para requisitos de ${processTypeLabel(
+          requestedProcessType,
+        )}, la evidencia debe incluir Reglamento aplicable, directiva u opinion especifica; la Ley sola no basta si remite al Reglamento.`,
     ];
-    const answer = buildProcessRegulationMissingAnswer({
-      processType: requestedProcessType,
-      sources,
-    });
-    const model = "process-regulation-sufficiency-gate";
-    const persisted = await persistOrSkip({
-      accessToken: auth.accessToken,
-      ownerId: auth.ownerId,
-      answer,
-      assessment,
-      filters: chatFilters,
-      mode: input.mode,
-      model,
-      question: input.question,
-      sessionId: input.sessionId,
-      sources,
-    });
-
     return {
-      answer,
+      status: "final",
+      answer: buildProcessRegulationMissingAnswer({ processType: requestedProcessType, sources }),
+      model: "process-regulation-sufficiency-gate",
       assessment,
-      confidence: assessment.confidence,
-      messageId: persisted.assistantMessageId,
-      model,
-      sessionId: persisted.sessionId,
       sources,
+      chatFilters,
     };
   }
 
@@ -1461,47 +1505,28 @@ export async function answerLegalQuestion(
     const answer = assessment.coverage.bases
       ? `No encontre norma suficiente${processScopeText} para responder con sustento. Hay bases integradas relacionadas, pero son esquema de implementacion, no fundamento normativo. No voy a reemplazar ese proceso por contratos menores u otro tipo de proceso. Revisa esas bases en Consultas y sube o selecciona la ley, reglamento, directiva u opinion aplicable.`
       : `No encontre fuentes normativas suficientes${processScopeText} para responder con sustento. El chat solo fundamenta respuestas en ley, reglamento, directivas y opiniones, y no debe sustituir el proceso consultado por contratos menores u otro regimen. Las bases integradas pueden revisarse en Consultas como esquema de implementacion, pero no se usan como fundamento juridico principal.`;
-    const model = "source-sufficiency-gate";
-    const persisted = await persistOrSkip({
-      accessToken: auth.accessToken,
-      ownerId: auth.ownerId,
-      answer,
-      assessment,
-      filters: chatFilters,
-      mode: input.mode,
-      model,
-      question: input.question,
-      sessionId: input.sessionId,
-      sources,
-    });
-
     return {
+      status: "final",
       answer,
+      model: "source-sufficiency-gate",
       assessment,
-      confidence: assessment.confidence,
-      messageId: persisted.assistantMessageId,
-      model,
-      sessionId: persisted.sessionId,
       sources,
+      chatFilters,
     };
   }
 
   const context = buildContext(sources);
   const historyContext = buildHistoryContext(history);
-  let answer = "";
-  let model = legalAnswerModel;
 
-  try {
-    const openai = getOpenAIClient();
-    const response = await openai.responses.create({
-      input: [
-        {
-          content:
+  const generationParams: GenerationParams = {
+    input: [
+      {
+        content:
       "Eres un asistente juridico especializado en contrataciones publicas peruanas. Responde solo con base en las fuentes proporcionadas. Las fuentes validas para fundamentar respuestas son ley, reglamento, directivas y opiniones. No uses bases integradas como fundamento juridico porque son esquemas de implementacion. Tolera errores de ortografia del usuario, pero no inventes normas, articulos ni documentos. Si algo no esta sustentado, dilo. Prioriza una respuesta rapida, exacta y accionable.",
-          role: "system",
-        },
-        {
-          content: `${buildModeInstruction(input.mode)}
+        role: "system",
+      },
+      {
+        content: `${buildModeInstruction(input.mode)}
 
 Historial reciente de la sesion:
 ${historyContext}
@@ -1551,40 +1576,131 @@ Estructura:
 - Indica exactamente que parte de la pregunta no queda cubierta por las fuentes. [F# si aplica]
 
 No escribas el nivel de confianza; el sistema lo agregara despues con una evaluacion independiente.`,
-          role: "user",
-        },
-      ],
-      max_output_tokens: input.mode === "breve" ? 700 : 1300,
-      model: legalAnswerModel,
-      temperature: 0.2,
-    });
+        role: "user",
+      },
+    ],
+    max_output_tokens: input.mode === "breve" ? 700 : 1300,
+    model: legalAnswerModel,
+    temperature: 0.2,
+  };
 
-    answer = applySystemConfidence(response.output_text, assessment.confidence);
-  } catch (error) {
-    answer = applySystemConfidence(buildFallbackAnswer(input.question, sources), assessment.confidence);
-    model = `fallback-source-extract (${error instanceof Error ? error.message.slice(0, 90) : "OpenAI error"})`;
+  return { status: "generate", generationParams, assessment, sources, chatFilters };
+}
+
+export async function answerLegalQuestion(
+  input: z.infer<typeof chatRequestSchema>,
+  auth: ChatAuthContext,
+) {
+  const prep = await prepareLegalAnswer(input, auth);
+
+  let answer: string;
+  let model: string;
+
+  if (prep.status === "final") {
+    answer = prep.answer;
+    model = prep.model;
+  } else {
+    try {
+      const openai = getOpenAIClient();
+      const response = await openai.responses.create(prep.generationParams);
+      answer = applySystemConfidence(response.output_text, prep.assessment.confidence);
+      model = legalAnswerModel;
+    } catch (error) {
+      answer = applySystemConfidence(buildFallbackAnswer(input.question, prep.sources), prep.assessment.confidence);
+      model = `fallback-source-extract (${error instanceof Error ? error.message.slice(0, 90) : "OpenAI error"})`;
+    }
   }
 
-  const persisted = await persistOrSkip({
+  const persisted = await maybePersist(auth, {
     accessToken: auth.accessToken,
     ownerId: auth.ownerId,
     answer,
-    assessment,
-    filters: chatFilters,
+    assessment: prep.assessment,
+    filters: prep.chatFilters,
     mode: input.mode,
     model,
     question: input.question,
     sessionId: input.sessionId,
-    sources,
+    sources: prep.sources,
   });
 
   return {
     answer,
-    assessment,
-    confidence: assessment.confidence,
+    assessment: prep.assessment,
+    confidence: prep.assessment.confidence,
     messageId: persisted.assistantMessageId,
     model,
     sessionId: persisted.sessionId,
-    sources,
+    sources: prep.sources,
+  };
+}
+
+export async function* streamLegalAnswer(
+  input: z.infer<typeof chatRequestSchema>,
+  auth: ChatAuthContext,
+): AsyncGenerator<ChatStreamEvent> {
+  let prep: PreparedAnswer;
+  try {
+    prep = await prepareLegalAnswer(input, auth);
+  } catch (error) {
+    yield {
+      type: "error",
+      error: error instanceof Error ? error.message : "No se pudo preparar la respuesta",
+    };
+    return;
+  }
+
+  yield {
+    type: "meta",
+    sources: prep.sources,
+    assessment: prep.assessment,
+    confidence: prep.assessment.confidence,
+  };
+
+  let answer: string;
+  let model: string;
+
+  if (prep.status === "final") {
+    answer = prep.answer;
+    model = prep.model;
+    yield { type: "delta", text: answer };
+  } else {
+    let acc = "";
+    try {
+      const openai = getOpenAIClient();
+      const stream = await openai.responses.create({ ...prep.generationParams, stream: true });
+      for await (const event of stream) {
+        if (event.type === "response.output_text.delta") {
+          acc += event.delta;
+          yield { type: "delta", text: event.delta };
+        }
+      }
+      answer = applySystemConfidence(acc, prep.assessment.confidence);
+      model = legalAnswerModel;
+    } catch (error) {
+      answer = applySystemConfidence(buildFallbackAnswer(input.question, prep.sources), prep.assessment.confidence);
+      model = `fallback-source-extract (${error instanceof Error ? error.message.slice(0, 90) : "OpenAI error"})`;
+      yield { type: "delta", text: answer };
+    }
+  }
+
+  const persisted = await maybePersist(auth, {
+    accessToken: auth.accessToken,
+    ownerId: auth.ownerId,
+    answer,
+    assessment: prep.assessment,
+    filters: prep.chatFilters,
+    mode: input.mode,
+    model,
+    question: input.question,
+    sessionId: input.sessionId,
+    sources: prep.sources,
+  });
+
+  yield {
+    type: "done",
+    sessionId: persisted.sessionId,
+    messageId: persisted.assistantMessageId,
+    model,
   };
 }

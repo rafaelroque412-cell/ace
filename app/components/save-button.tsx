@@ -28,6 +28,8 @@ export function SaveButton({ itemType, title, documentId, articleId, messageId, 
     if (!open) {
       return;
     }
+    // Reset transient state and load folders when the dialog opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaved(false);
     fetch("/api/folders")
       .then((response) => response.json())
@@ -94,6 +96,9 @@ export function SaveButton({ itemType, title, documentId, articleId, messageId, 
           </div>
 
           <p className="savedItemTitle">{title}</p>
+          <p className="dialogHelp">
+            Guarda esta respuesta en una carpeta para organizarla por expediente, tema o revision.
+          </p>
 
           <label className="promptInput">
             <span>Carpeta</span>
@@ -118,7 +123,12 @@ export function SaveButton({ itemType, title, documentId, articleId, messageId, 
 
           <label className="promptInput">
             <span>Nota (opcional)</span>
-            <textarea className="noteTextarea" onChange={(event) => setNote(event.target.value)} value={note} />
+            <textarea
+              className="noteTextarea"
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Ej. Usar como base para informe legal del expediente."
+              value={note}
+            />
           </label>
 
           <div className="dialogActions">

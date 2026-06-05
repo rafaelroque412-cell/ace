@@ -55,6 +55,8 @@ export function NewsFeed() {
   }
 
   useEffect(() => {
+    // Initial sync with the news API when the feed mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, []);
 

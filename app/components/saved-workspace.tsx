@@ -11,12 +11,54 @@ type SavedItem = {
   document_id: string | null;
   article_id: string | null;
   message_id: string | null;
+  metadata?: Record<string, unknown> | null;
   title: string;
   note: string | null;
   created_at: string;
 };
 
-const typeLabels: Record<string, string> = { documento: "Documento", articulo: "Artículo", mensaje: "Respuesta" };
+const typeLabels: Record<string, string> = {
+  analisis: "Análisis",
+  articulo: "Artículo",
+  documento: "Documento",
+  mensaje: "Respuesta",
+  validacion: "Validación",
+};
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function sourceCount(metadata?: Record<string, unknown> | null) {
+  const legal = metadata?.legal as Record<string, unknown> | undefined;
+  const legalSources = legal?.sources;
+  if (Array.isArray(legalSources)) return legalSources.length;
+  if (Array.isArray(metadata?.sources)) return metadata.sources.length;
+  return 0;
+}
+
+function itemContext(item: SavedItem) {
+  const metadata = item.metadata ?? {};
+  const inferred = metadata.inferredContext as Record<string, unknown> | undefined;
+  const legal = metadata.legal as Record<string, unknown> | undefined;
+  const assessment = legal?.assessment as Record<string, unknown> | undefined;
+  const parts = [
+    stringValue(metadata.origin),
+    stringValue(metadata.processType) || stringValue(inferred?.procedureType),
+    stringValue(assessment?.confidence) ? `confianza ${stringValue(assessment?.confidence)}` : stringValue(metadata.confidence),
+    sourceCount(metadata) ? `${sourceCount(metadata)} fuente(s)` : "",
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function itemQuestion(item: SavedItem) {
+  const metadata = item.metadata ?? {};
+  return (
+    stringValue(metadata.question) ||
+    stringValue((metadata.plan as Record<string, unknown> | undefined)?.intent) ||
+    stringValue((metadata.inferredContext as Record<string, unknown> | undefined)?.query)
+  );
+}
 
 function itemHref(item: SavedItem) {
   if (item.document_id) {
@@ -24,6 +66,9 @@ function itemHref(item: SavedItem) {
   }
   if (item.item_type === "mensaje") {
     return "/historial";
+  }
+  if (item.item_type === "validacion") {
+    return "/validar";
   }
   return null;
 }
@@ -46,6 +91,8 @@ export function SavedWorkspace() {
   }
 
   useEffect(() => {
+    // Initial sync with saved items and folders when the workspace mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, []);
 
@@ -107,7 +154,7 @@ export function SavedWorkspace() {
           <div className="emptyState">
             <Bookmark size={20} />
             <strong>Nada guardado aquí</strong>
-            <span>Usa "Guardar" en búsquedas, normas o respuestas del chat.</span>
+            <span>Usa Guardar en búsquedas, normas o respuestas del chat.</span>
           </div>
         ) : (
           <div className="documentList">
@@ -119,11 +166,23 @@ export function SavedWorkspace() {
                     <div>
                       <span>{typeLabels[item.item_type] ?? item.item_type}</span>
                       <strong>{item.title}</strong>
+                      {itemContext(item) ? <small>{itemContext(item)}</small> : null}
                     </div>
                     <button className="iconButton" onClick={() => remove(item.id)} type="button" aria-label="Eliminar">
                       <Trash2 size={15} />
                     </button>
                   </div>
+                  {itemQuestion(item) ? (
+                    <p className="savedItemTitle">
+                      <strong>Contexto:</strong> {itemQuestion(item)}
+                    </p>
+                  ) : null}
+                  {sourceCount(item.metadata) ? (
+                    <div className="sourceMetaGrid">
+                      <span>{sourceCount(item.metadata)} fuente(s) usadas</span>
+                      {stringValue(item.metadata?.processType) ? <span>{stringValue(item.metadata?.processType)}</span> : null}
+                    </div>
+                  ) : null}
                   <textarea
                     className="noteTextarea savedNote"
                     onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))}

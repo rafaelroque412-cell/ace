@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Clipboard,
   ExternalLink,
   FileSearch,
+  GitCompare,
   Layers3,
+  Library,
   LoaderCircle,
   MessageSquareText,
   RotateCcw,
@@ -146,6 +148,19 @@ function groupByDocument(sources: SearchSource[]) {
   }));
 }
 
+function documentTypeForTab(tab: SourceTab) {
+  if (tab === "bases") return "bases_integradas";
+  if (tab === "directivas") return "directiva";
+  if (tab === "opiniones") return "opinion";
+  return "";
+}
+
+function isDocumentTypeCompatibleWithTab(type: string, tab: SourceTab) {
+  if (!type) return true;
+  if (tab === "normativa") return ["ley", "reglamento", "directiva", "opinion"].includes(type);
+  return type === documentTypeForTab(tab);
+}
+
 function FacetGroup({
   label,
   values,
@@ -182,22 +197,24 @@ function FacetGroup({
 
 export function SemanticSearch() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") ?? searchParams.get("pregunta") ?? "";
   const [copiedId, setCopiedId] = useState("");
-  const [documentType, setDocumentType] = useState("");
+  const [documentType, setDocumentType] = useState(searchParams.get("documentType") ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [processType, setProcessType] = useState("");
-  const [query, setQuery] = useState("");
+  const [processType, setProcessType] = useState(searchParams.get("processType") ?? "");
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<SearchSource[]>([]);
   const [sourceTab, setSourceTab] = useState<SourceTab>("normativa");
   const [showFilters, setShowFilters] = useState(false);
-  const [sourceEntity, setSourceEntity] = useState("");
-  const [status, setStatus] = useState("");
-  const [topic, setTopic] = useState("");
+  const [sourceEntity, setSourceEntity] = useState(searchParams.get("sourceEntity") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [topic, setTopic] = useState(searchParams.get("topic") ?? "");
   const [topK, setTopK] = useState(10);
-  const [vigencia, setVigencia] = useState("");
-  const [year, setYear] = useState("");
-  const [article, setArticle] = useState("");
+  const [vigencia, setVigencia] = useState(searchParams.get("vigencia") ?? "");
+  const [year, setYear] = useState(searchParams.get("year") ?? "");
+  const [article, setArticle] = useState(searchParams.get("article") ?? "");
   const [facets, setFacets] = useState<Facets | null>(null);
   const [assessment, setAssessment] = useState<SearchResponse["assessment"] | null>(null);
 
@@ -266,7 +283,11 @@ export function SemanticSearch() {
       : "";
   const searched = Boolean(assessment || results.length > 0 || error);
 
-  async function performSearch(targetTab: SourceTab, event?: React.FormEvent<HTMLFormElement>) {
+  async function performSearch(
+    targetTab: SourceTab,
+    event?: React.FormEvent<HTMLFormElement>,
+    documentTypeOverride?: string,
+  ) {
     event?.preventDefault();
 
     const normalizedQuery = query.trim();
@@ -282,19 +303,16 @@ export function SemanticSearch() {
     setResults([]);
 
     try {
+      const tabDocumentType = documentTypeForTab(targetTab);
+      const effectiveDocumentType =
+        documentTypeOverride ??
+        (tabDocumentType || (isDocumentTypeCompatibleWithTab(documentType, targetTab) ? documentType : ""));
+
       const response = await fetch("/api/search", {
         body: JSON.stringify({
           filters: {
             article,
-            documentType:
-              documentType ||
-              (targetTab === "bases"
-                ? "bases_integradas"
-                : targetTab === "directivas"
-                  ? "directiva"
-                  : targetTab === "opiniones"
-                    ? "opinion"
-                    : ""),
+            documentType: effectiveDocumentType,
             processType,
             sourceEntity,
             status,
@@ -331,12 +349,17 @@ export function SemanticSearch() {
   }
 
   function changeTab(tab: SourceTab) {
+    const tabDocumentType = documentTypeForTab(tab);
+    const nextDocumentType =
+      tabDocumentType || (isDocumentTypeCompatibleWithTab(documentType, tab) ? documentType : "");
+
     setSourceTab(tab);
+    setDocumentType(nextDocumentType);
 
     // Re-consulta al servidor cuando ya hay una busqueda activa, porque el
     // tipo documental enviado depende del tab seleccionado.
     if (query.trim().length >= 5) {
-      void performSearch(tab);
+      void performSearch(tab, undefined, nextDocumentType);
     }
   }
 
@@ -415,6 +438,33 @@ export function SemanticSearch() {
     }
 
     router.push(`/chat?${params.toString()}`);
+  }
+
+  function openInNorms(source: SearchSource) {
+    const params = new URLSearchParams({ documentId: source.documentId });
+    if (source.article) params.set("article", source.article);
+    if (source.documentType) params.set("documentType", source.documentType);
+    if (source.processType) params.set("processType", source.processType);
+    router.push(`/normas?${params.toString()}`);
+  }
+
+  function validateWithSource(source: SearchSource) {
+    const params = new URLSearchParams({
+      documentId: source.documentId,
+      pregunta: `${query.trim() || "Validar procedimiento"} usando ${source.documentTitle}${source.article ? ` articulo ${source.article}` : ""}.`,
+    });
+    if (source.processType || processType) params.set("processType", source.processType || processType);
+    router.push(`/validar?${params.toString()}`);
+  }
+
+  function compareSource(source: SearchSource) {
+    const params = new URLSearchParams({
+      documentIdA: source.documentId,
+      topic: query.trim() || source.citation || source.documentTitle,
+    });
+    if (source.documentType) params.set("documentTypeA", source.documentType);
+    if (source.processType) params.set("processType", source.processType);
+    router.push(`/comparar?${params.toString()}`);
   }
 
   return (
@@ -690,6 +740,18 @@ export function SemanticSearch() {
                 <button className="secondaryButton compactButton" onClick={() => sendToChat(source)} type="button">
                   <MessageSquareText size={15} />
                   Enviar al chat
+                </button>
+                <button className="secondaryButton compactButton" onClick={() => openInNorms(source)} type="button">
+                  <Library size={15} />
+                  Abrir en Normas
+                </button>
+                <button className="secondaryButton compactButton" onClick={() => validateWithSource(source)} type="button">
+                  <ShieldCheck size={15} />
+                  Validar
+                </button>
+                <button className="secondaryButton compactButton" onClick={() => compareSource(source)} type="button">
+                  <GitCompare size={15} />
+                  Comparar
                 </button>
                 <button className="secondaryButton compactButton" onClick={() => copySource(source)} type="button">
                   <Clipboard size={15} />

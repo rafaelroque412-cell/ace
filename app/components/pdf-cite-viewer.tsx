@@ -15,11 +15,40 @@ type Highlight = { left: number; top: number; width: number; height: number };
 
 const stopWords = new Set(["para", "por", "que", "con", "los", "las", "del", "una", "como", "este", "esta"]);
 
+function normalizeQuoteText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function pdfSearchPhrase(quote?: string | null) {
+  if (!quote) {
+    return "";
+  }
+
+  const clean = quote
+    .replace(/\s+/g, " ")
+    .replace(/\[[Ff]#?\d+\]/g, "")
+    .trim();
+
+  if (!clean) {
+    return "";
+  }
+
+  const sentence = clean
+    .split(/(?<=[.;:])\s+/)
+    .map((part) => part.trim())
+    .find((part) => part.length >= 24);
+
+  return (sentence ?? clean).slice(0, 90);
+}
+
 function quoteTokens(quote: string) {
   return new Set(
     quote
       .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
+      .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
@@ -107,16 +136,16 @@ export function PdfCiteButton({ documentId, page, quote, label = "Ver cita" }: P
 
     const textContent = await pageObj.getTextContent();
     const rects: Highlight[] = [];
+    const searchPhraseTokens = quote ? quoteTokens(pdfSearchPhrase(quote)) : new Set<string>();
+    const relevantTokens = searchPhraseTokens.size >= 3 ? searchPhraseTokens : tokens;
+
     for (const item of textContent.items) {
       const str: string = item.str ?? "";
       if (!str.trim()) {
         continue;
       }
-      const normalized = str
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase();
-      const matches = Array.from(tokens).some((token) => normalized.includes(token));
+      const normalized = normalizeQuoteText(str);
+      const matches = Array.from(relevantTokens).some((token) => normalized.includes(token));
       if (!matches) {
         continue;
       }
@@ -142,7 +171,12 @@ export function PdfCiteButton({ documentId, page, quote, label = "Ver cita" }: P
     await renderPage(pdfjs, pdf, pageNumber);
   }
 
-  const fallbackHref = `/api/documents/${documentId}${page && page > 0 ? `#page=${page}` : ""}`;
+  const searchPhrase = pdfSearchPhrase(quote);
+  const hashParts = [
+    page && page > 0 ? `page=${page}` : "",
+    searchPhrase ? `search=${encodeURIComponent(searchPhrase)}` : "",
+  ].filter(Boolean);
+  const fallbackHref = `/api/documents/${documentId}${hashParts.length ? `#${hashParts.join("&")}` : ""}`;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -169,7 +203,7 @@ export function PdfCiteButton({ documentId, page, quote, label = "Ver cita" }: P
               </button>
               <a className="secondaryButton compactButton" href={fallbackHref} rel="noreferrer" target="_blank">
                 <ExternalLink size={15} />
-                PDF
+                PDF exacto
               </a>
               <Dialog.Close asChild>
                 <button className="iconButton" type="button">
@@ -203,6 +237,9 @@ export function PdfCiteButton({ documentId, page, quote, label = "Ver cita" }: P
                   style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
                 />
               ))}
+              {status === "ready" && highlights.length === 0 && quote ? (
+                <span className="pdfHint">No se pudo resaltar texto exacto; revise la pagina indicada.</span>
+              ) : null}
             </div>
           </div>
         </Dialog.Content>

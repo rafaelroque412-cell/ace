@@ -33,12 +33,19 @@ type SummaryRow = {
   metadata: Record<string, unknown>;
 };
 
+type ChunkRow = {
+  page_start: number | null;
+  page_end: number | null;
+  pinecone_vector_id: string | null;
+};
+
 type ConcordanciaRow = {
   id: string;
   source_article_id: string | null;
   ref_type: string | null;
   ref_document_number: string | null;
   ref_article_number: string | null;
+  relation_type: string | null;
   raw_text: string;
   resolved: boolean;
   target_document_id: string | null;
@@ -60,7 +67,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Falta id de la norma" }, { status: 400 });
     }
 
-    const [documents, articles, summaries, concordancias] = await Promise.all([
+    const [documents, articles, summaries, concordancias, chunks] = await Promise.all([
       supabaseRest<DocumentRow[]>(
         `documents?id=eq.${id}&select=id,title,document_type,source_entity,process_type,status,metadata`,
       ),
@@ -74,7 +81,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       ),
       supabaseRest<ConcordanciaRow[]>(
         `norma_concordancias?source_document_id=eq.${id}` +
-          `&select=id,source_article_id,ref_type,ref_document_number,ref_article_number,raw_text,resolved,target_document_id,target_article_id,targetDoc:documents!target_document_id(id,title),targetArt:norma_articulos!target_article_id(article_number)`,
+          `&select=id,source_article_id,ref_type,ref_document_number,ref_article_number,relation_type,raw_text,resolved,target_document_id,target_article_id,targetDoc:documents!target_document_id(id,title),targetArt:norma_articulos!target_article_id(article_number)`,
+      ).catch(() => []),
+      supabaseRest<ChunkRow[]>(
+        `document_chunks?document_id=eq.${id}&select=page_start,page_end,pinecone_vector_id&limit=20000`,
       ).catch(() => []),
     ]);
 
@@ -85,6 +95,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
 
     const metadata = document.metadata ?? {};
+    const pagesDetected = chunks.filter((chunk) => chunk.page_start || chunk.page_end).length;
+    const vectorCount = chunks.filter((chunk) => chunk.pinecone_vector_id).length;
+    const pinecone = metadata.pinecone;
+    const pineconeVerified = Boolean(
+      pinecone &&
+        typeof pinecone === "object" &&
+        (pinecone as Record<string, unknown>).verification &&
+        ((pinecone as Record<string, unknown>).verification as Record<string, unknown>).verified === true,
+    );
 
     const concordanciasByArticle: Record<string, unknown[]> = {};
     for (const row of concordancias) {
@@ -95,6 +114,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       list.push({
         id: row.id,
         refType: row.ref_type,
+        relationType: row.relation_type ?? "concordancia",
         refDocumentNumber: row.ref_document_number,
         refArticleNumber: row.ref_article_number,
         rawText: row.raw_text,
@@ -126,7 +146,17 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         topic: typeof metadata.topic === "string" ? metadata.topic : null,
         year: typeof metadata.year === "number" ? metadata.year : null,
         amends: typeof metadata.amends === "string" ? metadata.amends : null,
+        articleCount: articles.length,
+        concordanceCount: concordancias.length,
+        hasSummary: Boolean(summaries[0]),
+        pagesDetected,
+        pineconeVerified,
+        qualityStatus:
+          articles.length > 0 && pagesDetected > 0 && (pineconeVerified || vectorCount > 0)
+            ? "lista"
+            : "revisar",
         summary: summaries[0]?.content ?? null,
+        vectorCount,
       },
       articles: articles.map((article) => ({
         id: article.id,

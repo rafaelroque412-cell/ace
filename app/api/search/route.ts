@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { searchLegalSources, semanticSearchRequestSchema } from "@/lib/legal-chat";
-import { writeAuditLog } from "@/lib/supabase-server";
+import { institutionalAuditDetails, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,7 +26,24 @@ export async function POST(request: Request) {
 
     await writeAuditLog({
       action: "search.hybrid",
+      actorReference: auth.user.email ?? auth.user.id,
       details: {
+        ...institutionalAuditDetails({
+          conclusion: result.assessment.sufficient ? "fuente_suficiente" : "fuente_insuficiente",
+          entity: auth.user.entity,
+          processType: payload.data.filters?.processType,
+          query: payload.data.query,
+          role: auth.user.role,
+          sources: result.sources,
+          userEmail: auth.user.email,
+          userId: auth.user.id,
+        }),
+        actor: {
+          email: auth.user.email,
+          entity: auth.user.entity,
+          id: auth.user.id,
+          role: auth.user.role,
+        },
         confidence: result.assessment.confidence,
         evidenceQuality: result.assessment.evidenceQuality,
         evidenceWarnings: result.assessment.evidenceWarnings,
@@ -38,6 +55,14 @@ export async function POST(request: Request) {
         topScore: result.assessment.topScore,
       },
       entityType: "search",
+      module: "busqueda",
+      processType: payload.data.filters?.processType ?? null,
+      user: {
+        email: auth.user.email,
+        entity: auth.user.entity,
+        id: auth.user.id,
+        role: auth.user.role,
+      },
     });
 
     return NextResponse.json({

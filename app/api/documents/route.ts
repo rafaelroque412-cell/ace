@@ -12,11 +12,10 @@ import {
   writeAuditLog,
 } from "@/lib/supabase-server";
 import { processPdfForSearch } from "@/lib/pdf-processing";
+import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const maxPdfSize = 50 * 1024 * 1024;
 
 type DocumentChunkVector = {
   document_id: string;
@@ -75,9 +74,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Solo se permiten archivos PDF" }, { status: 400 });
     }
 
-    if (file.size > maxPdfSize) {
+    if (file.size > maxPdfSizeBytes) {
       return NextResponse.json(
-        { error: "El PDF supera el limite de 50 MB" },
+        { error: `El PDF supera el limite de ${maxPdfSizeLabel}` },
         { status: 400 },
       );
     }
@@ -131,6 +130,14 @@ export async function POST(request: Request) {
       },
       entityId: document.id,
       entityType: "document",
+      module: "documentos",
+      processType,
+      user: {
+        email: auth.user.email,
+        entity: auth.user.entity,
+        id: auth.user.id,
+        role: auth.user.role,
+      },
     });
 
     // Procesa e indexa en segundo plano: el archivo ya esta guardado en Storage,
@@ -254,6 +261,14 @@ export async function DELETE(request: Request) {
         vectorCount: vectorIds.length,
       },
       entityType: "document",
+      module: "documentos",
+      processType,
+      user: {
+        email: auth.user.email,
+        entity: auth.user.entity,
+        id: auth.user.id,
+        role: auth.user.role,
+      },
     });
 
     return NextResponse.json({

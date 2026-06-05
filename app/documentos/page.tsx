@@ -27,8 +27,8 @@ export default async function DocumentosPage() {
           <div className="emptyState">
             <Lock size={20} />
             <p>
-              La gestion del corpus normativo (carga, reindexado y borrado) esta reservada a
-              editores y administradores. Puedes consultar todos los documentos indexados desde el
+              La gestión del corpus normativo (carga, reindexado y borrado) requiere rol DEC o
+              administrador. Puedes consultar todos los documentos indexados desde el
               chat y la busqueda.
             </p>
             <Link className="primaryButton" href="/busqueda">

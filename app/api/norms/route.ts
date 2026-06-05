@@ -17,6 +17,21 @@ type NormRow = {
   norma_articulos: Array<{ count: number }>;
 };
 
+type ChunkRow = {
+  document_id: string;
+  page_start: number | null;
+  page_end: number | null;
+  pinecone_vector_id: string | null;
+};
+
+type SummaryRow = {
+  document_id: string;
+};
+
+type ConcordanciaRow = {
+  source_document_id: string;
+};
+
 const normTypes = ["ley", "reglamento", "directiva"];
 const jurisprudenceTypes = ["resolucion", "opinion"];
 
@@ -32,6 +47,14 @@ function typeFilter(category: string | null) {
   return "";
 }
 
+function textFilter(column: string, value: string | null) {
+  return value ? `&${column}=ilike.*${encodeURIComponent(value.replaceAll("*", ""))}*` : "";
+}
+
+function exactFilter(column: string, value: string | null) {
+  return value ? `&${column}=eq.${encodeURIComponent(value)}` : "";
+}
+
 export async function GET(request: Request) {
   try {
     const auth = await requireUser();
@@ -39,14 +62,57 @@ export async function GET(request: Request) {
       return auth.error;
     }
 
-    const category = new URL(request.url).searchParams.get("category");
+    const params = new URL(request.url).searchParams;
+    const category = params.get("category");
     const rows = await supabaseRest<NormRow[]>(
       `documents?select=id,title,document_type,source_entity,process_type,status,metadata,created_at,norma_articulos(count)` +
-        `&status=eq.indexed${typeFilter(category)}&order=document_type.asc,created_at.desc&limit=200`,
+        `&status=eq.indexed${typeFilter(category)}` +
+        exactFilter("document_type", params.get("documentType")) +
+        exactFilter("process_type", params.get("processType")) +
+        textFilter("source_entity", params.get("sourceEntity")) +
+        `&order=document_type.asc,created_at.desc&limit=300`,
     );
+    const documentIds = rows.map((row) => row.id);
+    const idFilter = documentIds.length ? `in.(${documentIds.map((id) => `"${id}"`).join(",")})` : "in.(\"\")";
+    const [chunks, summaries, concordancias] = await Promise.all([
+      supabaseRest<ChunkRow[]>(
+        `document_chunks?document_id=${idFilter}&select=document_id,page_start,page_end,pinecone_vector_id&limit=20000`,
+      ).catch(() => []),
+      supabaseRest<SummaryRow[]>(
+        `document_summaries?document_id=${idFilter}&select=document_id&limit=1000`,
+      ).catch(() => []),
+      supabaseRest<ConcordanciaRow[]>(
+        `norma_concordancias?source_document_id=${idFilter}&select=source_document_id&limit=20000`,
+      ).catch(() => []),
+    ]);
+    const chunksByDocument = new Map<string, ChunkRow[]>();
+    const summaryIds = new Set(summaries.map((summary) => summary.document_id));
+    const concordanceCount = new Map<string, number>();
 
-    const norms = rows.map((row) => {
+    for (const chunk of chunks) {
+      chunksByDocument.set(chunk.document_id, [...(chunksByDocument.get(chunk.document_id) ?? []), chunk]);
+    }
+
+    for (const concordancia of concordancias) {
+      concordanceCount.set(
+        concordancia.source_document_id,
+        (concordanceCount.get(concordancia.source_document_id) ?? 0) + 1,
+      );
+    }
+
+    const norms = rows
+      .map((row) => {
       const metadata = row.metadata ?? {};
+      const documentChunks = chunksByDocument.get(row.id) ?? [];
+      const pagesDetected = documentChunks.filter((chunk) => chunk.page_start || chunk.page_end).length;
+      const vectorsDetected = documentChunks.filter((chunk) => chunk.pinecone_vector_id).length;
+      const pineconeVerification = metadata.pinecone;
+      const pineconeVerified = Boolean(
+        pineconeVerification &&
+          typeof pineconeVerification === "object" &&
+          (pineconeVerification as Record<string, unknown>).verification &&
+          ((pineconeVerification as Record<string, unknown>).verification as Record<string, unknown>).verified === true,
+      );
       return {
         id: row.id,
         title: row.title,
@@ -65,9 +131,28 @@ export async function GET(request: Request) {
         topic: typeof metadata.topic === "string" ? metadata.topic : null,
         year: typeof metadata.year === "number" ? metadata.year : null,
         amends: typeof metadata.amends === "string" ? metadata.amends : null,
+        concordanceCount: concordanceCount.get(row.id) ?? 0,
         createdAt: row.created_at,
+        hasSummary: summaryIds.has(row.id),
+        pagesDetected,
+        pineconeVerified,
+        qualityStatus:
+          row.norma_articulos?.[0]?.count > 0 && pagesDetected > 0 && (pineconeVerified || vectorsDetected > 0)
+            ? "lista"
+            : "revisar",
+        vectorCount: vectorsDetected,
       };
-    });
+    })
+      .filter((row) => {
+        const year = params.get("year");
+        const vigencia = params.get("vigencia")?.toLowerCase();
+        const topic = params.get("topic")?.toLowerCase();
+
+        if (year && String(row.year ?? "") !== year) return false;
+        if (vigencia && !(row.vigencia ?? "").toLowerCase().includes(vigencia)) return false;
+        if (topic && !(row.topic ?? "").toLowerCase().includes(topic)) return false;
+        return true;
+      });
 
     return NextResponse.json({ norms });
   } catch (error) {

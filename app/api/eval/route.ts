@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
-import { getEvaluationOverview, runEvaluation } from "@/lib/legal-eval";
+import { getEvaluationOverview, runEvaluation, seedBaselineEvalQuestions } from "@/lib/legal-eval";
 import { supabaseUserRest } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +13,25 @@ const questionSchema = z.object({
   action: z.literal("add"),
   question: z.string().trim().min(8).max(500),
   expectedKeywords: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  expectedSources: z
+    .array(
+      z.object({
+        article: z.string().trim().max(40).optional().or(z.literal("")),
+        documentType: z.string().trim().max(60).optional().or(z.literal("")),
+        processType: z.string().trim().max(60).optional().or(z.literal("")),
+        titleIncludes: z.string().trim().max(120).optional().or(z.literal("")),
+      }),
+    )
+    .max(10)
+    .default([]),
   documentType: z.string().trim().max(60).optional().or(z.literal("")),
   processType: z.string().trim().max(60).optional().or(z.literal("")),
 });
 
 const runSchema = z.object({ action: z.literal("run") });
+const seedSchema = z.object({ action: z.literal("seed") });
 
-const bodySchema = z.discriminatedUnion("action", [questionSchema, runSchema]);
+const bodySchema = z.discriminatedUnion("action", [questionSchema, runSchema, seedSchema]);
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -54,10 +66,21 @@ export async function POST(request: Request) {
       return NextResponse.json(run);
     }
 
+    if (payload.data.action === "seed") {
+      const result = await seedBaselineEvalQuestions(auth.user.accessToken);
+      return NextResponse.json(result);
+    }
+
     const [pregunta] = await supabaseUserRest<Array<{ id: string }>>(auth.user.accessToken, "eval_preguntas", {
       body: JSON.stringify({
         document_type: payload.data.documentType || null,
         expected_keywords: payload.data.expectedKeywords,
+        expected_sources: payload.data.expectedSources.map((source) => ({
+          article: source.article || undefined,
+          documentType: source.documentType || undefined,
+          processType: source.processType || undefined,
+          titleIncludes: source.titleIncludes || undefined,
+        })),
         process_type: payload.data.processType || null,
         question: payload.data.question,
       }),

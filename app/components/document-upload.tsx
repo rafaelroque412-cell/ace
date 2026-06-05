@@ -1,23 +1,27 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Database,
   FileText,
   Filter,
   Layers3,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import {
   DOCUMENT_TYPES,
-  PROCESS_TYPES,
   documentTypeLabel,
   processTypeLabel,
 } from "@/lib/legal-taxonomy";
+import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import { processLabelFromOptions, useSettingsCatalog, withBlankProcessOption } from "./use-settings-catalog";
 
 type DocumentItem = {
   id: string;
@@ -78,11 +82,28 @@ type BulkReindexTarget = {
   count: number;
   ids: string[];
 } | null;
+type CorpusQuality = {
+  procedures: Array<{
+    missingDocumentTypes?: Array<{
+      documentType: string;
+      documentTypeLabel: string;
+      reason: string;
+    }>;
+    operationalReady: boolean;
+    processType: string;
+    processTypeLabel: string;
+    score: number;
+    status: "listo" | "operativo_sin_norma_completa" | "incompleto";
+    typeCoverage: Array<{
+      documentType: string;
+      documentTypeLabel: string;
+      documents: number;
+      ready: boolean;
+    }>;
+  }>;
+};
 
 const documentTypes = DOCUMENT_TYPES;
-
-const processTypes = [{ label: "No aplica", value: "" }, ...PROCESS_TYPES];
-const maxPdfSize = 50 * 1024 * 1024;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) {
@@ -107,7 +128,52 @@ function getDocumentProcessType(document: DocumentItem) {
   return document.process_type ?? document.metadata?.processType ?? "";
 }
 
+function isPineconeVerified(document: DocumentItem) {
+  return document.metadata?.pinecone?.verification?.verified === true;
+}
+
+function hasUsableTrace(document: DocumentItem) {
+  return (
+    document.status === "indexed" &&
+    Boolean(document.metadata?.chunkCount) &&
+    Boolean(document.metadata?.pageCount) &&
+    isPineconeVerified(document)
+  );
+}
+
+function needsReindex(document: DocumentItem) {
+  if (document.status === "error" || document.status === "uploaded") {
+    return true;
+  }
+
+  if (document.status !== "indexed") {
+    return false;
+  }
+
+  return !document.metadata?.chunkCount || !document.metadata?.pageCount || !isPineconeVerified(document);
+}
+
+function uploadGuidance(documentType: string, processType: string) {
+  if (documentType === "ley" || documentType === "reglamento") {
+    return processType === "todos"
+      ? "Correcto: Ley y Reglamento deben quedar disponibles para todos los procesos."
+      : "Recomendado: para Ley y Reglamento usa proceso Todos los procesos.";
+  }
+
+  if (documentType === "directiva" || documentType === "bases_integradas") {
+    return processType
+      ? "Correcto: directivas y bases deben clasificarse por el proceso al que aplican."
+      : "Selecciona el tipo de proceso para evitar que el chat mezcle reglas de procedimientos distintos.";
+  }
+
+  return "Clasifica el documento con el tipo y proceso mas preciso posible.";
+}
+
 export function DocumentUpload() {
+  const { processTypes: configuredProcessTypes } = useSettingsCatalog();
+  const processTypes = withBlankProcessOption(configuredProcessTypes, "No aplica");
+  const labelProcessType = (value?: string | null) =>
+    processLabelFromOptions(configuredProcessTypes, value) ?? processTypeLabel(value);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentType, setDocumentType] = useState("opinion");
   const [file, setFile] = useState<File | null>(null);
@@ -126,6 +192,7 @@ export function DocumentUpload() {
   const [reindexingId, setReindexingId] = useState<string | null>(null);
   const [sourceEntity, setSourceEntity] = useState("");
   const [title, setTitle] = useState("");
+  const [quality, setQuality] = useState<CorpusQuality | null>(null);
 
   const selectedFileLabel = useMemo(() => {
     if (!file) {
@@ -150,6 +217,29 @@ export function DocumentUpload() {
   ).length;
   const directiveCount = documents.filter((document) => document.document_type === "directiva").length;
   const indexedCount = documents.filter((document) => document.status === "indexed").length;
+  const usableCount = documents.filter(hasUsableTrace).length;
+  const reindexRecommended = documents.filter(needsReindex);
+  const normativeTypes = ["ley", "reglamento", "directiva", "opinion"];
+  const corpusChecklist = normativeTypes.map((type) => {
+    const typeDocuments = documents.filter((document) => document.document_type === type);
+    const indexedDocuments = typeDocuments.filter((document) => document.status === "indexed");
+    const usableDocuments = typeDocuments.filter(hasUsableTrace);
+
+    return {
+      count: typeDocuments.length,
+      indexed: indexedDocuments.length,
+      ready: usableDocuments.length > 0,
+      title: documentTypeLabel(type),
+      usable: usableDocuments.length,
+    };
+  });
+  const globalScopeIssues = documents.filter(
+    (document) =>
+      ["ley", "reglamento"].includes(document.document_type) &&
+      document.status === "indexed" &&
+      getDocumentProcessType(document) &&
+      getDocumentProcessType(document) !== "todos",
+  );
   const bulkDeleteCount = filteredDocuments.filter(
     (document) =>
       ["bases_integradas", "directiva"].includes(document.document_type) &&
@@ -173,6 +263,17 @@ export function DocumentUpload() {
 
     setDocuments(payload.documents);
   }, []);
+  const loadQuality = useCallback(async () => {
+    try {
+      const response = await fetch("/api/corpus/quality", { cache: "no-store" });
+      const payload = (await response.json()) as CorpusQuality;
+      if (response.ok) {
+        setQuality(payload);
+      }
+    } catch {
+      setQuality(null);
+    }
+  }, []);
   const hasPendingDocuments = useMemo(
     () => documents.some((document) => document.status === "uploaded" || document.status === "processing"),
     [documents],
@@ -182,7 +283,8 @@ export function DocumentUpload() {
     // Initial sync with the documents API when the upload panel mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDocuments();
-  }, [loadDocuments]);
+    void loadQuality();
+  }, [loadDocuments, loadQuality]);
 
   useEffect(() => {
     // Mientras haya documentos indexandose en segundo plano, refresca el estado
@@ -215,8 +317,8 @@ export function DocumentUpload() {
       return;
     }
 
-    if (file.size > maxPdfSize) {
-      setMessage("El PDF supera el limite de 50 MB.");
+    if (file.size > maxPdfSizeBytes) {
+      setMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
       return;
     }
 
@@ -247,10 +349,21 @@ export function DocumentUpload() {
       setTitle("");
       setMessage("PDF subido. Procesando e indexando en segundo plano...");
       await loadDocuments();
+      await loadQuality();
     } catch {
       setMessage("No se pudo conectar con el servidor.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function applyDocumentType(nextType: string) {
+    setDocumentType(nextType);
+
+    if (["ley", "reglamento"].includes(nextType)) {
+      setProcessType("todos");
+    } else if (nextType === "directiva" || nextType === "bases_integradas") {
+      setProcessType((current) => (current === "todos" ? "" : current));
     }
   }
 
@@ -272,6 +385,7 @@ export function DocumentUpload() {
 
       setMessage("Documento eliminado completamente.");
       await loadDocuments();
+      await loadQuality();
     } catch {
       setMessage("No se pudo conectar con el servidor.");
     } finally {
@@ -409,31 +523,143 @@ export function DocumentUpload() {
         </div>
         <div>
           <RefreshCw size={17} />
-          <span>Indexados</span>
-          <strong>{indexedCount}</strong>
+          <span>Listos para RAG</span>
+          <strong>
+            {usableCount}/{indexedCount}
+          </strong>
         </div>
+      </section>
+
+      <section className="analysisHelpBox">
+        <UploadCloud size={18} />
+        <div>
+          <strong>Elige el destino correcto del PDF</strong>
+          <span>
+            Biblioteca normativa: Ley, Reglamento, Directivas, Opiniones y Bases que alimentan Chat, Busqueda y Normas.
+            Expediente: documentos de un proceso especifico para evaluar ofertas, riesgos o generar informes.
+          </span>
+          <div className="sourceActions">
+            <Link className="secondaryButton compactButton" href="/documentos">
+              Subir a biblioteca normativa
+            </Link>
+            <Link className="secondaryButton compactButton" href="/expedientes">
+              Subir al expediente
+            </Link>
+            <Link className="secondaryButton compactButton" href="/expedientes">
+              Vincular documento existente
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="corpusReadiness" aria-label="Preparacion del corpus">
+        <div className="documentSectionTitle">
+          <div>
+            <strong>Preparacion para Chat y Consultas</strong>
+            <span>El chat juridico necesita normativa vigente, paginas, articulos y vectores verificados.</span>
+          </div>
+          <Link className="secondaryButton compactButton" href="/validar">
+            <ShieldCheck size={15} />
+            Verificar corpus
+          </Link>
+        </div>
+        <div className="corpusChecklist">
+          {corpusChecklist.map((item) => (
+            <article className="corpusCheckItem" data-ready={item.ready} key={item.title}>
+              {item.ready ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+              <div>
+                <strong>{item.title}</strong>
+                <span>
+                  {item.usable}/{item.count} listo(s) · {item.indexed} indexado(s)
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+        {reindexRecommended.length > 0 || globalScopeIssues.length > 0 ? (
+          <div className="corpusWarnings">
+            {reindexRecommended.length > 0 ? (
+              <span>{reindexRecommended.length} documento(s) requieren reindexacion o revision de Pinecone/paginas.</span>
+            ) : null}
+            {globalScopeIssues.length > 0 ? (
+              <span>Ley/Reglamento deben usar proceso Todos los procesos para no quedar fuera de busquedas especificas.</span>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="corpusReadiness" aria-label="Calidad por procedimiento">
+        <div className="documentSectionTitle">
+          <div>
+            <strong>Calidad del corpus por procedimiento</strong>
+            <span>Permite saber si cada proceso tiene normativa suficiente y bases solo como apoyo operativo.</span>
+          </div>
+          <button className="secondaryButton compactButton" onClick={() => void loadQuality()} type="button">
+            <RefreshCw size={15} />
+            Actualizar calidad
+          </button>
+        </div>
+        {quality ? (
+          <div className="procedureQualityGrid">
+            {quality.procedures.map((procedure) => (
+              <article className="ruleItem" data-tone={procedure.status === "listo" ? "ok" : procedure.operationalReady ? "warn" : "bad"} key={procedure.processType}>
+                <div>
+                  {procedure.status === "listo" ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+                  <strong>{procedure.processTypeLabel}</strong>
+                  <span>{procedure.score}%</span>
+                </div>
+                <small>
+                  {procedure.status === "listo"
+                    ? "Normativa principal disponible."
+                    : procedure.operationalReady
+                      ? "Hay bases/esquema, pero falta normativa completa."
+                      : "Corpus incompleto para responder con seguridad."}
+                </small>
+                <div className="sourceMetaGrid">
+                  {procedure.typeCoverage.map((item) => (
+                    <span key={`${procedure.processType}-${item.documentType}`}>
+                      {item.documentTypeLabel}: {item.ready ? "sí" : "no"} ({item.documents})
+                    </span>
+                  ))}
+                </div>
+                {procedure.missingDocumentTypes?.length ? (
+                  <div className="corpusMissingList">
+                    <strong>Falta completar</strong>
+                    {procedure.missingDocumentTypes.slice(0, 4).map((item) => (
+                      <span key={`${procedure.processType}-missing-${item.documentType}`}>
+                        {item.documentTypeLabel}: {item.reason}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="emptyState">Actualiza para calcular calidad por procedimiento.</div>
+        )}
       </section>
 
       <form className="documentForm" onSubmit={uploadDocument}>
         <div className="documentSectionTitle">
           <div>
             <strong>Subir nuevo PDF</strong>
-            <span>Clasifica bases integradas y directivas por tipo de proceso.</span>
+            <span>{uploadGuidance(documentType, processType)}</span>
           </div>
         </div>
         <label className="filePicker">
           <UploadCloud size={28} />
           <strong>{selectedFileLabel}</strong>
-          <span>Ley, reglamento, bases integradas, directivas, resoluciones y expedientes. Maximo 50 MB.</span>
+          <span>Ley, reglamento, bases integradas, directivas, resoluciones y expedientes. Maximo {maxPdfSizeLabel}.</span>
           <input
             accept="application/pdf"
             aria-label="Seleccionar PDF"
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;
 
-              if (selected && selected.size > maxPdfSize) {
+              if (selected && selected.size > maxPdfSizeBytes) {
                 setFile(null);
-                setMessage("El PDF supera el limite de 50 MB.");
+                setMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
                 event.target.value = "";
                 return;
               }
@@ -465,7 +691,7 @@ export function DocumentUpload() {
           <label>
             <span>Tipo</span>
             <select
-              onChange={(event) => setDocumentType(event.target.value)}
+              onChange={(event) => applyDocumentType(event.target.value)}
               value={documentType}
             >
               {documentTypes.map((item) => (
@@ -607,8 +833,8 @@ export function DocumentUpload() {
                 <span>
                   {document.document_type} · {formatBytes(document.file_size)} ·{" "}
                   {document.source_entity ?? "Sin entidad"}
-                  {processTypeLabel(getDocumentProcessType(document))
-                    ? ` · ${processTypeLabel(getDocumentProcessType(document))}`
+                  {labelProcessType(getDocumentProcessType(document))
+                    ? ` · ${labelProcessType(getDocumentProcessType(document))}`
                     : ""}
                 </span>
                 {document.metadata?.extractionMethod ? (
@@ -630,6 +856,20 @@ export function DocumentUpload() {
                     {document.metadata.ocrPartial ? " · OCR parcial" : ""}
                   </span>
                 ) : null}
+                <div className="documentQuality">
+                  <span data-ready={Boolean(document.metadata?.pageCount)}>
+                    Paginas {document.metadata?.pageCount ?? "sin dato"}
+                  </span>
+                  <span data-ready={Boolean(document.metadata?.chunkCount)}>
+                    Fragmentos {document.metadata?.chunkCount ?? 0}
+                  </span>
+                  <span data-ready={isPineconeVerified(document)}>
+                    Pinecone {isPineconeVerified(document) ? "verificado" : "pendiente"}
+                  </span>
+                  <span data-ready={!needsReindex(document)}>
+                    {needsReindex(document) ? "Reindexar" : "Utilizable"}
+                  </span>
+                </div>
                 {document.metadata?.topic || document.metadata?.vigencia || document.metadata?.year ? (
                   <span>
                     {document.metadata.topic ? `Tema ${document.metadata.topic}` : "Tema no definido"}
@@ -644,6 +884,14 @@ export function DocumentUpload() {
               </div>
               <div className="documentActions">
                 <small data-status={document.status}>{statusLabel(document.status)}</small>
+                <Link
+                  aria-label={`Abrir PDF ${document.title}`}
+                  href={`/api/documents/${document.id}`}
+                  target="_blank"
+                  title="Abrir PDF original"
+                >
+                  <FileText size={16} />
+                </Link>
                 <button
                   aria-label={`Reindexar ${document.title}`}
                   disabled={reindexingId === document.id || deletingId === document.id}
@@ -719,7 +967,7 @@ export function DocumentUpload() {
             </Dialog.Description>
             <strong>
               {documentTypeLabel(bulkDeleteTarget?.documentType)} ·{" "}
-              {processTypeLabel(bulkDeleteTarget?.processType) ?? "Sin proceso"}
+              {labelProcessType(bulkDeleteTarget?.processType) ?? "Sin proceso"}
             </strong>
             <p>{bulkDeleteTarget?.count ?? 0} documento(s) seran eliminados.</p>
             <div className="dialogActions">
