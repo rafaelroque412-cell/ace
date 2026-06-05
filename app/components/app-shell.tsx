@@ -6,12 +6,15 @@ import {
   BookOpenCheck,
   Bookmark,
   Bot,
+  Briefcase,
   FileSearch,
   FileText,
   GitCompare,
   History,
   Library,
   LogOut,
+  Settings,
+  ShieldCheck,
   ScanSearch,
   ScrollText,
   UploadCloud,
@@ -24,8 +27,10 @@ type AppShellProps = {
     | "panel"
     | "chat"
     | "busqueda"
+    | "validar"
     | "normas"
     | "analizar"
+    | "expedientes"
     | "documentos"
     | "comparar"
     | "historial"
@@ -34,7 +39,8 @@ type AppShellProps = {
     | "guardado"
     | "evaluacion"
     | "metricas"
-    | "auditoria";
+    | "auditoria"
+    | "configuracion";
   children: React.ReactNode;
   eyebrow: string;
   title: string;
@@ -42,20 +48,51 @@ type AppShellProps = {
 };
 
 const navigation = [
-  { href: "/", icon: BookOpenCheck, id: "panel", label: "Panel", adminOnly: false },
-  { href: "/chat", icon: Bot, id: "chat", label: "Chat", adminOnly: false },
-  { href: "/busqueda", icon: FileSearch, id: "busqueda", label: "Consultas", adminOnly: false },
-  { href: "/normas", icon: Library, id: "normas", label: "Normas", adminOnly: false },
-  { href: "/analizar", icon: ScanSearch, id: "analizar", label: "Analizar", adminOnly: false },
-  { href: "/alertas", icon: Bell, id: "alertas", label: "Alertas", adminOnly: false },
-  { href: "/guardado", icon: Bookmark, id: "guardado", label: "Guardado", adminOnly: false },
-  { href: "/documentos", icon: UploadCloud, id: "documentos", label: "Documentos", adminOnly: false },
-  { href: "/comparar", icon: GitCompare, id: "comparar", label: "Comparar", adminOnly: false },
-  { href: "/historial", icon: History, id: "historial", label: "Historial", adminOnly: false },
-  { href: "/contratos", icon: FileText, id: "contratos", label: "Contratos", adminOnly: false },
-  { href: "/evaluacion", icon: BarChart3, id: "evaluacion", label: "Evaluación", adminOnly: true },
-  { href: "/metricas", icon: Activity, id: "metricas", label: "Monitoreo", adminOnly: true },
-  { href: "/auditoria", icon: ScrollText, id: "auditoria", label: "Auditoría", adminOnly: true },
+  {
+    items: [{ href: "/", icon: BookOpenCheck, id: "panel", label: "Inicio", adminOnly: false }],
+    label: "General",
+  },
+  {
+    items: [
+      { href: "/chat", icon: Bot, id: "chat", label: "Chat con fuentes", adminOnly: false },
+      { href: "/busqueda", icon: FileSearch, id: "busqueda", label: "Búsqueda documental", adminOnly: false },
+      { href: "/normas", icon: Library, id: "normas", label: "Normas por artículo", adminOnly: false },
+    ],
+    label: "Consultar",
+  },
+  {
+    items: [
+      { href: "/validar", icon: ShieldCheck, id: "validar", label: "Validar procedimiento", adminOnly: false },
+      { href: "/analizar", icon: ScanSearch, id: "analizar", label: "Analizar documento", adminOnly: false },
+      { href: "/comparar", icon: GitCompare, id: "comparar", label: "Comparar normas", adminOnly: false },
+    ],
+    label: "Revisar",
+  },
+  {
+    items: [
+      { href: "/expedientes", icon: Briefcase, id: "expedientes", label: "Expedientes", adminOnly: false },
+      { href: "/contratos", icon: FileText, id: "contratos", label: "Contratos", adminOnly: false },
+    ],
+    label: "Trabajo",
+  },
+  {
+    items: [
+      { href: "/documentos", icon: UploadCloud, id: "documentos", label: "Biblioteca PDF", adminOnly: false },
+      { href: "/guardado", icon: Bookmark, id: "guardado", label: "Guardados", adminOnly: false },
+      { href: "/historial", icon: History, id: "historial", label: "Historial", adminOnly: false },
+      { href: "/alertas", icon: Bell, id: "alertas", label: "Alertas", adminOnly: false },
+    ],
+    label: "Organizar",
+  },
+  {
+    items: [
+      { href: "/evaluacion", icon: BarChart3, id: "evaluacion", label: "Evaluación IA", adminOnly: true, requiredRole: "Admin" },
+      { href: "/metricas", icon: Activity, id: "metricas", label: "Monitoreo", adminOnly: true, requiredRole: "Admin" },
+      { href: "/auditoria", icon: ScrollText, id: "auditoria", label: "Auditoría", adminOnly: true, requiredRole: "Admin" },
+      { href: "/configuracion", icon: Settings, id: "configuracion", label: "Configuración", adminOnly: true, requiredRole: "Admin" },
+    ],
+    label: "Administrar",
+  },
 ] as const;
 
 async function countRecentNews() {
@@ -72,7 +109,7 @@ async function countRecentNews() {
 
 export async function AppShell({ active, action, children, eyebrow, title }: AppShellProps) {
   const [user, newsCount] = await Promise.all([getSessionUser(), countRecentNews()]);
-  const items = navigation.filter((item) => !item.adminOnly || user?.isAdmin);
+  const sections = navigation;
 
   return (
     <main className="shell">
@@ -85,23 +122,44 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
           </div>
         </Link>
 
-        <nav className="nav">
-          {items.map((item) => {
-            const Icon = item.icon;
+        <nav className="nav" aria-label="Menu principal">
+          {sections.map((section) => (
+            <div className="navSection" key={section.label}>
+              <span className="navSectionLabel">{section.label}</span>
+              <div className="navSectionItems">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
 
-            return (
-              <Link
-                aria-current={active === item.id ? "page" : undefined}
-                className={active === item.id ? "active" : undefined}
-                href={item.href}
-                key={item.id}
-              >
-                <Icon size={18} />
-                {item.label}
-                {item.id === "alertas" && newsCount > 0 ? <span className="navBadge">{newsCount}</span> : null}
-              </Link>
-            );
-          })}
+                  const locked = Boolean(item.adminOnly && !user?.isAdmin);
+
+                  if (locked) {
+                    const requiredRole = "requiredRole" in item ? item.requiredRole : "Admin";
+                    return (
+                      <span className="navLocked" key={item.id} title={`Requiere rol ${requiredRole}`}>
+                        <Icon size={18} />
+                        {item.label}
+                        <small>{requiredRole}</small>
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      aria-current={active === item.id ? "page" : undefined}
+                      className={active === item.id ? "active" : undefined}
+                      href={item.href}
+                      key={item.id}
+                      title={item.label}
+                    >
+                      <Icon size={18} />
+                      {item.label}
+                      {item.id === "alertas" && newsCount > 0 ? <span className="navBadge">{newsCount}</span> : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {user ? (
@@ -110,8 +168,19 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
               {user.email ?? "Sesion activa"}
             </span>
             <span className="userRole">
-              {user.role === "admin" ? "Administrador" : user.role === "editor" ? "Editor" : "Usuario"}
+              {user.role === "admin"
+                ? "Administrador"
+                : user.role === "dec"
+                  ? "DEC"
+                  : user.role === "legal"
+                    ? "Asesoría Jurídica"
+                    : user.role === "area_usuaria"
+                      ? "Área Usuaria"
+                      : "Consulta"}
             </span>
+            {user.permissions.length > 0 ? (
+              <span className="userPermissions">{user.permissions.length} permiso(s) activos</span>
+            ) : null}
             <form action="/auth/signout" method="post">
               <button className="signoutButton" type="submit">
                 <LogOut size={16} />

@@ -187,13 +187,37 @@ export async function writeAuditLog(input: {
   details?: Record<string, unknown>;
   entityId?: string;
   entityType: string;
+  module?: string;
+  processType?: string | null;
+  user?: {
+    email?: string | null;
+    entity?: string | null;
+    id?: string | null;
+    role?: string | null;
+  };
 }) {
   try {
+    const module = input.module ?? input.action.split(".")[0] ?? input.entityType;
     await supabaseRest("audit_logs", {
       body: JSON.stringify({
         action: input.action,
         actor_reference: input.actorReference ?? "system",
-        details: input.details ?? {},
+        details: {
+          action: input.action,
+          module,
+          processType: input.processType ?? null,
+          ...(input.details ?? {}),
+          ...(input.user
+            ? {
+                user: {
+                  email: input.user.email ?? null,
+                  entity: input.user.entity ?? null,
+                  id: input.user.id ?? null,
+                  role: input.user.role ?? null,
+                },
+              }
+            : {}),
+        },
         entity_id: input.entityId ?? null,
         entity_type: input.entityType,
       }),
@@ -202,4 +226,47 @@ export async function writeAuditLog(input: {
   } catch {
     // Audit logging must not break the user-facing workflow.
   }
+}
+
+export function institutionalAuditDetails(input: {
+  conclusion?: string | null;
+  documentId?: string | null;
+  entity?: string | null;
+  processId?: string | null;
+  processType?: string | null;
+  query?: string | null;
+  role?: string | null;
+  sources?: Array<{
+    article?: string | null;
+    documentId?: string | null;
+    documentTitle?: string | null;
+    documentType?: string | null;
+    pageStart?: number | null;
+    processType?: string | null;
+  }>;
+  userEmail?: string | null;
+  userId?: string | null;
+}) {
+  return {
+    conclusion: input.conclusion ?? null,
+    documentId: input.documentId ?? null,
+    processId: input.processId ?? null,
+    processType: input.processType ?? null,
+    query: input.query ?? null,
+    sources:
+      input.sources?.slice(0, 20).map((source) => ({
+        article: source.article ?? null,
+        documentId: source.documentId ?? null,
+        documentTitle: source.documentTitle ?? null,
+        documentType: source.documentType ?? null,
+        pageStart: source.pageStart ?? null,
+        processType: source.processType ?? null,
+      })) ?? [],
+    user: {
+      email: input.userEmail ?? null,
+      entity: input.entity ?? null,
+      id: input.userId ?? null,
+      role: input.role ?? null,
+    },
+  };
 }
