@@ -13,9 +13,14 @@ yarn-error.log*
 pnpm-debug.log*
 coverage
 tsconfig.tsbuildinfo
-.next-dev.*.log
+.next-dev*.log
 .DS_Store
 Thumbs.db
 
 # MCP config (contiene token de Supabase)
 .mcp.json
+
+# Corpus PDFs y artefactos sueltos (van en Storage, no en git)
+/normas/
+/SDD nuevo.pdf
+/Nuevo Documento de Microsoft Word.docx
