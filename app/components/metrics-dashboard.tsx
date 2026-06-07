@@ -277,7 +277,7 @@ export function MetricsDashboard() {
         </div>
         <p className="metricMessage">
           Ejecuta una prueba autenticada como admin: revisa matriz de roles, corpus crítico
-          (Reglamento art. 144 y Directiva SIE) y un dry-run de búsqueda + chat sin guardar historial.
+          (Reglamento y Directiva SIE) y un dry-run de búsqueda + chat sin guardar historial.
         </p>
         {verificationError ? <p className="evalError">{verificationError}</p> : null}
         {verification ? (

@@ -141,7 +141,7 @@ export const procedureCatalog: Record<string, ProcedureCatalogEntry> = {
         documentType: "directiva",
         label: "Directiva SIE aplicable",
         message: "Para SIE debe recuperarse la Directiva aplicable; ficha tecnica y bases no sustituyen esta fuente.",
-        titleIncludes: ["subasta inversa", "sie", "006-2019"],
+        titleIncludes: ["subasta inversa", "sie"],
       },
       optionalOpinionRequirement,
       optionalBasesRequirement,
@@ -155,31 +155,30 @@ export const procedureCatalog: Record<string, ProcedureCatalogEntry> = {
   comparacion_precios: {
     aliases: ["comparacion de precios", "comparacion precios", "comparar precios"],
     anchors: [
-      "Ley 32069 articulo 4 definiciones comparacion de precios procedimiento de seleccion competitivo unico factor de evaluacion precio",
-      "Reglamento Decreto Supremo 009-2025-EF articulo 144 comparacion de precios condiciones utilizacion requisitos procedencia",
-      "Decreto Supremo 001-2026-EF articulo 144 comparacion de precios modificacion vigente",
-      "bases estandar comparacion de precios articulo 144 reglamento admision calificacion evaluacion otorgamiento buena pro",
+      "Ley 32069 articulo 4 comparacion de precios procedimiento de seleccion competitivo unico factor de evaluacion precio bienes y servicios",
+      "Reglamento Decreto Supremo 009-2025-EF comparacion de precios condiciones de utilizacion requisitos de procedencia",
+      "comparacion de precios modificatoria vigente del reglamento condiciones",
+      "bases estandar comparacion de precios admision calificacion evaluacion otorgamiento buena pro",
     ],
     label: "Comparacion de precios",
     requiredSources: [
       {
         documentType: "ley",
-        label: "Ley N. 32069, definicion/remision",
-        message: "La Ley reconoce Comparacion de Precios y remite condiciones concretas al Reglamento.",
+        label: "Ley 32069 (definicion/remision, art. 4)",
+        message:
+          "La Ley (art. 4) define Comparacion de Precios como procedimiento competitivo y remite sus condiciones al Reglamento.",
       },
       {
-        article: "144",
         critical: true,
         documentType: "reglamento",
-        label: "Reglamento articulo 144",
+        label: "Reglamento (condiciones de Comparacion de Precios)",
         message:
-          "Para requisitos de Comparacion de Precios debe recuperarse el Reglamento articulo 144 vigente; la Ley sola no desarrolla condiciones concretas.",
+          "Para requisitos de Comparacion de Precios debe recuperarse el Reglamento vigente que desarrolle sus condiciones; la Ley sola remite al Reglamento.",
       },
       {
-        article: "144",
         documentType: "reglamento",
-        label: "Modificatoria vigente del articulo 144",
-        message: "Si existe D.S. modificatorio, debe advertirse la version vigente del articulo 144.",
+        label: "Modificatoria vigente del Reglamento",
+        message: "Si existe D.S. modificatorio, debe advertirse la version vigente de las condiciones.",
         optional: true,
         titleIncludes: ["001-2026", "modifica", "modificatoria"],
       },
@@ -187,10 +186,9 @@ export const procedureCatalog: Record<string, ProcedureCatalogEntry> = {
       optionalBasesRequirement,
     ],
     requirementRule: {
-      article: "144",
       documentType: "reglamento",
       message:
-        "Para requisitos de Comparacion de precios debe recuperarse el Reglamento, articulo 144; la Ley sola no desarrolla las condiciones concretas.",
+        "Para requisitos de Comparacion de precios debe recuperarse el Reglamento que desarrolle sus condiciones; la Ley (art. 4) solo remite al Reglamento.",
     },
     value: "comparacion_precios",
   },

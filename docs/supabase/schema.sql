@@ -775,6 +775,7 @@ create table if not exists public.eval_preguntas (
   id uuid primary key default gen_random_uuid(),
   question text not null,
   expected_keywords text[] not null default '{}',
+  expected_must_not_contain text[] not null default '{}',
   expected_sources jsonb not null default '[]'::jsonb,
   document_type text,
   process_type text,

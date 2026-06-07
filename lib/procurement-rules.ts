@@ -416,7 +416,7 @@ function conclude(findings: RuleFinding[]) {
 function buildNextSteps(procedureType: string | null) {
   const articleHint =
     procedureType === "comparacion_precios"
-      ? "Buscar Reglamento vigente, articulo 144, y contrastar la cuantia/condiciones."
+      ? "Buscar el Reglamento vigente que desarrolla la comparacion de precios (la Ley, art. 4, remite al Reglamento) y contrastar la cuantia/condiciones."
       : "Buscar Ley, Reglamento y directiva aplicable al procedimiento seleccionado.";
 
   return [

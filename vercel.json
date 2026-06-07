@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "regions": ["iad1"],
   "env": {
-    "PINECONE_INDEX_NAME": "ace"
+    "PINECONE_INDEX_NAME": "ace-openai"
   },
   "crons": [
     {

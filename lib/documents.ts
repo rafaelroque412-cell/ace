@@ -44,6 +44,48 @@ export function normalizeProcessType(value: FormDataEntryValue | null): ProcessT
   return allowedProcessTypes.includes(value as ProcessType) ? (value as ProcessType) : "otros";
 }
 
+// Tipos normativos que admiten subirse como modificatoria/cambio de una norma
+// existente (Ley, Reglamento, Directiva). El resto no ofrece ese enlace.
+export function supportsAmendment(documentType: string): boolean {
+  return documentType === "ley" || documentType === "reglamento" || documentType === "directiva";
+}
+
+// Alcance del process_type segun el tipo documental (regla unica de negocio):
+// Ley y Reglamento aplican a todos los procesos; las Opiniones son de alcance
+// general (sin proceso); Directivas, Bases y el resto conservan su proceso.
+// Version NO lanzante: usada por el pipeline de indexado para que la inferencia
+// de IA nunca sobrescriba el alcance de Ley/Reglamento/Opinion.
+export function scopeProcessType(
+  documentType: string,
+  processType: ProcessType | string | null,
+): ProcessType | null {
+  if (documentType === "ley" || documentType === "reglamento") {
+    return "todos";
+  }
+
+  if (documentType === "opinion") {
+    return null;
+  }
+
+  return (processType as ProcessType | null) ?? null;
+}
+
+// Version validante: usada por la API de subida. Ademas del alcance, exige que
+// Directivas y Bases tengan un proceso especifico (no vacio ni "todos").
+export function resolveDocumentProcessType(
+  documentType: DocumentType,
+  processType: ProcessType | null,
+): { processType: ProcessType | null } | { error: string } {
+  if (
+    (documentType === "directiva" || documentType === "bases_integradas") &&
+    (!processType || processType === "todos")
+  ) {
+    return { error: "Las directivas y bases requieren un tipo de proceso especifico." };
+  }
+
+  return { processType: scopeProcessType(documentType, processType) };
+}
+
 export function sanitizeFileName(fileName: string) {
   const normalized = fileName
     .normalize("NFD")

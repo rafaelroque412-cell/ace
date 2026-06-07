@@ -9,6 +9,7 @@ import {
   Database,
   FileText,
   Filter,
+  Info,
   Layers3,
   RefreshCw,
   ShieldCheck,
@@ -19,7 +20,9 @@ import {
   DOCUMENT_TYPES,
   documentTypeLabel,
   processTypeLabel,
+  type TaxonomyOption,
 } from "@/lib/legal-taxonomy";
+import { supportsAmendment } from "@/lib/documents";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import { processLabelFromOptions, useSettingsCatalog, withBlankProcessOption } from "./use-settings-catalog";
 
@@ -32,6 +35,9 @@ type DocumentItem = {
   process_type?: string | null;
   error_message: string | null;
   metadata: {
+    amends?: string | null;
+    changeCategory?: string | null;
+    changeNote?: string | null;
     ai?: {
       classificationConfidence?: string;
       suggestedDocumentType?: string | null;
@@ -153,20 +159,44 @@ function needsReindex(document: DocumentItem) {
   return !document.metadata?.chunkCount || !document.metadata?.pageCount || !isPineconeVerified(document);
 }
 
-function uploadGuidance(documentType: string, processType: string) {
+// Alcance del tipo de proceso segun el tipo documental:
+// - "todos": Ley y Reglamento se aplican a todos los procesos (process_type = "todos").
+// - "general": Opiniones son de alcance general, sin proceso asociado (process_type vacio).
+// - "required": Directivas y Bases se clasifican por el proceso especifico al que aplican.
+// - "optional": resto de tipos (resolucion, contrato, expediente, otros) sin restriccion.
+type ProcessScope = "todos" | "general" | "required" | "optional";
+
+function processScopeFor(documentType: string): ProcessScope {
   if (documentType === "ley" || documentType === "reglamento") {
-    return processType === "todos"
-      ? "Correcto: Ley y Reglamento deben quedar disponibles para todos los procesos."
-      : "Recomendado: para Ley y Reglamento usa proceso Todos los procesos.";
+    return "todos";
+  }
+
+  if (documentType === "opinion") {
+    return "general";
   }
 
   if (documentType === "directiva" || documentType === "bases_integradas") {
-    return processType
-      ? "Correcto: directivas y bases deben clasificarse por el proceso al que aplican."
-      : "Selecciona el tipo de proceso para evitar que el chat mezcle reglas de procedimientos distintos.";
+    return "required";
   }
 
-  return "Clasifica el documento con el tipo y proceso mas preciso posible.";
+  return "optional";
+}
+
+function uploadGuidance(documentType: string) {
+  if (documentType === "opinion") {
+    return "Opinión del OECE: interpreta el sentido o alcance de la norma. No es un proceso de selección; sus criterios aplican a todos los procesos.";
+  }
+
+  switch (processScopeFor(documentType)) {
+    case "todos":
+      return "Ley y Reglamento se aplican a todos los tipos de proceso.";
+    case "general":
+      return "Documento de alcance general: aplica a todos los procesos.";
+    case "required":
+      return "Selecciona el tipo de proceso al que aplican la directiva o las bases.";
+    default:
+      return "Clasifica el documento con el tipo y proceso mas preciso posible.";
+  }
 }
 
 export function DocumentUpload() {
@@ -190,8 +220,10 @@ export function DocumentUpload() {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [processType, setProcessType] = useState("");
   const [reindexingId, setReindexingId] = useState<string | null>(null);
-  const [sourceEntity, setSourceEntity] = useState("");
   const [title, setTitle] = useState("");
+  const [changeCategory, setChangeCategory] = useState("original");
+  const [amendsDocumentId, setAmendsDocumentId] = useState("");
+  const [amendsNote, setAmendsNote] = useState("");
   const [quality, setQuality] = useState<CorpusQuality | null>(null);
 
   const selectedFileLabel = useMemo(() => {
@@ -250,6 +282,36 @@ export function DocumentUpload() {
     ["bases_integradas", "directiva"].includes(filterDocumentType) &&
     Boolean(filterProcessType);
   const canBulkReindex = filteredDocuments.length > 0 && !bulkReindexing;
+
+  // Opciones del selector de proceso en la subida, segun el alcance del tipo documental.
+  const uploadProcessScope = processScopeFor(documentType);
+  const uploadProcessDisabled = uploadProcessScope === "todos" || uploadProcessScope === "general";
+  const uploadProcessOptions: TaxonomyOption[] =
+    uploadProcessScope === "todos"
+      ? [{ label: "Todos los procesos", value: "todos" }]
+      : uploadProcessScope === "general"
+        ? [{ label: "Aplica a todos los procesos (general)", value: "" }]
+        : uploadProcessScope === "required"
+          ? [{ label: "Selecciona el proceso…", value: "" }, ...configuredProcessTypes]
+          : withBlankProcessOption(configuredProcessTypes, "No aplica");
+  // Normas ya indexadas que pueden ser modificadas por el documento que se sube.
+  const amendableDocuments = documents.filter(
+    (document) => supportsAmendment(document.document_type) && document.status === "indexed",
+  );
+  const changeCategoryHint =
+    changeCategory === "modificatoria"
+      ? "Enlázala con la norma que modifica."
+      : changeCategory === "modificada"
+        ? "Marca que esta norma recibió cambios posteriores."
+        : "La norma se registra como versión original/vigente.";
+  const uploadProcessHint =
+    uploadProcessScope === "todos"
+      ? "La Ley y el Reglamento se aplican a todos los procesos."
+      : uploadProcessScope === "general"
+        ? "Alcance general: sus criterios aplican a todos los procesos."
+        : uploadProcessScope === "required"
+          ? "Obligatorio: elige el proceso al que aplica."
+          : "Opcional: asígnalo solo si aplica a un proceso concreto.";
 
   const loadDocuments = useCallback(async () => {
     // No limpia `message` para no borrar el aviso de "procesando" durante el polling.
@@ -322,12 +384,41 @@ export function DocumentUpload() {
       return;
     }
 
+    const scope = processScopeFor(documentType);
+
+    if (scope === "required" && (!processType || processType === "todos")) {
+      setMessage("Selecciona el tipo de proceso al que aplican la directiva o las bases.");
+      return;
+    }
+
+    // Normaliza el proceso al alcance del tipo documental antes de enviar.
+    const processTypeToSend = scope === "todos" ? "todos" : scope === "general" ? "" : processType;
+
+    // Categoria de cambio (paso 2): original | modificatoria | modificada.
+    let amendsToSend = "";
+    let amendsDocumentIdToSend = "";
+    let changeNoteToSend = "";
+    if (changeCategory === "modificatoria") {
+      if (amendableDocuments.length > 0 && !amendsDocumentId) {
+        setMessage("Selecciona la norma que este documento modifica.");
+        return;
+      }
+      const base = documents.find((document) => document.id === amendsDocumentId);
+      amendsDocumentIdToSend = amendsDocumentId;
+      amendsToSend = amendsNote.trim() || (base ? `Modifica ${base.title}` : "Modificatoria de norma existente");
+    } else if (changeCategory === "modificada") {
+      changeNoteToSend = amendsNote.trim();
+    }
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentType", documentType);
-    formData.append("processType", processType);
-    formData.append("sourceEntity", sourceEntity);
+    formData.append("processType", processTypeToSend);
     formData.append("title", title);
+    formData.append("changeCategory", changeCategory);
+    formData.append("amends", amendsToSend);
+    formData.append("amendsDocumentId", amendsDocumentIdToSend);
+    formData.append("changeNote", changeNoteToSend);
 
     setLoading(true);
     setMessage("Subiendo PDF...");
@@ -347,6 +438,9 @@ export function DocumentUpload() {
       setFile(null);
       setProcessType("");
       setTitle("");
+      setChangeCategory("original");
+      setAmendsDocumentId("");
+      setAmendsNote("");
       setMessage("PDF subido. Procesando e indexando en segundo plano...");
       await loadDocuments();
       await loadQuality();
@@ -357,13 +451,30 @@ export function DocumentUpload() {
     }
   }
 
+  function applyChangeCategory(nextCategory: string) {
+    setChangeCategory(nextCategory);
+    // Limpia los datos del cambio al alternar categoria para no arrastrar valores.
+    setAmendsDocumentId("");
+    setAmendsNote("");
+  }
+
   function applyDocumentType(nextType: string) {
     setDocumentType(nextType);
 
-    if (["ley", "reglamento"].includes(nextType)) {
-      setProcessType("todos");
-    } else if (nextType === "directiva" || nextType === "bases_integradas") {
-      setProcessType((current) => (current === "todos" ? "" : current));
+    switch (processScopeFor(nextType)) {
+      case "todos":
+        setProcessType("todos");
+        break;
+      case "general":
+        setProcessType("");
+        break;
+      case "required":
+        // Fuerza una eleccion de proceso especifico (descarta "todos" o vacio heredados).
+        setProcessType((current) => (current && current !== "todos" ? current : ""));
+        break;
+      default:
+        setProcessType((current) => (current === "todos" ? "" : current));
+        break;
     }
   }
 
@@ -552,6 +663,165 @@ export function DocumentUpload() {
         </div>
       </section>
 
+      <form className="documentForm" onSubmit={uploadDocument}>
+        <div className="documentSectionTitle">
+          <div>
+            <strong>Subir nuevo PDF</strong>
+            <span>{uploadGuidance(documentType)}</span>
+          </div>
+        </div>
+        <label className="filePicker">
+          <UploadCloud size={28} />
+          <strong>{selectedFileLabel}</strong>
+          <span>Ley, reglamento, bases integradas, directivas, resoluciones y expedientes. Maximo {maxPdfSizeLabel}.</span>
+          <input
+            accept="application/pdf"
+            aria-label="Seleccionar PDF"
+            onChange={(event) => {
+              const selected = event.target.files?.[0] ?? null;
+
+              if (selected && selected.size > maxPdfSizeBytes) {
+                setFile(null);
+                setMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
+                event.target.value = "";
+                return;
+              }
+
+              setMessage(null);
+              setFile(selected);
+            }}
+            type="file"
+          />
+        </label>
+
+        <div className="formGrid uploadFields">
+          <label>
+            <span>1 · Tipo de documento</span>
+            <select
+              onChange={(event) => applyDocumentType(event.target.value)}
+              value={documentType}
+            >
+              {documentTypes.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>2 · Cambios o modificación</span>
+            <select
+              onChange={(event) => applyChangeCategory(event.target.value)}
+              value={changeCategory}
+            >
+              <option value="original">Original (sin cambios)</option>
+              <option value="modificatoria">Modificatoria (modifica otra norma)</option>
+              <option value="modificada">Con modificaciones posteriores</option>
+            </select>
+            <small className="fieldHint">{changeCategoryHint}</small>
+          </label>
+          <label>
+            <span>3 · Tipo de proceso</span>
+            <select
+              disabled={uploadProcessDisabled}
+              onChange={(event) => setProcessType(event.target.value)}
+              value={processType}
+            >
+              {uploadProcessOptions.map((item) => (
+                <option key={item.value || "blank"} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <small className="fieldHint">{uploadProcessHint}</small>
+          </label>
+          <label>
+            <span>4 · Título (opcional)</span>
+            <input
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Si lo dejas vacío se usa el nombre del archivo"
+              value={title}
+            />
+          </label>
+        </div>
+
+        {documentType === "opinion" ? (
+          <div className="uploadTypeNote">
+            <Info size={18} />
+            <div>
+              <strong>Opiniones del OECE</strong>
+              <span>
+                Absuelven consultas sobre el sentido o alcance de la normativa de contrataciones,
+                formuladas por entidades, sector privado y sociedad civil. No son normas ni un proceso
+                de selección, pero sus criterios deben ser observados por las Entidades. Base legal:
+                art. 11, numeral 11.1, literal g) de la Ley 32069 y art. 11 de su Reglamento (D.S.
+                009-2025-EF).
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {changeCategory === "modificatoria" ? (
+          <div className="amendmentBox">
+            <div className="formGrid uploadFields">
+              <label className="fullSpan">
+                <span>Norma que modifica</span>
+                <select
+                  onChange={(event) => setAmendsDocumentId(event.target.value)}
+                  value={amendsDocumentId}
+                >
+                  <option value="">Selecciona la norma…</option>
+                  {amendableDocuments.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {documentTypeLabel(document.document_type)} · {document.title}
+                    </option>
+                  ))}
+                </select>
+                <small className="fieldHint">
+                  {amendableDocuments.length === 0
+                    ? "Aún no hay normas indexadas para enlazar. Sube primero la norma base."
+                    : "Elige la Ley, Reglamento o Directiva que este PDF modifica."}
+                </small>
+              </label>
+              <label className="fullSpan">
+                <span>Detalle del cambio (opcional)</span>
+                <input
+                  onChange={(event) => setAmendsNote(event.target.value)}
+                  placeholder="Ej. Modifica el artículo del Reglamento sobre comparación de precios"
+                  value={amendsNote}
+                />
+              </label>
+            </div>
+          </div>
+        ) : changeCategory === "modificada" ? (
+          <div className="amendmentBox">
+            <div className="formGrid uploadFields">
+              <label className="fullSpan">
+                <span>Detalle de las modificaciones (opcional)</span>
+                <input
+                  onChange={(event) => setAmendsNote(event.target.value)}
+                  placeholder="Ej. Tuvo cambios por el D.S. 001-2026-EF"
+                  value={amendsNote}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="formActions">
+          <button className="secondaryButton" onClick={() => void loadDocuments()} type="button">
+            <RefreshCw size={17} />
+            Actualizar
+          </button>
+          <button className="primaryButton" disabled={loading} type="submit">
+            <UploadCloud size={18} />
+            {loading ? "Subiendo..." : "Subir PDF"}
+          </button>
+        </div>
+
+        {message ? <p className="formMessage">{message}</p> : null}
+      </form>
+
       <section className="corpusReadiness" aria-label="Preparacion del corpus">
         <div className="documentSectionTitle">
           <div>
@@ -639,96 +909,6 @@ export function DocumentUpload() {
           <div className="emptyState">Actualiza para calcular calidad por procedimiento.</div>
         )}
       </section>
-
-      <form className="documentForm" onSubmit={uploadDocument}>
-        <div className="documentSectionTitle">
-          <div>
-            <strong>Subir nuevo PDF</strong>
-            <span>{uploadGuidance(documentType, processType)}</span>
-          </div>
-        </div>
-        <label className="filePicker">
-          <UploadCloud size={28} />
-          <strong>{selectedFileLabel}</strong>
-          <span>Ley, reglamento, bases integradas, directivas, resoluciones y expedientes. Maximo {maxPdfSizeLabel}.</span>
-          <input
-            accept="application/pdf"
-            aria-label="Seleccionar PDF"
-            onChange={(event) => {
-              const selected = event.target.files?.[0] ?? null;
-
-              if (selected && selected.size > maxPdfSizeBytes) {
-                setFile(null);
-                setMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
-                event.target.value = "";
-                return;
-              }
-
-              setMessage(null);
-              setFile(selected);
-            }}
-            type="file"
-          />
-        </label>
-
-        <div className="formGrid">
-          <label>
-            <span>Titulo</span>
-            <input
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ej. Bases integradas LP 001-2026"
-              value={title}
-            />
-          </label>
-          <label>
-            <span>Entidad</span>
-            <input
-              onChange={(event) => setSourceEntity(event.target.value)}
-              placeholder="Ej. OSCE, OECE, MEF"
-              value={sourceEntity}
-            />
-          </label>
-          <label>
-            <span>Tipo</span>
-            <select
-              onChange={(event) => applyDocumentType(event.target.value)}
-              value={documentType}
-            >
-              {documentTypes.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Tipo de proceso</span>
-            <select
-              onChange={(event) => setProcessType(event.target.value)}
-              value={processType}
-            >
-              {processTypes.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="formActions">
-          <button className="secondaryButton" onClick={() => void loadDocuments()} type="button">
-            <RefreshCw size={17} />
-            Actualizar
-          </button>
-          <button className="primaryButton" disabled={loading} type="submit">
-            <UploadCloud size={18} />
-            {loading ? "Subiendo..." : "Subir PDF"}
-          </button>
-        </div>
-
-        {message ? <p className="formMessage">{message}</p> : null}
-      </form>
 
       <div className="documentList">
         <div className="documentToolbar">
@@ -831,8 +1011,8 @@ export function DocumentUpload() {
               <div>
                 <strong>{document.title}</strong>
                 <span>
-                  {document.document_type} · {formatBytes(document.file_size)} ·{" "}
-                  {document.source_entity ?? "Sin entidad"}
+                  {documentTypeLabel(document.document_type)} · {formatBytes(document.file_size)}
+                  {document.source_entity ? ` · ${document.source_entity}` : ""}
                   {labelProcessType(getDocumentProcessType(document))
                     ? ` · ${labelProcessType(getDocumentProcessType(document))}`
                     : ""}
@@ -876,6 +1056,12 @@ export function DocumentUpload() {
                     {document.metadata.vigencia ? ` · ${document.metadata.vigencia}` : ""}
                     {document.metadata.year ? ` · ${document.metadata.year}` : ""}
                   </span>
+                ) : null}
+                {document.metadata?.amends ? (
+                  <span className="documentAmends">Modifica: {document.metadata.amends}</span>
+                ) : null}
+                {document.metadata?.changeNote ? (
+                  <span className="documentAmends">Con modificaciones: {document.metadata.changeNote}</span>
                 ) : null}
                 {document.metadata?.summary ? <p>{document.metadata.summary}</p> : null}
                 {document.error_message ? (

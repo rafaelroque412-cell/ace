@@ -77,7 +77,6 @@ const navigation = [
   },
   {
     items: [
-      { href: "/documentos", icon: UploadCloud, id: "documentos", label: "Biblioteca PDF", adminOnly: false },
       { href: "/guardado", icon: Bookmark, id: "guardado", label: "Guardados", adminOnly: false },
       { href: "/historial", icon: History, id: "historial", label: "Historial", adminOnly: false },
       { href: "/alertas", icon: Bell, id: "alertas", label: "Alertas", adminOnly: false },
@@ -86,6 +85,7 @@ const navigation = [
   },
   {
     items: [
+      { href: "/documentos", icon: UploadCloud, id: "documentos", label: "Biblioteca PDF", adminOnly: false },
       { href: "/evaluacion", icon: BarChart3, id: "evaluacion", label: "Evaluación IA", adminOnly: true, requiredRole: "Admin" },
       { href: "/metricas", icon: Activity, id: "metricas", label: "Monitoreo", adminOnly: true, requiredRole: "Admin" },
       { href: "/auditoria", icon: ScrollText, id: "auditoria", label: "Auditoría", adminOnly: true, requiredRole: "Admin" },

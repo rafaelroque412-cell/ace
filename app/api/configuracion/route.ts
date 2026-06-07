@@ -460,7 +460,7 @@ function defaultProcessTypes(): ProcessTypeRow[] {
       description: "Procedimiento competitivo donde el precio es factor central conforme a Reglamento.",
       frequent_municipality: true,
       label: "Comparacion de Precios",
-      legal_basis: "Ley 32069 y Reglamento articulo 144",
+      legal_basis: "Ley 32069 (art. 4) y su Reglamento (D.S. 009-2025-EF)",
       object: "Bienes y servicios",
     },
     {

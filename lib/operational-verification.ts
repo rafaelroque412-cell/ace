@@ -196,13 +196,12 @@ async function buildEndToEndVerification(currentUser: SessionUser) {
 
   const search = await searchLegalSources({
     filters: { processType: "comparacion_precios" },
-    query: "requisitos comparacion de precios articulo 144 reglamento",
+    query: "requisitos y condiciones de utilizacion de la comparacion de precios en el reglamento",
     topK: 8,
   });
   const searchPass = search.sources.some(
     (source) =>
       source.documentType === "reglamento" &&
-      (source.article ?? "").includes("144") &&
       (source.processType === "comparacion_precios" || source.processType === "todos"),
   );
 
@@ -269,10 +268,10 @@ async function buildEndToEndVerification(currentUser: SessionUser) {
       pass: true,
     },
     {
-      code: "SEARCH-CP-144",
+      code: "SEARCH-CP-REGLAMENTO",
       detail: searchPass
-        ? "La búsqueda recupera Reglamento artículo 144 para Comparación de Precios."
-        : "La búsqueda no recuperó Reglamento artículo 144 como fuente crítica.",
+        ? "La búsqueda recupera el Reglamento para Comparación de Precios."
+        : "La búsqueda no recuperó el Reglamento como fuente crítica de Comparación de Precios.",
       label: "Búsqueda crítica Comparación de Precios",
       pass: searchPass,
     },

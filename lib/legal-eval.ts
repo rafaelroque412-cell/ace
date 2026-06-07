@@ -10,11 +10,56 @@ export type EvalQuestion = {
   id: string;
   question: string;
   expected_keywords: string[];
+  expected_must_not_contain: string[];
   expected_sources: ExpectedSource[];
   document_type: string | null;
   process_type: string | null;
   created_at: string;
 };
+
+// Normas del regimen DEROGADO: si aparecen en una respuesta (y no estan en el
+// corpus 32069), es una alucinacion grave. Se chequea en TODA respuesta evaluada.
+const derogatedNormPatterns = [
+  "30225",
+  "344-2018",
+  "320-2019",
+  "350-2015",
+  "ley de contrataciones del estado",
+];
+
+// Detecta fallas de grounding (criticas en materia legal): cita de normas
+// derogadas, terminos vetados por la pregunta, y marcadores [F#] fuera del rango
+// de fuentes recuperadas (cita inventada). Devuelve la lista de violaciones.
+function detectGroundingViolations(
+  answer: string,
+  sourcesCount: number,
+  mustNotContain: string[],
+): string[] {
+  const haystack = normalize(answer);
+  const violations: string[] = [];
+
+  for (const pattern of derogatedNormPatterns) {
+    if (haystack.includes(normalize(pattern))) {
+      violations.push(`Cita norma derogada/ajena al corpus: "${pattern}".`);
+    }
+  }
+
+  for (const term of mustNotContain) {
+    if (term.trim() && haystack.includes(normalize(term))) {
+      violations.push(`Contiene termino vetado: "${term}".`);
+    }
+  }
+
+  const citationNumbers = [...answer.matchAll(/\[F(\d+)\]/g)].map((match) => Number(match[1]));
+  const outOfRange = Array.from(
+    new Set(citationNumbers.filter((number) => number < 1 || number > sourcesCount)),
+  );
+  if (outOfRange.length > 0) {
+    violations.push(`Citas [F#] fuera de rango (inexistentes): ${outOfRange.map((n) => `F${n}`).join(", ")}.`);
+  }
+
+  return violations;
+}
 
 export type EvalResult = {
   id: string;
@@ -67,15 +112,15 @@ export type ExpectedSource = {
 export const baselineEvalQuestions: Array<{
   documentType?: string;
   expectedKeywords: string[];
+  expectedMustNotContain?: string[];
   expectedSources: ExpectedSource[];
   processType?: string;
   question: string;
 }> = [
   {
-    expectedKeywords: ["comparacion de precios", "articulo 144", "reglamento"],
+    expectedKeywords: ["comparacion de precios", "reglamento", "precio"],
     expectedSources: [
       {
-        article: "144",
         documentType: "reglamento",
         processType: "comparacion_precios",
         titleIncludes: "reglamento",
@@ -99,6 +144,22 @@ export const baselineEvalQuestions: Array<{
     expectedSources: [{ documentType: "opinion" }],
     question: "Que valor tiene una opinion del OECE frente a la Ley y el Reglamento?",
   },
+  // Preguntas trampa anti-alucinacion: el corpus NO trae un monto en UIT para
+  // comparacion de precios; la respuesta correcta es "no consta", no inventar
+  // cifras ni citar el regimen derogado.
+  {
+    expectedKeywords: ["no consta"],
+    expectedMustNotContain: ["8 uit", "ley 30225", "30225", "320-2019", "344-2018"],
+    expectedSources: [],
+    processType: "comparacion_precios",
+    question: "Cual es el monto maximo exacto en UIT para usar comparacion de precios?",
+  },
+  {
+    expectedKeywords: ["32069"],
+    expectedMustNotContain: ["30225", "320-2019", "344-2018"],
+    expectedSources: [{ documentType: "ley" }],
+    question: "Que ley regula las contrataciones publicas y cual es su reglamento vigente?",
+  },
 ];
 
 export const matrixEvalQuestions = procedureEntries
@@ -115,6 +176,7 @@ export const matrixEvalQuestions = procedureEntries
             .map((requirement) => requirement.article ? `articulo ${requirement.article}` : requirement.documentType)
             .slice(0, 4),
         ],
+        expectedMustNotContain: ["30225", "344-2018", "320-2019"] as string[],
         expectedSources: required.map((requirement) => ({
           article: requirement.article,
           documentType: requirement.documentType,
@@ -239,7 +301,7 @@ function expectedSourceHitRatio(
 export async function runEvaluation(accessToken: string) {
   const preguntas = await supabaseUserRest<EvalQuestion[]>(
     accessToken,
-    "eval_preguntas?select=id,question,expected_keywords,expected_sources,document_type,process_type,created_at&order=created_at.asc",
+    "eval_preguntas?select=id,question,expected_keywords,expected_must_not_contain,expected_sources,document_type,process_type,created_at&order=created_at.asc",
   );
 
   if (preguntas.length === 0) {
@@ -283,14 +345,25 @@ export async function runEvaluation(accessToken: string) {
             .join("; ")}.`,
         );
       }
+      // Grounding: en materia legal una alucinacion (norma derogada, dato vetado,
+      // cita inexistente) es una falla critica -> score 0 aunque lo demas pase.
+      const groundingViolations = detectGroundingViolations(
+        result.answer,
+        result.sources.length,
+        pregunta.expected_must_not_contain ?? [],
+      );
+      if (groundingViolations.length > 0) {
+        feedbackParts.unshift(`FALLA DE GROUNDING: ${groundingViolations.join(" ")}`);
+      }
+      const baseScore = scoreOf({ confidence, keywordHit: ratio, sourceHit: sourceCheck.ratio, sufficient });
       rows.push({
         confidence,
         feedback: feedbackParts.join(" ") || "Respuesta correcta y con cobertura esperada.",
         keyword_hit: ratio,
         pregunta_id: pregunta.id,
         question: pregunta.question,
-        score: scoreOf({ confidence, keywordHit: ratio, sourceHit: sourceCheck.ratio, sufficient }),
-        source_feedback: { expected: sourceCheck.details },
+        score: groundingViolations.length > 0 ? 0 : baseScore,
+        source_feedback: { expected: sourceCheck.details, groundingViolations },
         source_hit: sourceCheck.ratio,
         sources_count: result.sources.length,
         sufficient,
@@ -348,7 +421,7 @@ export async function getEvaluationOverview(accessToken: string) {
   const [preguntas, corridas, feedbackExamples] = await Promise.all([
     supabaseUserRest<EvalQuestion[]>(
       accessToken,
-      "eval_preguntas?select=id,question,expected_keywords,expected_sources,document_type,process_type,created_at&order=created_at.asc",
+      "eval_preguntas?select=id,question,expected_keywords,expected_must_not_contain,expected_sources,document_type,process_type,created_at&order=created_at.asc",
     ),
     supabaseUserRest<EvalRun[]>(
       accessToken,
@@ -382,6 +455,7 @@ export async function seedBaselineEvalQuestions(accessToken: string) {
     .map((item) => ({
       document_type: item.documentType ?? null,
       expected_keywords: item.expectedKeywords,
+      expected_must_not_contain: item.expectedMustNotContain ?? [],
       expected_sources: item.expectedSources,
       process_type: item.processType ?? null,
       question: item.question,

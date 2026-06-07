@@ -4,6 +4,8 @@ import { createHash } from "crypto";
 import { getOpenAIClient, legalAnswerModel, pdfOcrModel } from "./openai-server";
 import { type DocumentRecord, supabaseRest } from "./supabase-server";
 import { deleteRecords, getPineconeConfig, upsertTextRecords, verifyDocumentIndexedInPinecone } from "./pinecone";
+import { scopeProcessType } from "./documents";
+import { repairLigatures } from "./text-normalization";
 import {
   type RefType,
   detectCitations,
@@ -92,11 +94,12 @@ type StructuredLegalMetadata = {
 };
 
 function normalizeText(text: string) {
-  return text
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return repairLigatures(
+    text
+      .replace(/\r/g, "\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n"),
+  ).trim();
 }
 
 function hashText(text: string) {
@@ -325,7 +328,7 @@ Devuelve solo JSON valido, sin markdown, con estas claves:
   "keyPoints": ["punto clave"],
   "relatedArticles": ["articulo o numeral"],
   "practicalImpact": "impacto practico para el usuario",
-  "amends": "si el documento modifica o deroga otra norma/articulos, indicalo brevemente (ej: 'modifica el articulo 144 del Reglamento DS 009-2025-EF'); si no, null",
+  "amends": "si el documento modifica o deroga otra norma/articulos, indicalo brevemente (ej: 'modifica el articulo X del Reglamento DS 009-2025-EF'); si no, null",
   "confidence": "alta|media|baja"
 }
 
@@ -478,6 +481,9 @@ type ArticleSegment = {
 // de la ley"). El filtro monotonico adicional descarta referencias hacia atras.
 const articleHeadingPattern = /\bart[ií]culo\s+(\d+[a-z-]*)\s*[.)\-º°]/gi;
 const maxArticleContentLength = 24000;
+// Salto maximo permitido entre numeros de articulo consecutivos para tratar una
+// cabecera como real (y no como referencia interna a un articulo lejano).
+const maxArticleForwardGap = 5;
 
 // Segmenta el texto integro de la norma en articulos. Reusa la idea de
 // `chunkPages` (concatena paginas, mapea offsets a paginas) y detecta cabeceras
@@ -520,7 +526,15 @@ function segmentArticlesFromPages(pages: Array<{ pageNumber: number; text: strin
 
     const hasLetterSuffix = /[a-z]/i.test(raw);
 
-    if (baseNumber > lastNumber || (baseNumber === lastNumber && hasLetterSuffix)) {
+    // Solo abre un articulo nuevo si el numero CONTINUA la secuencia con un salto
+    // pequeño (tolera algun encabezado perdido por la extraccion), o es un "bis".
+    // Un salto grande hacia adelante (p. ej. estar en el art. 36 y ver "articulo
+    // 157") es una REFERENCIA interna, no un encabezado: si se aceptara, subiria
+    // lastNumber y descartaria todos los articulos reales intermedios.
+    const isNextInSequence = baseNumber > lastNumber && baseNumber <= lastNumber + maxArticleForwardGap;
+    const isBis = baseNumber === lastNumber && hasLetterSuffix;
+
+    if (isNextInSequence || isBis) {
       const wordIndex = tagged.toLowerCase().indexOf("art", match.index);
       heads.push({ index: wordIndex >= 0 ? wordIndex : match.index, number: raw });
       lastNumber = baseNumber;
@@ -1037,13 +1051,17 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       getInsightString(insights, "number") ??
       getMetadataString(document.metadata, "number") ??
       detectDocumentNumber(document.title, text);
-    const processType =
+    // scopeProcessType garantiza que Ley/Reglamento queden en "todos" y las
+    // Opiniones en general, sin que la inferencia de IA pueda sobrescribirlo.
+    const processType = scopeProcessType(
+      documentType,
       document.process_type ??
-      getMetadataString(document.metadata, "processType") ??
-      getMetadataString(document.metadata, "process_type") ??
-      inferProcessTypeFromText(`${document.title}\n${text.slice(0, 12000)}`) ??
-      structured.processType ??
-      (["ley", "reglamento"].includes(documentType) ? "todos" : null);
+        getMetadataString(document.metadata, "processType") ??
+        getMetadataString(document.metadata, "process_type") ??
+        inferProcessTypeFromText(`${document.title}\n${text.slice(0, 12000)}`) ??
+        structured.processType ??
+        null,
+    );
     const enrichedMetadata = {
       ...document.metadata,
       ai: {
@@ -1051,7 +1069,8 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
         suggestedDocumentType: insights.documentType ?? null,
         suggestedSourceEntity: insights.sourceEntity ?? null,
       },
-      amends: insights.amends ?? null,
+      // El cambio declarado por el usuario al subir tiene prioridad sobre la IA.
+      amends: getMetadataString(document.metadata, "amends") ?? insights.amends ?? null,
       articleCount: articleSegments.length,
       detectedArticles: structured.articles,
       detectedDispositions: structured.dispositions,

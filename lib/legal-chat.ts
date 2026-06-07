@@ -583,9 +583,55 @@ function isLikelyLegalProcurementQuestion(question: string) {
     "requerimiento",
     "publica",
     "publicas",
+    // Procedimientos y figuras que faltaban (evita rechazar consultas legales validas).
+    "acuerdo marco",
+    "acuerdo",
+    "marco",
+    "catalogo",
+    "catalogo electronico",
+    "consultor",
+    "consultores",
+    "consultoria",
+    "concurso",
+    "contratacion directa",
+    "postor",
+    "oferta",
+    "ofertas",
+    "buena pro",
+    "valor referencial",
+    "valor estimado",
+    "uit",
+    "desierto",
+    "nulidad",
+    "apelacion",
+    "recurso",
+    "arbitraje",
+    "junta de prevencion",
+    "sancion",
+    "tribunal",
+    "peru compras",
+    "perucompras",
+    "vigencia",
+    "modificatoria",
+    "adenda",
+    "addenda",
+    "adelanto",
+    "conformidad",
+    "supervisor",
+    "valorizacion",
   ];
 
-  return legalTerms.some((term) => normalized.includes(term));
+  // Tambien reconoce los alias de todos los procedimientos configurados en el
+  // catalogo (DRY): asi cualquier procedimiento valido se considera dentro de
+  // alcance aunque no este en la lista manual de arriba.
+  const catalogAliases = Object.values(procedureCatalog).flatMap((entry) => [
+    entry.label.toLowerCase(),
+    ...entry.aliases,
+  ]);
+
+  return [...legalTerms, ...catalogAliases].some((term) =>
+    normalized.includes(normalizeProcedureText(term)),
+  );
 }
 
 function buildModeInstruction(mode: z.infer<typeof chatRequestSchema>["mode"]) {
@@ -708,7 +754,7 @@ ${lawLines}
 **Como verificarlo**
 - Revisa o sube el Reglamento vigente que regule ${processTypeLabel(
     input.processType,
-  )}; para Comparacion de precios, el articulo critico a recuperar es el articulo 144 del Reglamento si esta vigente.
+  )}; para Comparacion de precios, la Ley (art. 4) remite las condiciones al Reglamento, que es la fuente critica a recuperar si esta vigente.
 - Si el Reglamento fue modificado, valida la version vigente antes de usar la respuesta.
 
 **Limitaciones**
@@ -894,7 +940,14 @@ function assessSources(
       : 0;
   const uniqueDocuments = new Set(sources.map((source) => source.documentId)).size;
   const hasMeaningfulText = sources.reduce((total, source) => total + source.excerpt.length, 0) >= 600;
-  const hasSemanticSignal = topScore >= 0.48 || averageScore >= 0.38;
+  // Señales de relevancia. El rerank dedicado (bge) es la mas fiable y NO depende
+  // del modelo de embeddings; el coseno crudo de OpenAI (text-embedding-3-small)
+  // es mas bajo que el del modelo anterior, por eso los umbrales semanticos son
+  // menores. `topScore` (max de semantico/lexical) esta inflado por el lexical y
+  // ya no se usa para confianza.
+  const topRerankScore = sources.reduce((max, source) => Math.max(max, source.rerankScore), 0);
+  const topSemanticScore = sources.reduce((max, source) => Math.max(max, source.semanticScore), 0);
+  const hasSemanticSignal = topRerankScore >= 0.3 || topSemanticScore >= 0.32 || averageScore >= 0.38;
   const hasLexicalSignal = lexicalScore >= 0.45 && matchedQueryTokens.length >= 2;
   const hasTraceableCitation = sources.some((source) => source.pageStart || source.article);
   const nonCurrentSources = sources.filter(isNotCurrentSource);
@@ -921,20 +974,26 @@ function assessSources(
 
   let confidence: SourceAssessment["confidence"] = "baja";
 
+  // Solo se exige la fuente critica del PROCEDIMIENTO cuando la pregunta pide uno
+  // concreto. En preguntas generales (definiciones, funciones del OECE, etc.) no
+  // se exige Reglamento para poder dar confianza, porque muchas se responden con
+  // la Ley sola.
+  const criticalMet = inferredProcessType ? procedureCoverage.missingCritical.length === 0 : true;
+
   if (
     sufficient &&
-    procedureCoverage.missingCritical.length === 0 &&
-    sources.length >= 4 &&
-    topScore >= 0.65 &&
-    lexicalScore >= 0.55 &&
-    averageEvidenceQuality >= 0.6
+    criticalMet &&
+    sources.length >= 3 &&
+    (topRerankScore >= 0.6 || averageEvidenceQuality >= 0.62) &&
+    (hasLexicalSignal || topSemanticScore >= 0.35)
   ) {
     confidence = "alta";
   } else if (
     sufficient &&
-    procedureCoverage.missingCritical.length === 0 &&
-    (topScore >= 0.48 ||
-      averageScore >= 0.38 ||
+    criticalMet &&
+    (topRerankScore >= 0.28 ||
+      topSemanticScore >= 0.32 ||
+      averageEvidenceQuality >= 0.5 ||
       (sources.length >= 3 && lexicalScore >= 0.45) ||
       Boolean(exactArticleSource))
   ) {
@@ -1401,41 +1460,72 @@ async function prepareLegalAnswer(
   const anchoredQuery = requestedProcessType
     ? buildProcessAnchoredQuery(input.question, requestedProcessType)
     : input.question;
-  const [history, searchResult, broadSearchResult, anchoredSearchResult] = await Promise.all([
-    getRecentChatHistory(auth.accessToken, input.sessionId),
-    searchLegalSources({
-      filters: chatFilters,
-      query: input.question,
-      topK: 10,
-    }),
-    broadNormativeFilters
-      ? searchLegalSources({
-          filters: broadNormativeFilters,
-          query: input.question,
-          topK: 10,
-        })
-      : Promise.resolve(null),
-    requestedProcessType
-      ? searchLegalSources({
-          filters: {
-            ...chatFilters,
-            processType: "",
-          },
+  // Pasadas tipadas a la(s) fuente(s) critica(s) del procedimiento (reglamento /
+  // directiva). En recuperacion abierta la Ley suele dominar y tapar al Reglamento
+  // aunque sea la fuente que desarrolla las condiciones; forzar el documentType
+  // garantiza que esos fragmentos entren al pool de candidatos.
+  const criticalScopedTypes = requestedProcessType
+    ? Array.from(
+        new Set(
+          procedureSourceRequirements(requestedProcessType)
+            .filter(
+              (requirement) =>
+                requirement.critical &&
+                (requirement.documentType === "reglamento" || requirement.documentType === "directiva"),
+            )
+            .map((requirement) => requirement.documentType),
+        ),
+      )
+    : [];
+  const [history, searchResult, broadSearchResult, anchoredSearchResult, ...scopedResults] =
+    await Promise.all([
+      getRecentChatHistory(auth.accessToken, input.sessionId),
+      searchLegalSources({
+        filters: chatFilters,
+        query: input.question,
+        topK: 10,
+      }),
+      broadNormativeFilters
+        ? searchLegalSources({
+            filters: broadNormativeFilters,
+            query: input.question,
+            topK: 10,
+          })
+        : Promise.resolve(null),
+      requestedProcessType
+        ? searchLegalSources({
+            filters: {
+              ...chatFilters,
+              processType: "",
+            },
+            query: anchoredQuery,
+            topK: 14,
+          })
+        : Promise.resolve(null),
+      ...criticalScopedTypes.map((documentType) =>
+        searchLegalSources({
+          filters: { ...chatFilters, documentType, processType: "" },
           query: anchoredQuery,
-          topK: 14,
-        })
-      : Promise.resolve(null),
-  ]);
+          topK: 6,
+        }),
+      ),
+    ]);
   const processRelevantBroadSources = (broadSearchResult?.sources ?? []).filter((source) =>
     sourceSupportsProcess(source, requestedProcessType),
   );
   const processRelevantAnchoredSources = (anchoredSearchResult?.sources ?? []).filter((source) =>
     sourceSupportsProcess(source, requestedProcessType),
   );
+  const processRelevantScopedSources = scopedResults
+    .flatMap((result) => result?.sources ?? [])
+    .filter((source) => sourceSupportsProcess(source, requestedProcessType));
   const candidateSources = rerankSources(
-    [...searchResult.sources, ...processRelevantBroadSources, ...processRelevantAnchoredSources].filter((source) =>
-      sourceSupportsProcess(source, requestedProcessType),
-    ),
+    [
+      ...searchResult.sources,
+      ...processRelevantBroadSources,
+      ...processRelevantAnchoredSources,
+      ...processRelevantScopedSources,
+    ].filter((source) => sourceSupportsProcess(source, requestedProcessType)),
     normalizeQuestionForSearch(input.question),
     20,
   );
@@ -1522,7 +1612,7 @@ async function prepareLegalAnswer(
     input: [
       {
         content:
-      "Eres un asistente juridico especializado en contrataciones publicas peruanas. Responde solo con base en las fuentes proporcionadas. Las fuentes validas para fundamentar respuestas son ley, reglamento, directivas y opiniones. No uses bases integradas como fundamento juridico porque son esquemas de implementacion. Tolera errores de ortografia del usuario, pero no inventes normas, articulos ni documentos. Si algo no esta sustentado, dilo. Prioriza una respuesta rapida, exacta y accionable.",
+      "Eres un asistente juridico especializado en contrataciones publicas peruanas. Respondes UNICAMENTE con el texto literal de las Fuentes recuperadas que se te entregan; tienes prohibido usar conocimiento externo, tu memoria u otras normas que no aparezcan en esas fuentes. El marco vigente es la Ley 32069 y su Reglamento (Decreto Supremo 009-2025-EF): NUNCA cites ni atribuyas contenido a la Ley 30225, al D.S. 344-2018-EF, al D.S. 320-2019-EF ni a ningun otro regimen anterior, salvo que ese texto aparezca literalmente en una Fuente recuperada. Datos especificos (montos, UIT, plazos, porcentajes, numeros de articulo, nombres y numeros de norma) solo pueden afirmarse si constan LITERALMENTE en una Fuente; si no constan, di explicitamente 'no consta en las fuentes recuperadas' y NO los inventes ni los completes. Las fuentes validas para fundamentar son ley, reglamento, directivas y opiniones; las bases integradas son esquema operativo, no fundamento. Tolera errores de ortografia del usuario, pero no inventes normas, articulos, montos ni documentos. Mas vale decir 'no consta' que dar un dato sin sustento: en materia legal un dato inventado es una falla grave.",
         role: "system",
       },
       {
@@ -1553,6 +1643,13 @@ Formato obligatorio:
 - Los encabezados pueden no llevar fuente; todo el contenido debajo de un encabezado si debe llevarla.
 - Si la pregunta pide un tipo de proceso especifico, no lo reemplaces por contratos menores ni por otro procedimiento. Si las fuentes no regulan ese proceso, dilo en Limitaciones y no inventes requisitos.
 
+Reglas anti-invencion (CRITICAS, materia legal):
+- Usa EXCLUSIVAMENTE el texto literal de las Fuentes recuperadas listadas arriba. Prohibido usar conocimiento externo, tu memoria u otras normas no recuperadas.
+- El marco aplicable es la Ley 32069 y su Reglamento D.S. 009-2025-EF. NUNCA menciones ni cites la Ley 30225, el D.S. 344-2018-EF, el D.S. 320-2019-EF u otras normas del regimen anterior, salvo que ese texto aparezca literalmente en una Fuente recuperada.
+- Datos especificos (montos, UIT, plazos, porcentajes, numeros de articulo, numeros/nombres de norma) SOLO pueden afirmarse si aparecen LITERALMENTE en una Fuente recuperada. Si no constan, escribe "no consta en las fuentes recuperadas" y NO los inventes ni completes desde tu conocimiento.
+- Un marcador [F#] solo es valido si ESE fragmento contiene literalmente el dato que afirmas. Si ninguna fuente lo contiene, no pongas [F#]: lleva esa afirmacion a Limitaciones indicando que no consta.
+- No uses frases como "es conocido que", "segun la normativa vigente" o similares para introducir datos que no esten en las Fuentes.
+
 Estructura:
 **Respuesta breve**
 1. Si hay Ley o Reglamento pertinente, empieza por esa base normativa. [F1]
@@ -1561,7 +1658,7 @@ Estructura:
 **Mapa normativo**
 - Si la pregunta pide requisitos de un tipo de proceso, separa en viñetas o tabla: Ley, Reglamento, Directiva/Opinion si existe, y Bases solo como referencia operativa si fueron mencionadas en las fuentes recuperadas. [F#]
 - Explica cuando la Ley solo define o remite al Reglamento y no contiene los requisitos concretos. [F#]
-- Para Comparacion de precios, si aparece el articulo 144 del Reglamento, indicalo como el punto principal de verificacion. [F#]
+- Para Comparacion de precios, la Ley (art. 4) define y remite al Reglamento; señala las condiciones del Reglamento recuperado como punto principal de verificacion. [F#]
 
 **Como verificarlo**
 - Paso verificable... [F1]

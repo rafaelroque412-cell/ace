@@ -2178,6 +2178,78 @@ textarea:focus,
   grid-column: auto;
 }
 
+/* Subida de documentos: Tipo y Proceso en una fila, Titulo a todo el ancho. */
+.formGrid.uploadFields label:first-child {
+  grid-column: auto;
+}
+
+.formGrid.uploadFields label.fullSpan {
+  grid-column: 1 / -1;
+}
+
+.fieldHint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.amendmentBox {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.uploadTypeNote {
+  display: flex;
+  gap: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f6fbfa, #ffffff);
+  padding: 12px;
+  color: var(--ink);
+}
+
+.uploadTypeNote > svg {
+  flex-shrink: 0;
+  color: var(--brand);
+  margin-top: 2px;
+}
+
+.uploadTypeNote div {
+  display: grid;
+  gap: 3px;
+}
+
+.uploadTypeNote span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.amendmentToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.amendmentToggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.documentAmends {
+  color: var(--brand);
+  font-weight: 600;
+}
+
 .formGrid span {
   color: var(--muted);
   font-size: 13px;

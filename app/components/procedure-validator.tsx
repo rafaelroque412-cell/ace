@@ -204,7 +204,7 @@ function guidanceForProcedure(type: string) {
   if (type === "comparacion_precios") {
     return {
       checks: [
-        "Debe recuperar Reglamento art. 144 como fuente critica.",
+        "Debe recuperar el Reglamento como fuente critica (la Ley, art. 4, remite a el).",
         "Verifica si el bien o servicio es comparable por precio.",
         "Confirma pluralidad de proveedores y ofertas validas.",
         "Las bases solo sirven como esquema operativo.",

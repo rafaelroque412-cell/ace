@@ -1,3 +1,5 @@
+import { embeddingDimensions, embeddingModel, getOpenAIClient } from "./openai-server";
+
 type PineconeIndexInfo = {
   host: string;
   name: string;
@@ -156,6 +158,65 @@ function sleep(ms: number) {
   });
 }
 
+const maxEmbeddingBatchSize = 96;
+
+// Calcula embeddings con OpenAI (reemplaza el modelo integrado de Pinecone para no
+// depender de su cuota mensual de tokens). Devuelve un vector por texto, en orden.
+async function embedTexts(texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) {
+    return [];
+  }
+
+  const client = getOpenAIClient();
+  const vectors: number[][] = [];
+
+  for (let start = 0; start < texts.length; start += maxEmbeddingBatchSize) {
+    const batch = texts.slice(start, start + maxEmbeddingBatchSize).map((text) => text.slice(0, 8000));
+    const response = await client.embeddings.create({
+      model: embeddingModel,
+      input: batch,
+      dimensions: embeddingDimensions,
+    });
+    for (const item of response.data) {
+      vectors.push(item.embedding as number[]);
+    }
+  }
+
+  return vectors;
+}
+
+// Metadata de Pinecone: solo campos definidos (Pinecone rechaza null/undefined) y
+// sin el texto (el contenido se lee de Supabase; el vector solo guarda filtros).
+function buildVectorMetadata(record: PineconeRecord): Record<string, string | number> {
+  const metadata: Record<string, string | number> = {};
+  const entries: Array<[string, string | number | undefined]> = [
+    ["document_id", record.document_id],
+    ["chunk_id", record.chunk_id],
+    ["chunk_index", record.chunk_index],
+    ["document_type", record.document_type],
+    ["document_number", record.document_number],
+    ["hierarchy_rank", record.hierarchy_rank],
+    ["page_start", record.page_start],
+    ["page_end", record.page_end],
+    ["process_type", record.process_type],
+    ["article", record.article],
+    ["section_title", record.section_title],
+    ["status", record.status],
+    ["title", record.title],
+    ["source_entity", record.source_entity],
+    ["source_role", record.source_role],
+    ["topic", record.topic],
+    ["vigencia", record.vigencia],
+    ["year", record.year],
+  ];
+  for (const [key, value] of entries) {
+    if (value !== undefined && value !== null && value !== "") {
+      metadata[key] = value;
+    }
+  }
+  return metadata;
+}
+
 const defaultRerankModel = "bge-reranker-v2-m3";
 const maxRerankDocuments = 30;
 
@@ -271,26 +332,26 @@ export async function upsertTextRecords(records: PineconeRecord[]) {
 
   const { apiKey, namespace } = getPineconeConfig();
   const index = await describePineconeIndex();
-  const textField = Object.values(index.embed?.field_map ?? {})[0] ?? "text";
 
-  for (let indexStart = 0; indexStart < records.length; indexStart += maxUpsertBatchSize) {
-    const batch = records.slice(indexStart, indexStart + maxUpsertBatchSize);
-    const body = batch
-      .map((record) =>
-        JSON.stringify({
-          ...record,
-          [textField]: record.text,
-        }),
-      )
-      .join("\n");
+  // Embeddings con OpenAI (no con el modelo integrado de Pinecone).
+  const embeddings = await embedTexts(records.map((record) => record.text));
+  const vectors = records.map((record, position) => ({
+    id: record._id,
+    values: embeddings[position],
+    metadata: buildVectorMetadata(record),
+  }));
+
+  for (let indexStart = 0; indexStart < vectors.length; indexStart += maxUpsertBatchSize) {
+    const batch = vectors.slice(indexStart, indexStart + maxUpsertBatchSize);
+    const body = JSON.stringify({ namespace, vectors: batch });
     let response: Response | null = null;
 
     for (let attempt = 0; attempt <= maxUpsertRetries; attempt += 1) {
-      response = await fetch(`https://${index.host}/records/namespaces/${encodeURIComponent(namespace)}/upsert`, {
+      response = await fetch(`https://${index.host}/vectors/upsert`, {
         body,
         headers: {
           "Api-Key": apiKey,
-          "Content-Type": "application/x-ndjson",
+          "Content-Type": "application/json",
           "X-Pinecone-API-Version": pineconeApiVersion,
         },
         method: "POST",
@@ -314,7 +375,7 @@ export async function upsertTextRecords(records: PineconeRecord[]) {
     await response.text();
   }
 
-  return { batches: Math.ceil(records.length / maxUpsertBatchSize), upserted: records.length };
+  return { batches: Math.ceil(vectors.length / maxUpsertBatchSize), upserted: vectors.length };
 }
 
 export async function verifyDocumentIndexedInPinecone(input: {
@@ -354,58 +415,39 @@ export async function searchTextRecords(query: string, topK = 6, filters?: Searc
   const { apiKey, namespace } = getPineconeConfig();
   const index = await describePineconeIndex();
   const filter = compactFilter(filters);
-  const response = await fetch(
-    `https://${index.host}/records/namespaces/${encodeURIComponent(namespace)}/search`,
-    {
-      body: JSON.stringify({
-        query: {
-          ...(filter ? { filter } : {}),
-          inputs: {
-            text: query,
-          },
-          top_k: topK,
-        },
-        fields: [
-          "text",
-          "document_id",
-          "chunk_id",
-          "chunk_index",
-          "document_number",
-          "document_type",
-          "hierarchy_rank",
-          "page_start",
-          "page_end",
-          "process_type",
-          "article",
-          "section_title",
-          "title",
-          "source_entity",
-          "source_role",
-          "status",
-          "topic",
-          "vigencia",
-          "year",
-        ],
-      }),
-      headers: {
-        "Api-Key": apiKey,
-        "Content-Type": "application/json",
-        "X-Pinecone-API-Version": pineconeApiVersion,
-      },
-      method: "POST",
+  const [vector] = await embedTexts([query]);
+
+  const response = await fetch(`https://${index.host}/query`, {
+    body: JSON.stringify({
+      namespace,
+      topK,
+      vector,
+      includeMetadata: true,
+      includeValues: false,
+      ...(filter ? { filter } : {}),
+    }),
+    headers: {
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
+      "X-Pinecone-API-Version": pineconeApiVersion,
     },
-  );
+    method: "POST",
+  });
 
   if (!response.ok) {
     throw new Error(`Pinecone search ${response.status}: ${await response.text()}`);
   }
 
-  const payload = (await response.json()) as { result?: { hits?: PineconeSearchHit[] } };
+  const payload = (await response.json()) as {
+    matches?: Array<{ id: string; score: number; metadata?: Record<string, unknown> }>;
+  };
 
-  return (payload.result?.hits ?? []).map((hit) => ({
-    ...hit,
-    ...hit.fields,
-  }));
+  // Normaliza al shape previo: _id, _score y los campos de metadata aplanados.
+  return (payload.matches ?? []).map((match) => ({
+    _id: match.id,
+    _score: match.score,
+    ...(match.metadata ?? {}),
+  })) as unknown as Array<PineconeSearchHit & Record<string, unknown>>;
 }
 
 export async function deleteRecords(ids: string[]) {

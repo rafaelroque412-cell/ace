@@ -1,7 +1,12 @@
 import { after, NextResponse } from "next/server";
 import { requireEditor, requireUser } from "@/lib/auth";
 import { deleteRecords } from "@/lib/pinecone";
-import { buildStoragePath, normalizeDocumentType, normalizeProcessType } from "@/lib/documents";
+import {
+  buildStoragePath,
+  normalizeDocumentType,
+  normalizeProcessType,
+  resolveDocumentProcessType,
+} from "@/lib/documents";
 import {
   type DocumentRecord,
   deleteStorageObjects,
@@ -92,7 +97,40 @@ export async function POST(request: Request) {
         ? sourceEntityValue.trim()
         : null;
     const documentType = normalizeDocumentType(formData.get("documentType"));
-    const processType = normalizeProcessType(formData.get("processType"));
+    const requestedProcessType = normalizeProcessType(formData.get("processType"));
+
+    const scopedProcessType = resolveDocumentProcessType(documentType, requestedProcessType);
+    if ("error" in scopedProcessType) {
+      return NextResponse.json({ error: scopedProcessType.error }, { status: 400 });
+    }
+    const processType = scopedProcessType.processType;
+
+    // Categoria de cambio declarada por el usuario (paso 2): original |
+    // modificatoria | modificada. Para "modificatoria" se enlaza la norma base
+    // (`amendsDocumentId`) y `amends` (texto) tiene prioridad sobre la IA en el
+    // pipeline. Para "modificada" se guarda una nota informativa (`changeNote`).
+    const changeCategoryValue = formData.get("changeCategory");
+    const changeCategory =
+      changeCategoryValue === "modificatoria" || changeCategoryValue === "modificada"
+        ? changeCategoryValue
+        : "original";
+    const amendsValue = formData.get("amends");
+    const amendsDocumentIdValue = formData.get("amendsDocumentId");
+    const changeNoteValue = formData.get("changeNote");
+    const amends =
+      changeCategory === "modificatoria" && typeof amendsValue === "string" && amendsValue.trim()
+        ? amendsValue.trim().slice(0, 400)
+        : null;
+    const amendsDocumentId =
+      changeCategory === "modificatoria" &&
+      typeof amendsDocumentIdValue === "string" &&
+      amendsDocumentIdValue.trim()
+        ? amendsDocumentIdValue.trim()
+        : null;
+    const changeNote =
+      changeCategory === "modificada" && typeof changeNoteValue === "string" && changeNoteValue.trim()
+        ? changeNoteValue.trim().slice(0, 400)
+        : null;
 
     await uploadPdfToStorage(storagePath, file);
 
@@ -102,6 +140,10 @@ export async function POST(request: Request) {
         file_name: file.name,
         file_size: file.size,
         metadata: {
+          amends,
+          amendsDocumentId,
+          changeCategory,
+          changeNote,
           originalLastModified: file.lastModified || null,
           processType,
           uploadSource: "web",

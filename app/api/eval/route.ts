@@ -13,6 +13,7 @@ const questionSchema = z.object({
   action: z.literal("add"),
   question: z.string().trim().min(8).max(500),
   expectedKeywords: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  expectedMustNotContain: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   expectedSources: z
     .array(
       z.object({
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         document_type: payload.data.documentType || null,
         expected_keywords: payload.data.expectedKeywords,
+        expected_must_not_contain: payload.data.expectedMustNotContain,
         expected_sources: payload.data.expectedSources.map((source) => ({
           article: source.article || undefined,
           documentType: source.documentType || undefined,

@@ -34,7 +34,13 @@ type CorpusRequirement = {
 
 const requiredDocumentTypes = ["ley", "reglamento", "directiva", "opinion"] as const;
 
-const requiredNormativeTargets = [
+const requiredNormativeTargets: Array<{
+  code: string;
+  documentType: string;
+  label: string;
+  patterns: string[];
+  processTypes?: string[];
+}> = [
   {
     code: "NORM-LEY-32069",
     documentType: "ley",
@@ -57,9 +63,12 @@ const requiredNormativeTargets = [
     code: "NORM-DIR-SIE",
     documentType: "directiva",
     label: "Directiva SIE cargada e indexada",
-    patterns: ["subasta inversa", "006-2019", "sie"],
+    // El titulo de la directiva suele ser solo el numero; se reconoce tambien
+    // por su tipo de proceso (subasta inversa electronica), no solo por el texto.
+    patterns: ["subasta inversa", "sie"],
+    processTypes: ["subasta_inversa_electronica"],
   },
-] as const;
+];
 
 function metadataString(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
@@ -174,6 +183,13 @@ function buildRequirements(documents: DocumentRow[], chunks: ChunkRow[]): Corpus
       if (document.document_type !== target.documentType || document.status !== "indexed") {
         return false;
       }
+      if (
+        target.processTypes &&
+        document.process_type &&
+        target.processTypes.includes(document.process_type)
+      ) {
+        return true;
+      }
       const searchText = documentSearchText(document);
       return target.patterns.some((pattern) => searchText.includes(normalizeComparable(pattern)));
     });
@@ -194,18 +210,16 @@ function buildRequirements(documents: DocumentRow[], chunks: ChunkRow[]): Corpus
 async function runCriticalSearches() {
   const specificCases = [
     {
-      code: "CP-ART-144",
-      expected: "Reglamento articulo 144",
-      query: "requisitos comparacion de precios articulo 144 reglamento",
-      requiredArticle: "144",
+      code: "CP-REGLAMENTO",
+      expected: "Reglamento con condiciones de comparacion de precios",
+      query: "requisitos y condiciones de utilizacion de la comparacion de precios en el reglamento",
       requiredDocumentType: "reglamento",
       processType: "comparacion_precios",
     },
     {
       code: "CP-MOD-001-2026",
-      expected: "Modificatoria vigente D.S. 001-2026-EF sobre articulo 144",
-      query: "Decreto Supremo 001-2026-EF modifica articulo 144 comparacion de precios reglamento",
-      requiredArticle: "144",
+      expected: "Modificatoria vigente D.S. 001-2026-EF del Reglamento",
+      query: "Decreto Supremo 001-2026-EF modifica el reglamento comparacion de precios condiciones vigentes",
       requiredDocumentType: "reglamento",
       requiredText: "001-2026",
       processType: "comparacion_precios",
