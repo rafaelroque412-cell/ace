@@ -7,6 +7,7 @@ import {
   Bookmark,
   Bot,
   Briefcase,
+  ClipboardList,
   FileSearch,
   FileText,
   GitCompare,
@@ -30,6 +31,7 @@ type AppShellProps = {
     | "validar"
     | "normas"
     | "analizar"
+    | "necesidades"
     | "expedientes"
     | "documentos"
     | "comparar"
@@ -70,6 +72,7 @@ const navigation = [
   },
   {
     items: [
+      { href: "/necesidades", icon: ClipboardList, id: "necesidades", label: "Necesidades", adminOnly: false },
       { href: "/expedientes", icon: Briefcase, id: "expedientes", label: "Expedientes", adminOnly: false },
       { href: "/contratos", icon: FileText, id: "contratos", label: "Contratos", adminOnly: false },
     ],

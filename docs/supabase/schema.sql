@@ -973,3 +973,153 @@ begin
     execute format('create policy %I_owner on public.%I for all to authenticated using (owner_id = auth.uid() or public.is_admin()) with check (owner_id = auth.uid())', t, t);
   end loop;
 end $$;
+
+-- ============================================================
+-- Fase C: actores de la Ley 32069 (D.S. 009-2025-EF) como roles asignables
+-- + RLS colaborativa del expediente (varios actores trabajan un mismo expediente).
+-- Aplicar este bloque completo a la BD live. Es idempotente.
+-- ============================================================
+
+-- Amplia los roles permitidos a los 8 actores internos + consulta/legal/admin.
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'profiles_role_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles drop constraint profiles_role_check;
+  end if;
+  alter table public.profiles add constraint profiles_role_check
+    check (role in (
+      'consulta','area_usuaria','ate','dec','oficial_compra',
+      'comite','jurado','legal','titular','aga','admin'
+    ));
+end $$;
+
+-- Colaborador del expediente: cualquier actor interno (todos salvo 'consulta').
+create or replace function public.is_expediente_colaborador()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role in ('area_usuaria','ate','dec','oficial_compra','comite','jurado','legal','titular','aga','admin')
+  );
+$$;
+
+-- No ejecutable por anon; solo usuarios autenticados (el RLS lo invoca en ese contexto).
+revoke execute on function public.is_expediente_colaborador() from anon;
+grant execute on function public.is_expediente_colaborador() to authenticated;
+
+-- RLS del expediente: lectura para todo usuario interno autenticado; escritura
+-- para el dueno o un actor interno colaborador. El control fino por accion
+-- (cargar, evaluar, generar, etc.) se aplica en la capa de aplicacion segun rol.
+do $$
+declare t text;
+begin
+  foreach t in array array['procurement_processes','process_documents','process_evaluations','process_risks']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I_owner on public.%I', t, t);
+    execute format('drop policy if exists %I_read on public.%I', t, t);
+    execute format('drop policy if exists %I_write on public.%I', t, t);
+    execute format('create policy %I_read on public.%I for select to authenticated using (true)', t, t);
+    execute format('create policy %I_write on public.%I for all to authenticated using (owner_id = auth.uid() or public.is_expediente_colaborador()) with check (owner_id = auth.uid() or public.is_expediente_colaborador())', t, t);
+  end loop;
+end $$;
+
+-- ============================================================
+-- Fase D: Modulo 1 (Necesidades) + maquina de estados de 11 etapas del ciclo
+-- de vida de la contratacion. Aplicar este bloque completo a la BD live.
+-- ============================================================
+
+-- 1) Estados del ciclo de vida (Necesidad..Archivo + desierto). Quitar el CHECK
+--    viejo ANTES de migrar datos, para que las filas pasen por valores nuevos.
+alter table public.procurement_processes drop constraint if exists procurement_processes_status_check;
+update public.procurement_processes set status = 'actuaciones_preparatorias' where status = 'en_preparacion';
+update public.procurement_processes set status = 'seleccion' where status = 'en_evaluacion';
+update public.procurement_processes set status = 'buena_pro' where status = 'otorgado';
+update public.procurement_processes set status = 'ejecucion' where status = 'en_ejecucion';
+update public.procurement_processes set status = 'archivo' where status = 'cerrado';
+alter table public.procurement_processes add constraint procurement_processes_status_check
+  check (status in (
+    'necesidad','actuaciones_preparatorias','expediente','aprobacion_aga',
+    'seleccion','buena_pro','desierto','contrato','ejecucion','conformidad','liquidacion','archivo'
+  ));
+alter table public.procurement_processes alter column status set default 'necesidad';
+
+-- 2) Tabla de necesidades (Modulo 1).
+create table if not exists public.necesidades (
+  id uuid primary key default gen_random_uuid(),
+  codigo text unique,
+  nombre text not null,
+  finalidad_publica text,
+  objetivo text,
+  centro_costo text,
+  meta_presupuestal text,
+  proyecto_inversion text,
+  tipo_contratacion text not null default 'bienes'
+    check (tipo_contratacion in ('bienes','servicios','obras','consultoria')),
+  area_usuaria text,
+  status text not null default 'borrador'
+    check (status in ('borrador','registrada','observada','aprobada','derivada')),
+  summary text,
+  process_id uuid references public.procurement_processes(id) on delete set null,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  entity text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.procurement_processes add column if not exists necesidad_id uuid references public.necesidades(id) on delete set null;
+
+create table if not exists public.necesidad_documentos (
+  id uuid primary key default gen_random_uuid(),
+  necesidad_id uuid not null references public.necesidades(id) on delete cascade,
+  kind text not null default 'otros'
+    check (kind in ('requerimiento','tdr','ee_tt','expediente_tecnico','memoria_descriptiva','informe_necesidad','otros')),
+  title text not null,
+  file_name text,
+  storage_bucket text,
+  storage_path text,
+  mime_type text,
+  status text not null default 'uploaded' check (status in ('uploaded','processing','ready','error')),
+  error_message text,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_necesidades_owner on public.necesidades(owner_id);
+create index if not exists idx_necesidades_process on public.necesidades(process_id);
+create index if not exists idx_necesidad_documentos_necesidad on public.necesidad_documentos(necesidad_id);
+create index if not exists idx_procurement_processes_necesidad on public.procurement_processes(necesidad_id);
+
+drop trigger if exists set_necesidades_updated_at on public.necesidades;
+create trigger set_necesidades_updated_at before update on public.necesidades
+for each row execute function public.set_updated_at();
+
+-- Codigo unico por necesidad: REQ-YYYY-NNNN (secuencia + trigger).
+create sequence if not exists public.necesidad_codigo_seq;
+create or replace function public.set_necesidad_codigo()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.codigo is null then
+    new.codigo := 'REQ-' || to_char(now(),'YYYY') || '-' || lpad(nextval('public.necesidad_codigo_seq')::text, 4, '0');
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.set_necesidad_codigo() from public, anon, authenticated;
+drop trigger if exists set_necesidades_codigo on public.necesidades;
+create trigger set_necesidades_codigo before insert on public.necesidades
+for each row execute function public.set_necesidad_codigo();
+
+-- RLS colaborativo (mismo criterio que expedientes).
+do $$
+declare t text;
+begin
+  foreach t in array array['necesidades','necesidad_documentos']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I_read on public.%I', t, t);
+    execute format('drop policy if exists %I_write on public.%I', t, t);
+    execute format('create policy %I_read on public.%I for select to authenticated using (true)', t, t);
+    execute format('create policy %I_write on public.%I for all to authenticated using (owner_id = auth.uid() or public.is_expediente_colaborador()) with check (owner_id = auth.uid() or public.is_expediente_colaborador())', t, t);
+  end loop;
+end $$;

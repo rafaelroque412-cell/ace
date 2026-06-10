@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDec, requireUser } from "@/lib/auth";
+import { requireCapability, requireUser } from "@/lib/auth";
 import { type ProcessDocument, type ProcurementProcess, processUpdateSchema } from "@/lib/processes";
 import { deleteStorageObjects, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -59,7 +59,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.manage");
   if ("error" in auth) {
     return auth.error;
   }
@@ -99,7 +99,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.manage");
   if ("error" in auth) {
     return auth.error;
   }

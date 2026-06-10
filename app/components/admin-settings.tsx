@@ -8,7 +8,9 @@ import {
   ListChecks,
   Plus,
   Save,
+  Search,
   ShieldCheck,
+  Star,
   Trash2,
   UserPlus,
   Users,
@@ -94,6 +96,30 @@ const emptyEntity: EntitySettings = {
   updatedAt: null,
 };
 
+const CATEGORY_ORDER: ProcessTypeSetting["category"][] = [
+  "competitivo",
+  "no_competitivo",
+  "contrato_menor",
+];
+
+const CATEGORY_META: Record<
+  ProcessTypeSetting["category"],
+  { description: string; label: string }
+> = {
+  competitivo: {
+    description: "Licitaciones, concursos, subasta inversa y comparacion de precios.",
+    label: "Competitivo",
+  },
+  no_competitivo: {
+    description: "Supuestos del articulo 55 de la Ley 32069 y su reglamento.",
+    label: "No competitivo",
+  },
+  contrato_menor: {
+    description: "Reglas especiales hasta 8 UIT; no es procedimiento competitivo.",
+    label: "Contrato menor",
+  },
+};
+
 function onlyDigits(value: string, length: number) {
   return value.replace(/\D/g, "").slice(0, length);
 }
@@ -110,6 +136,9 @@ function codeFromLabel(label: string) {
 
 export function AdminSettings() {
   const [activeTab, setActiveTab] = useState<"municipalidad" | "procesos" | "usuarios">("municipalidad");
+  const [processFilter, setProcessFilter] = useState<string>("todos");
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("todos");
   const [entity, setEntity] = useState<EntitySettings>(emptyEntity);
   const [governmentLevels, setGovernmentLevels] = useState<GovernmentLevel[]>([]);
   const [processTypes, setProcessTypes] = useState<ProcessTypeSetting[]>([]);
@@ -129,16 +158,62 @@ export function AdminSettings() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const entityComplete = useMemo(
-    () =>
-      entity.name.trim().length >= 3 &&
-      /^\d{11}$/.test(entity.ruc) &&
-      /^\d{6}$/.test(entity.executingUnit) &&
-      entity.address.trim().length >= 5 &&
-      Boolean(entity.governmentLevel),
+  const entityChecklist = useMemo(
+    () => [
+      { done: entity.name.trim().length >= 3, label: "Nombre de la entidad" },
+      { done: /^\d{11}$/.test(entity.ruc), label: "RUC (11 digitos)" },
+      { done: /^\d{6}$/.test(entity.executingUnit), label: "Unidad ejecutora (6 digitos)" },
+      { done: entity.address.trim().length >= 5, label: "Direccion" },
+      { done: Boolean(entity.governmentLevel), label: "Tipo de gobierno" },
+    ],
     [entity],
   );
+  const entityComplete = entityChecklist.every((item) => item.done);
+  const entityProgress = entityChecklist.filter((item) => item.done).length;
   const activeProcesses = processTypes.filter((item) => item.active).length;
+  const categorySummary = useMemo(
+    () =>
+      CATEGORY_ORDER.map((value) => {
+        const items = processTypes.filter((item) => item.category === value);
+        return {
+          activeCount: items.filter((item) => item.active).length,
+          description: CATEGORY_META[value].description,
+          label: CATEGORY_META[value].label,
+          total: items.length,
+          value,
+        };
+      }),
+    [processTypes],
+  );
+  const frequentCount = useMemo(
+    () => processTypes.filter((item) => item.frequentMunicipality).length,
+    [processTypes],
+  );
+  const processFilters = useMemo(
+    () => [
+      { count: processTypes.length, label: "Todos", value: "todos" },
+      ...CATEGORY_ORDER.map((value) => ({
+        count: processTypes.filter((item) => item.category === value).length,
+        label: CATEGORY_META[value].label,
+        value,
+      })),
+      { count: frequentCount, label: "Frecuentes municipales", value: "frecuentes" },
+    ],
+    [processTypes, frequentCount],
+  );
+  const visibleProcesses = useMemo(
+    () =>
+      processTypes
+        .map((item, index) => ({ index, item }))
+        .filter(({ item }) =>
+          processFilter === "todos"
+            ? true
+            : processFilter === "frecuentes"
+              ? item.frequentMunicipality
+              : item.category === processFilter,
+        ),
+    [processTypes, processFilter],
+  );
   const userRoleCounts = useMemo(
     () =>
       roles.map((role) => ({
@@ -147,9 +222,29 @@ export function AdminSettings() {
       })),
     [roles, users],
   );
+  const visibleUsers = useMemo(() => {
+    const term = userSearch.trim().toLowerCase();
+    return users
+      .map((user, index) => ({ index, user }))
+      .filter(({ user }) => {
+        const matchesRole = userRoleFilter === "todos" || user.role === userRoleFilter;
+        const matchesTerm =
+          !term ||
+          (user.email ?? "").toLowerCase().includes(term) ||
+          (user.entity ?? "").toLowerCase().includes(term);
+        return matchesRole && matchesTerm;
+      });
+  }, [users, userSearch, userRoleFilter]);
 
   function roleLabel(roleValue: string) {
     return roles.find((role) => role.value === roleValue)?.label ?? roleValue;
+  }
+
+  function userInitials(user: UserSetting) {
+    const source = (user.email ?? "").split("@")[0] ?? "";
+    const parts = source.split(/[.\-_]+/).filter(Boolean);
+    const initials = parts.slice(0, 2).map((part) => part[0]).join("");
+    return (initials || source.slice(0, 2) || "?").toUpperCase();
   }
 
   async function load() {
@@ -186,14 +281,17 @@ export function AdminSettings() {
   }
 
   function addProcess() {
+    const presetCategory = (CATEGORY_ORDER as string[]).includes(processFilter)
+      ? (processFilter as ProcessTypeSetting["category"])
+      : "competitivo";
     setProcessTypes((current) => [
       ...current,
       {
         active: true,
-        category: "competitivo",
+        category: presetCategory,
         code: "",
         description: "",
-        frequentMunicipality: false,
+        frequentMunicipality: processFilter === "frecuentes",
         label: "",
         legalBasis: "",
         object: "",
@@ -437,220 +535,350 @@ export function AdminSettings() {
       </div>
 
       {activeTab === "municipalidad" ? (
-        <div className="settingsGrid single">
+        <div className="municipalityLayout">
           <section className="toolPanel">
-          <div className="toolPanelHeader">
-            <div>
-              <p className="eyebrow">Entidad</p>
-              <h2>Informacion institucional</h2>
+            <div className="toolPanelHeader">
+              <div>
+                <p className="eyebrow">Entidad</p>
+                <h2>Informacion institucional</h2>
+                <span className="processPanelHint">
+                  Estos datos identifican a tu entidad en expedientes, contratos y auditoria.
+                </span>
+              </div>
             </div>
-          </div>
             <div className="settingsForm">
-            <label>
-              <span>Nombre de la entidad</span>
-              <input
-                onChange={(event) => setEntity((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Ej. Municipalidad Distrital de..."
-                value={entity.name}
-              />
-            </label>
-            <div className="settingsFormTwo">
               <label>
-                <span>RUC</span>
+                <span>Nombre de la entidad</span>
                 <input
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setEntity((current) => ({ ...current, ruc: onlyDigits(event.target.value, 11) }))
-                  }
-                  placeholder="11 digitos"
-                  value={entity.ruc}
+                  onChange={(event) => setEntity((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ej. Municipalidad Distrital de..."
+                  value={entity.name}
                 />
-                <small>{entity.ruc.length}/11 digitos</small>
               </label>
+              <div className="settingsFormTwo">
+                <label>
+                  <span>RUC</span>
+                  <input
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setEntity((current) => ({ ...current, ruc: onlyDigits(event.target.value, 11) }))
+                    }
+                    placeholder="11 digitos"
+                    value={entity.ruc}
+                  />
+                  <small data-ok={/^\d{11}$/.test(entity.ruc)}>{entity.ruc.length}/11 digitos</small>
+                </label>
+                <label>
+                  <span>Unidad ejecutora</span>
+                  <input
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setEntity((current) => ({
+                        ...current,
+                        executingUnit: onlyDigits(event.target.value, 6),
+                      }))
+                    }
+                    placeholder="6 digitos"
+                    value={entity.executingUnit}
+                  />
+                  <small data-ok={/^\d{6}$/.test(entity.executingUnit)}>
+                    {entity.executingUnit.length}/6 digitos
+                  </small>
+                </label>
+              </div>
               <label>
-                <span>Unidad ejecutora</span>
+                <span>Direccion de la entidad</span>
                 <input
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setEntity((current) => ({
-                      ...current,
-                      executingUnit: onlyDigits(event.target.value, 6),
-                    }))
-                  }
-                  placeholder="6 digitos"
-                  value={entity.executingUnit}
+                  onChange={(event) => setEntity((current) => ({ ...current, address: event.target.value }))}
+                  placeholder="Direccion fiscal o sede principal"
+                  value={entity.address}
                 />
-                <small>{entity.executingUnit.length}/6 digitos</small>
               </label>
+              <div className="govLevelField">
+                <span className="govLevelLabel">Tipo de gobierno</span>
+                <div className="govLevelOptions" role="radiogroup" aria-label="Tipo de gobierno">
+                  {governmentLevels.map((level) => (
+                    <button
+                      aria-checked={entity.governmentLevel === level.value}
+                      className="govLevelCard"
+                      data-selected={entity.governmentLevel === level.value}
+                      key={level.value}
+                      onClick={() =>
+                        setEntity((current) => ({ ...current, governmentLevel: level.value }))
+                      }
+                      role="radio"
+                      type="button"
+                    >
+                      <strong>{level.label}</strong>
+                      <small>{level.examples}</small>
+                    </button>
+                  ))}
+                </div>
+                <small className="govLevelHint">
+                  Identifica el ambito institucional en reportes, expedientes y auditoria.
+                </small>
+              </div>
             </div>
-            <label>
-              <span>Direccion de la entidad</span>
-              <input
-                onChange={(event) => setEntity((current) => ({ ...current, address: event.target.value }))}
-                placeholder="Direccion fiscal o sede principal"
-                value={entity.address}
-              />
-            </label>
-            <label>
-              <span>Tipo de gobierno</span>
-              <select
-                onChange={(event) =>
-                  setEntity((current) => ({ ...current, governmentLevel: event.target.value }))
-                }
-                value={entity.governmentLevel}
-              >
-                <option value="">Seleccionar nivel</option>
-                {governmentLevels.map((level) => (
-                  <option key={level.value} value={level.value}>
-                    {level.label}
-                  </option>
+          </section>
+
+          <aside className="municipalitySide">
+            <section className="entityPreviewCard" data-ready={entityComplete}>
+              <div className="entityPreviewHead">
+                <span className="entityPreviewIcon">
+                  <Building2 size={20} />
+                </span>
+                <div>
+                  <small>Vista previa</small>
+                  <strong>{entity.name || "Nombre de la entidad"}</strong>
+                </div>
+              </div>
+              <dl className="entityPreviewData">
+                <div>
+                  <dt>RUC</dt>
+                  <dd>{entity.ruc || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Unidad ejecutora</dt>
+                  <dd>{entity.executingUnit || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Direccion</dt>
+                  <dd>{entity.address || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Nivel</dt>
+                  <dd>
+                    {governmentLevels.find((level) => level.value === entity.governmentLevel)?.label ?? "—"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="entityChecklist">
+              <div className="entityChecklistHead">
+                <strong>Completa el perfil</strong>
+                <span>
+                  {entityProgress}/{entityChecklist.length}
+                </span>
+              </div>
+              <div className="entityProgressBar" aria-hidden>
+                <span style={{ width: `${(entityProgress / entityChecklist.length) * 100}%` }} />
+              </div>
+              <ul>
+                {entityChecklist.map((item) => (
+                  <li data-done={item.done} key={item.label}>
+                    <CheckCircle2 size={15} />
+                    {item.label}
+                  </li>
                 ))}
-              </select>
-              <small>
-                Se usa para identificar el ambito institucional en reportes, expedientes y auditoria.
-              </small>
-            </label>
+              </ul>
+            </section>
+
             <div className="settingsUsagePanel">
               <strong>Uso dentro de ACE</strong>
               <span>Expedientes y documentos generados tomaran esta entidad como contexto predeterminado.</span>
               <span>Auditoria registrara entidad, rol y usuario para trazabilidad institucional.</span>
               <span>Validar y Analiza podran incorporar estos datos en informes y exportaciones.</span>
             </div>
-          </div>
-          </section>
+          </aside>
         </div>
       ) : null}
 
       {activeTab === "procesos" ? (
-        <section className="toolPanel">
-        <div className="toolPanelHeader">
-          <div>
-            <p className="eyebrow">Catalogo</p>
-            <h2>Procedimientos de contratacion</h2>
+        <section className="toolPanel processPanel">
+          <div className="toolPanelHeader">
+            <div>
+              <p className="eyebrow">Catalogo</p>
+              <h2>Procedimientos de contratacion</h2>
+              <span className="processPanelHint">
+                Define los procedimientos que ACE ofrecera al crear expedientes y contratos.
+              </span>
+            </div>
+            <button className="primaryButton" onClick={addProcess} type="button">
+              <Plus size={16} />
+              Agregar proceso
+            </button>
           </div>
-          <button className="secondaryButton" onClick={addProcess} type="button">
-            <Plus size={16} />
-            Agregar proceso
-          </button>
-        </div>
-        <div className="processSettingsIntro">
-          <article>
-            <strong>Competitivos</strong>
-            <span>Licitaciones, concursos, SIE, comparacion de precios y concursos de proyectos.</span>
-          </article>
-          <article>
-            <strong>No competitivos</strong>
-            <span>Supuestos del articulo 55 de la Ley 32069 y desarrollo reglamentario.</span>
-          </article>
-          <article>
-            <strong>Contratos menores</strong>
-            <span>No son procedimiento competitivo; aplican reglas especiales hasta 8 UIT.</span>
-          </article>
-        </div>
-        <div className="processSettingsList">
-          {processTypes.map((item, index) => (
-            <article className="processSettingsRow" key={`${item.code}-${index}`}>
-              <label className="toggleLine">
-                <input
-                  checked={item.active}
-                  onChange={(event) => updateProcess(index, { active: event.target.checked })}
-                  type="checkbox"
-                />
-                <span>{item.active ? "Activo" : "Inactivo"}</span>
-              </label>
-              <label>
-                <span>Nombre</span>
-                <input
-                  onBlur={() => {
-                    if (!item.code && item.label) {
-                      updateProcess(index, { code: codeFromLabel(item.label) });
-                    }
-                  }}
-                  onChange={(event) => updateProcess(index, { label: event.target.value })}
-                  placeholder="Ej. Licitacion publica"
-                  value={item.label}
-                />
-              </label>
-              <label>
-                <span>Categoria</span>
-                <select
-                  onChange={(event) =>
-                    updateProcess(index, {
-                      category: event.target.value as ProcessTypeSetting["category"],
-                    })
-                  }
-                  value={item.category}
-                >
-                  <option value="competitivo">Competitivo</option>
-                  <option value="no_competitivo">No competitivo</option>
-                  <option value="contrato_menor">Contrato menor</option>
-                </select>
-              </label>
-              <label>
-                <span>Objeto</span>
-                <input
-                  onChange={(event) => updateProcess(index, { object: event.target.value })}
-                  placeholder="Bienes, obras, servicios..."
-                  value={item.object}
-                />
-              </label>
-              <label>
-                <span>Codigo</span>
-                <input
-                  onChange={(event) =>
-                    updateProcess(index, { code: codeFromLabel(event.target.value) })
-                  }
-                  placeholder="licitacion_publica"
-                  value={item.code}
-                />
-              </label>
-              <label>
-                <span>Sustento / referencia</span>
-                <input
-                  onChange={(event) => updateProcess(index, { legalBasis: event.target.value })}
-                  placeholder="Ley 32069, Reglamento, Bases Estandar DGA..."
-                  value={item.legalBasis}
-                />
-              </label>
-              <label className="processDescription">
-                <span>Descripcion operativa</span>
-                <input
-                  onChange={(event) => updateProcess(index, { description: event.target.value })}
-                  placeholder="Uso interno, directiva aplicable o nota breve"
-                  value={item.description}
-                />
-              </label>
-              <label className="toggleLine">
-                <input
-                  checked={item.frequentMunicipality}
-                  onChange={(event) =>
-                    updateProcess(index, { frequentMunicipality: event.target.checked })
-                  }
-                  type="checkbox"
-                />
-                <span>Frecuente municipal</span>
-              </label>
-              <label className="sortField">
-                <span>Orden</span>
-                <input
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    updateProcess(index, { sortOrder: Number.parseInt(event.target.value || "0", 10) })
-                  }
-                  value={item.sortOrder}
-                />
-              </label>
+
+          <div className="processSummary">
+            {categorySummary.map((item) => (
+              <article data-category={item.value} key={item.value}>
+                <div className="processSummaryTop">
+                  <strong>{item.activeCount}</strong>
+                  <span className="processSummaryBadge">{item.label}</span>
+                </div>
+                <p>{item.description}</p>
+                <small>
+                  {item.activeCount} activo(s) de {item.total}
+                </small>
+              </article>
+            ))}
+          </div>
+
+          <div className="processFilterBar" role="tablist" aria-label="Filtrar procesos">
+            {processFilters.map((filter) => (
               <button
-                aria-label="Eliminar proceso"
-                className="iconButton"
-                onClick={() => removeProcess(index)}
+                aria-selected={processFilter === filter.value}
+                key={filter.value}
+                onClick={() => setProcessFilter(filter.value)}
+                role="tab"
                 type="button"
               >
-                <Trash2 size={15} />
+                {filter.label}
+                <em>{filter.count}</em>
               </button>
-            </article>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          <div className="processCardList">
+            {visibleProcesses.length === 0 ? (
+              <div className="emptyState">
+                <Workflow size={20} />
+                <p>No hay procesos en esta vista. Cambia el filtro o agrega uno nuevo.</p>
+                <button className="secondaryButton" onClick={addProcess} type="button">
+                  <Plus size={16} />
+                  Agregar proceso
+                </button>
+              </div>
+            ) : (
+              visibleProcesses.map(({ index, item }) => (
+                <article
+                  className="processCard"
+                  data-active={item.active}
+                  data-category={item.category}
+                  key={`${item.code}-${index}`}
+                >
+                  <header className="processCardHead">
+                    <label className="switchControl" title={item.active ? "Desactivar" : "Activar"}>
+                      <input
+                        checked={item.active}
+                        onChange={(event) => updateProcess(index, { active: event.target.checked })}
+                        type="checkbox"
+                      />
+                      <span aria-hidden className="switchTrack">
+                        <span className="switchThumb" />
+                      </span>
+                    </label>
+                    <div className="processCardHeadMain">
+                      <input
+                        className="processNameInput"
+                        onBlur={() => {
+                          if (!item.code && item.label) {
+                            updateProcess(index, { code: codeFromLabel(item.label) });
+                          }
+                        }}
+                        onChange={(event) => updateProcess(index, { label: event.target.value })}
+                        placeholder="Nombre del procedimiento"
+                        value={item.label}
+                      />
+                      <div className="processCardTags">
+                        <span className="categoryBadge" data-category={item.category}>
+                          {CATEGORY_META[item.category].label}
+                        </span>
+                        <span className="statusPill" data-active={item.active}>
+                          {item.active ? "Activo" : "Inactivo"}
+                        </span>
+                        {item.frequentMunicipality ? (
+                          <span className="freqBadge">
+                            <Star size={12} />
+                            Frecuente municipal
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      aria-label="Eliminar proceso"
+                      className="iconButton danger"
+                      onClick={() => removeProcess(index)}
+                      type="button"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </header>
+
+                  <div className="processCardGrid">
+                    <label>
+                      <span>Categoria</span>
+                      <select
+                        onChange={(event) =>
+                          updateProcess(index, {
+                            category: event.target.value as ProcessTypeSetting["category"],
+                          })
+                        }
+                        value={item.category}
+                      >
+                        <option value="competitivo">Competitivo</option>
+                        <option value="no_competitivo">No competitivo</option>
+                        <option value="contrato_menor">Contrato menor</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Objeto</span>
+                      <input
+                        onChange={(event) => updateProcess(index, { object: event.target.value })}
+                        placeholder="Bienes, obras, servicios..."
+                        value={item.object}
+                      />
+                    </label>
+                    <label className="processCardWide">
+                      <span>Sustento / referencia legal</span>
+                      <input
+                        onChange={(event) => updateProcess(index, { legalBasis: event.target.value })}
+                        placeholder="Ley 32069, Reglamento, Bases Estandar DGA..."
+                        value={item.legalBasis}
+                      />
+                    </label>
+                    <label className="processCardWide">
+                      <span>Descripcion operativa</span>
+                      <input
+                        onChange={(event) => updateProcess(index, { description: event.target.value })}
+                        placeholder="Uso interno, directiva aplicable o nota breve"
+                        value={item.description}
+                      />
+                    </label>
+                  </div>
+
+                  <details className="processAdvanced">
+                    <summary>Opciones avanzadas</summary>
+                    <div className="processAdvancedGrid">
+                      <label className="switchInline">
+                        <input
+                          checked={item.frequentMunicipality}
+                          onChange={(event) =>
+                            updateProcess(index, { frequentMunicipality: event.target.checked })
+                          }
+                          type="checkbox"
+                        />
+                        <span>Marcar como frecuente municipal</span>
+                      </label>
+                      <label>
+                        <span>Codigo interno</span>
+                        <input
+                          onChange={(event) =>
+                            updateProcess(index, { code: codeFromLabel(event.target.value) })
+                          }
+                          placeholder="licitacion_publica"
+                          value={item.code}
+                        />
+                      </label>
+                      <label>
+                        <span>Orden de aparicion</span>
+                        <input
+                          inputMode="numeric"
+                          onChange={(event) =>
+                            updateProcess(index, {
+                              sortOrder: Number.parseInt(event.target.value || "0", 10),
+                            })
+                          }
+                          value={item.sortOrder}
+                        />
+                      </label>
+                    </div>
+                  </details>
+                </article>
+              ))
+            )}
+          </div>
         </section>
       ) : null}
 
@@ -740,7 +968,7 @@ export function AdminSettings() {
               </div>
               <div className="roleProfileGrid">
                 {userRoleCounts.map((role) => (
-                  <article key={role.value}>
+                  <article data-role={role.value} key={role.value}>
                     <div>
                       <strong>{role.label}</strong>
                       <em>{role.count}</em>
@@ -787,29 +1015,77 @@ export function AdminSettings() {
               <p className="eyebrow">Cuentas activas</p>
               <h2>Usuarios registrados</h2>
             </div>
-            <span>{users.length} total</span>
+            <span>{visibleUsers.length} de {users.length}</span>
           </div>
+          {users.length > 0 ? (
+            <div className="usersToolbar">
+              <label className="usersSearch">
+                <Search size={15} />
+                <input
+                  onChange={(event) => setUserSearch(event.target.value)}
+                  placeholder="Buscar por correo o entidad..."
+                  value={userSearch}
+                />
+              </label>
+              <div className="usersRoleFilter" role="tablist" aria-label="Filtrar por rol">
+                <button
+                  aria-selected={userRoleFilter === "todos"}
+                  onClick={() => setUserRoleFilter("todos")}
+                  role="tab"
+                  type="button"
+                >
+                  Todos
+                  <em>{users.length}</em>
+                </button>
+                {userRoleCounts.map((role) => (
+                  <button
+                    aria-selected={userRoleFilter === role.value}
+                    data-role={role.value}
+                    key={role.value}
+                    onClick={() => setUserRoleFilter(role.value)}
+                    role="tab"
+                    type="button"
+                  >
+                    {role.label}
+                    <em>{role.count}</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="usersSettingsList">
             {users.length === 0 ? (
               <div className="emptyState">
                 <Users size={20} />
                 <span>No hay perfiles registrados todavia.</span>
               </div>
+            ) : visibleUsers.length === 0 ? (
+              <div className="emptyState">
+                <Search size={20} />
+                <span>Ningun usuario coincide con la busqueda o el filtro.</span>
+              </div>
             ) : (
-              users.map((user, index) => (
+              visibleUsers.map(({ index, user }) => (
                 <article className="userSettingsRow" key={user.id}>
                   <div className="userSettingsIdentity">
-                    <strong>{user.email ?? "Usuario sin correo"}</strong>
-                    <span>{roleLabel(user.role)} · {user.id}</span>
-                    <div className="userPermissionChips" aria-label="Permisos activos">
-                      {(user.permissions ?? [])
-                        .slice(0, 4)
-                        .map((permission) => (
-                          <small key={permission.area}>{permission.area}</small>
-                        ))}
-                      {(user.permissions?.length ?? 0) > 4 ? (
-                        <small>+{(user.permissions?.length ?? 0) - 4}</small>
-                      ) : null}
+                    <span className="userAvatar" data-role={user.role} aria-hidden>
+                      {userInitials(user)}
+                    </span>
+                    <div className="userIdentityText">
+                      <strong>{user.email ?? "Usuario sin correo"}</strong>
+                      <span className="roleBadge" data-role={user.role}>
+                        {roleLabel(user.role)}
+                      </span>
+                      <div className="userPermissionChips" aria-label="Permisos activos">
+                        {(user.permissions ?? [])
+                          .slice(0, 4)
+                          .map((permission) => (
+                            <small key={permission.area}>{permission.area}</small>
+                          ))}
+                        {(user.permissions?.length ?? 0) > 4 ? (
+                          <small>+{(user.permissions?.length ?? 0) - 4}</small>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <label>
@@ -844,7 +1120,7 @@ export function AdminSettings() {
                   </button>
                   <button
                     aria-label="Eliminar usuario"
-                    className="iconButton"
+                    className="iconButton danger"
                     disabled={savingUserId === user.id}
                     onClick={() => deleteUser(user)}
                     type="button"

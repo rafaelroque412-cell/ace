@@ -11,6 +11,15 @@ export default async function ExpedienteDetailPage({
 }) {
   const [{ id }, user] = await Promise.all([params, getSessionUser()]);
 
+  const caps = new Set(user?.capabilities ?? []);
+  const permisos = {
+    manage: caps.has("expediente.manage"),
+    upload: caps.has("expediente.upload"),
+    evaluate: caps.has("expediente.evaluate"),
+    risks: caps.has("expediente.risks"),
+    draft: caps.has("expediente.draft"),
+  };
+
   return (
     <AppShell
       active="expedientes"
@@ -24,7 +33,7 @@ export default async function ExpedienteDetailPage({
       title="Detalle del expediente"
     >
       <section className="singleWorkspace">
-        <ProcessDetail processId={id} canManage={Boolean(user?.isDec)} />
+        <ProcessDetail permisos={permisos} processId={id} />
       </section>
     </AppShell>
   );

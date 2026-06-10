@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   Clock,
   Download,
@@ -23,6 +24,9 @@ import {
   processStatusLabel,
   processTypeLabel,
 } from "@/lib/legal-taxonomy";
+import { instruirExpediente } from "@/lib/expediente-instruccion";
+import { PhaseTracker } from "./phase-tracker";
+import { LifecycleMap } from "./lifecycle-map";
 
 type Process = {
   id: string;
@@ -119,7 +123,15 @@ function DocStatus({ status }: { status: ProcessDoc["status"] }) {
   );
 }
 
-export function ProcessDetail({ canManage, processId }: { canManage: boolean; processId: string }) {
+export type ExpedientePermisos = {
+  manage: boolean;
+  upload: boolean;
+  evaluate: boolean;
+  risks: boolean;
+  draft: boolean;
+};
+
+export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePermisos; processId: string }) {
   const [process, setProcess] = useState<Process | null>(null);
   const [documents, setDocuments] = useState<ProcessDoc[]>([]);
   const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
@@ -127,11 +139,13 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
   const [risks, setRisks] = useState<RiskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [uploading, setUploading] = useState(false);
   const [linking, setLinking] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [detectingRisks, setDetectingRisks] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [declaringDesierto, setDeclaringDesierto] = useState(false);
 
   const [kind, setKind] = useState("bases");
   const [libraryDocumentId, setLibraryDocumentId] = useState("");
@@ -139,6 +153,26 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
   const [evalBidderName, setEvalBidderName] = useState("");
   const [draftKind, setDraftKind] = useState("informe_evaluacion");
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadSectionRef = useRef<HTMLElement>(null);
+
+  const instruccion = useMemo(
+    () =>
+      instruirExpediente({
+        status: process?.status,
+        documents: documents.map((doc) => ({ kind: doc.kind, title: doc.title, status: doc.status })),
+        evaluacionesCount: evaluations.length,
+      }),
+    [process?.status, documents, evaluations.length],
+  );
+
+  // Preselecciona el tipo de documento de una fase y lleva al formulario de carga.
+  function prepareUpload(nextKind: string) {
+    setKind(nextKind);
+    requestAnimationFrame(() => {
+      uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      fileRef.current?.focus();
+    });
+  }
 
   async function reload() {
     try {
@@ -214,6 +248,9 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
         fileRef.current.value = "";
       }
       setError("");
+      if (payload.statusAdvancedTo) {
+        setNotice(`El expediente avanzó automáticamente a la etapa “${processStatusLabel(payload.statusAdvancedTo)}”.`);
+      }
       await reload();
     } catch {
       setError("No se pudo conectar con el servidor.");
@@ -240,6 +277,9 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
         return;
       }
       setLibraryDocumentId("");
+      if (payload.statusAdvancedTo) {
+        setNotice(`El expediente avanzó automáticamente a la etapa “${processStatusLabel(payload.statusAdvancedTo)}”.`);
+      }
       await reload();
     } catch {
       setError("No se pudo conectar para vincular documento.");
@@ -275,6 +315,9 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
         setError(payload.error ?? "No se pudo evaluar la oferta.");
         return;
       }
+      if (payload.statusAdvancedTo) {
+        setNotice(`El expediente avanzó automáticamente a la etapa “${processStatusLabel(payload.statusAdvancedTo)}”.`);
+      }
       await reload();
     } catch {
       setError("No se pudo conectar con el evaluador.");
@@ -298,6 +341,28 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
       setError("No se pudo conectar con el detector de riesgos.");
     } finally {
       setDetectingRisks(false);
+    }
+  }
+
+  async function declareDesierto() {
+    if (!window.confirm("¿Declarar DESIERTO este procedimiento? La selección se cierra sin adjudicación.")) {
+      return;
+    }
+    setDeclaringDesierto(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/processes/${processId}/desierto`, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error ?? "No se pudo declarar desierto.");
+        return;
+      }
+      setNotice("Procedimiento declarado desierto. Genera el Acta de declaratoria de desierto desde el panel.");
+      await reload();
+    } catch {
+      setError("No se pudo conectar con el servidor.");
+    } finally {
+      setDeclaringDesierto(false);
     }
   }
 
@@ -366,7 +431,7 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
           </div>
         </div>
         <div className="processStatusBox">
-          {canManage ? (
+          {permisos.manage ? (
             <label>
               <span>Estado</span>
               <select onChange={(event) => void changeStatus(event.target.value)} value={process.status}>
@@ -384,15 +449,20 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
       </header>
 
       {error ? <p className="formMessage errorText">{error}</p> : null}
+      {notice ? <p className="formMessage successText">{notice}</p> : null}
+
+      <LifecycleMap status={process.status} />
+
+      <PhaseTracker canManage={permisos.upload} instruccion={instruccion} onSelectKind={prepareUpload} />
 
       <div className="processDetailGrid">
-        <section className="processPanel">
+        <section className="processPanel" ref={uploadSectionRef}>
           <div className="processPanelHead">
             <UploadCloud size={17} />
             <strong>Documentos del expediente</strong>
           </div>
 
-          {canManage ? (
+          {permisos.upload ? (
             <>
               <form className="docUploadForm" onSubmit={uploadDocument}>
                 <select onChange={(event) => setKind(event.target.value)} value={kind}>
@@ -523,11 +593,11 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
                   value={evalBidderName}
                 />
               </label>
-              <button className="primaryButton compactButton" disabled={!canManage || evaluating} onClick={evaluateOffer} type="button">
+              <button className="primaryButton compactButton" disabled={!permisos.evaluate || evaluating} onClick={evaluateOffer} type="button">
                 {evaluating ? <Loader size={15} /> : <CheckCircle2 size={15} />}
                 Evaluar oferta
               </button>
-              <button className="secondaryButton compactButton" disabled={!canManage || detectingRisks} onClick={detectRisks} type="button">
+              <button className="secondaryButton compactButton" disabled={!permisos.risks || detectingRisks} onClick={detectRisks} type="button">
                 {detectingRisks ? <Loader size={15} /> : <ShieldAlert size={15} />}
                 Detectar riesgos
               </button>
@@ -541,10 +611,21 @@ export function ProcessDetail({ canManage, processId }: { canManage: boolean; pr
                   ))}
                 </select>
               </label>
-              <button className="secondaryButton compactButton" disabled={!canManage || drafting} onClick={generateDraft} type="button">
+              <button className="secondaryButton compactButton" disabled={!permisos.draft || drafting} onClick={generateDraft} type="button">
                 {drafting ? <Loader size={15} /> : <Download size={15} />}
                 Generar DOCX
               </button>
+              {permisos.evaluate && (process.status === "seleccion" || process.status === "buena_pro") ? (
+                <button
+                  className="secondaryButton compactButton desiertoButton"
+                  disabled={declaringDesierto}
+                  onClick={declareDesierto}
+                  type="button"
+                >
+                  {declaringDesierto ? <Loader size={15} /> : <Ban size={15} />}
+                  Declarar desierto
+                </button>
+              ) : null}
             </div>
           </section>
 

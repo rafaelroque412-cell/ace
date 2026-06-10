@@ -46,7 +46,20 @@ export const processUpdateSchema = z.object({
   amount: z.coerce.number().nonnegative().optional(),
   entity: z.string().trim().max(160).optional(),
   status: z
-    .enum(["en_preparacion", "en_evaluacion", "otorgado", "desierto", "en_ejecucion", "cerrado"])
+    .enum([
+      "necesidad",
+      "actuaciones_preparatorias",
+      "expediente",
+      "aprobacion_aga",
+      "seleccion",
+      "buena_pro",
+      "desierto",
+      "contrato",
+      "ejecucion",
+      "conformidad",
+      "liquidacion",
+      "archivo",
+    ])
     .optional(),
   summary: z.string().trim().max(2000).optional(),
 });

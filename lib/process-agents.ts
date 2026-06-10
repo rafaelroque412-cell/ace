@@ -61,7 +61,14 @@ type DraftKind =
   | "acta_buena_pro"
   | "acta_desierto"
   | "memorando"
-  | "informe_evaluacion";
+  | "informe_evaluacion"
+  // Ejecución contractual (Módulo 8) y archivo (Módulo 9)
+  | "orden_inicio"
+  | "acta_conformidad"
+  | "informe_penalidad"
+  | "informe_adicional"
+  | "acta_liquidacion"
+  | "expediente_unico";
 
 export const draftKinds: Array<{ label: string; value: DraftKind }> = [
   { label: "Informe técnico", value: "informe_tecnico" },
@@ -72,6 +79,12 @@ export const draftKinds: Array<{ label: string; value: DraftKind }> = [
   { label: "Acta de declaratoria de desierto", value: "acta_desierto" },
   { label: "Memorando", value: "memorando" },
   { label: "Informe de evaluación de ofertas", value: "informe_evaluacion" },
+  { label: "Orden de inicio de la prestación", value: "orden_inicio" },
+  { label: "Acta de conformidad", value: "acta_conformidad" },
+  { label: "Informe de penalidad", value: "informe_penalidad" },
+  { label: "Informe de adicionales / ampliaciones", value: "informe_adicional" },
+  { label: "Acta de liquidación del contrato", value: "acta_liquidacion" },
+  { label: "Expediente electrónico único (índice)", value: "expediente_unico" },
 ];
 
 function normalize(text: string) {
@@ -460,17 +473,92 @@ function labelOfDraft(kind: DraftKind) {
   return draftKinds.find((item) => item.value === kind)?.label ?? "Documento administrativo";
 }
 
+function indexCell(text: string, bold = false, size = 25) {
+  return new TableCell({
+    children: [new Paragraph({ children: [new TextRun({ bold, text })] })],
+    width: { size, type: WidthType.PERCENTAGE },
+  });
+}
+
+async function buildExpedienteUnicoDocx(
+  process: ProcurementProcess,
+  documents: DraftDocumentRow[],
+  processType: string,
+  today: string,
+): Promise<Buffer> {
+  const fecha = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+
+  const children: Array<Paragraph | Table> = [
+    new Paragraph({ alignment: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, text: "EXPEDIENTE ELECTRÓNICO ÚNICO" }),
+    paragraph(`Expediente: ${process.nomenclature}`),
+    paragraph(`Entidad: ${process.entity ?? "[Entidad]"}`),
+    paragraph(`Objeto: ${objectTypeLabel(process.object_type)} - ${processType}`),
+    paragraph(`Fecha de cierre/archivo: ${today}`),
+    heading("Índice de actuaciones"),
+  ];
+
+  if (documents.length === 0) {
+    children.push(paragraph("El expediente no registra documentos cargados."));
+  } else {
+    children.push(
+      new Table({
+        rows: [
+          new TableRow({
+            children: [indexCell("N.°", true, 8), indexCell("Actuación", true, 27), indexCell("Documento", true, 45), indexCell("Fecha", true, 20)],
+          }),
+          ...documents.map(
+            (document, index) =>
+              new TableRow({
+                children: [
+                  indexCell(String(index + 1), false, 8),
+                  indexCell(processDocKindLabel(document.kind), false, 27),
+                  indexCell(`${document.title}${document.bidder_name ? ` (${document.bidder_name})` : ""}`, false, 45),
+                  indexCell(fecha(document.created_at), false, 20),
+                ],
+              }),
+          ),
+        ],
+        width: { size: 100, type: WidthType.PERCENTAGE },
+      }),
+    );
+  }
+
+  children.push(
+    paragraph(`Total de actuaciones: ${documents.length}.`),
+    paragraph("Se deja constancia del cierre y archivo del expediente electrónico único conforme a la Ley N.° 32069 y su Reglamento."),
+    paragraph("Firma / responsable del archivo: ______________________________"),
+  );
+
+  const document = new Document({ sections: [{ children }] });
+  return Buffer.from(await Packer.toBuffer(document));
+}
+
+export type DraftDocumentRow = {
+  kind: string;
+  title: string;
+  bidder_name?: string | null;
+  created_at?: string | null;
+};
+
 export async function buildAdministrativeDraftDocx(input: {
   draftKind: DraftKind;
   evaluation?: ProcessEvaluationResult | null;
   process: ProcurementProcess;
   risks?: ProcessRiskResult | null;
+  documents?: DraftDocumentRow[];
 }): Promise<Buffer> {
   const processType = input.process.procedure_type
     ? processTypeLabel(input.process.procedure_type) ?? input.process.procedure_type
     : "procedimiento no especificado";
   const title = labelOfDraft(input.draftKind).toUpperCase();
   const today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+
+  // Módulo 9: el "expediente electrónico único" es un índice/carátula que lista
+  // todas las actuaciones cargadas, no el documento administrativo de plantilla.
+  if (input.draftKind === "expediente_unico") {
+    return buildExpedienteUnicoDocx(input.process, input.documents ?? [], processType, today);
+  }
   const sources = await searchLegalSources({
     filters: { processType: input.process.procedure_type ?? "" },
     query: `${input.process.nomenclature} ${processType} ${labelOfDraft(input.draftKind)} contrataciones publicas`,

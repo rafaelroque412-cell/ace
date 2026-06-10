@@ -1,0 +1,16 @@
+{
+  "summary": {
+    "total": 27,
+    "avgScore": 0.977,
+    "confidence": {
+      "alta": 23,
+      "baja": 0,
+      "media": 4
+    },
+    "avgSourceHit": 0.974,
+    "avgKeywordHit": 0.988,
+    "sufficientCount": 27
+  },
+  "corrida": "daa735d2-1c47-45d7-bdc2-696f1ce969b7",
+  "low": []
+}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
+import { APP_AREAS, APP_ROLES, type AppRole, areasForRole } from "@/lib/permisos-contratacion";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ const saveSchema = z.object({
   processTypes: z.array(processTypeSchema).min(1).max(50),
 });
 
-const userRoleSchema = z.enum(["consulta", "area_usuaria", "dec", "legal", "admin"]);
+const userRoleSchema = z.enum(APP_ROLES.map((role) => role.value) as [AppRole, ...AppRole[]]);
 const updateUserSchema = z.object({
   action: z.literal("update_user"),
   entity: z.string().trim().max(180).optional().or(z.literal("")),
@@ -86,124 +87,21 @@ type ProfileRow = {
   role: string;
 };
 
-const roles = [
-  {
-    description: "Consulta Chat, Busqueda, Normas, Historial y Guardados sin gestionar corpus.",
-    label: "Consulta",
-    value: "consulta",
-  },
-  {
-    description: "Revisa requerimientos, documentos de expediente y consultas vinculadas a su area.",
-    label: "Area usuaria",
-    value: "area_usuaria",
-  },
-  {
-    description: "Gestiona expedientes, biblioteca documental, cargas PDF, validaciones y documentos del proceso.",
-    label: "DEC",
-    value: "dec",
-  },
-  {
-    description: "Revisa fundamento legal, riesgos, informes, nulidades, opiniones y analisis juridico.",
-    label: "Legal",
-    value: "legal",
-  },
-  {
-    description: "Administra configuracion, usuarios, monitoreo, auditoria, evaluacion IA y corpus completo.",
-    label: "Administrador",
-    value: "admin",
-  },
-] as const;
+// Catalogo de roles y matriz de areas: derivados del modelo central
+// (lib/permisos-contratacion.ts) para evitar divergencias.
+const roles = APP_ROLES.map((role) => ({
+  description: role.description,
+  label: role.label,
+  value: role.value,
+}));
 
-const rolePermissions = [
-  {
-    area: "Consulta documental",
-    permissions: {
-      admin: true,
-      area_usuaria: true,
-      consulta: true,
-      dec: true,
-      legal: true,
-    },
-    scope: "Chat, busqueda, normas, historial y guardados.",
-  },
-  {
-    area: "Expedientes",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: true,
-      legal: false,
-    },
-    scope: "Crear, actualizar y gestionar expedientes institucionales.",
-  },
-  {
-    area: "Biblioteca documental",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: true,
-      legal: false,
-    },
-    scope: "Subir, reindexar y eliminar documentos del corpus.",
-  },
-  {
-    area: "Analisis juridico",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: false,
-      legal: true,
-    },
-    scope: "Revision legal, riesgos, informes y fundamento juridico.",
-  },
-  {
-    area: "Validacion de procedimientos",
-    permissions: {
-      admin: true,
-      area_usuaria: true,
-      consulta: true,
-      dec: true,
-      legal: true,
-    },
-    scope: "Validar procedencia y fuentes; verificacion de corpus solo admin.",
-  },
-  {
-    area: "Evaluacion IA",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: false,
-      legal: false,
-    },
-    scope: "Banco de preguntas, corridas y feedback institucional.",
-  },
-  {
-    area: "Monitoreo y auditoria",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: false,
-      legal: false,
-    },
-    scope: "Metricas, auditoria, integraciones, verificacion operativa.",
-  },
-  {
-    area: "Configuracion",
-    permissions: {
-      admin: true,
-      area_usuaria: false,
-      consulta: false,
-      dec: false,
-      legal: false,
-    },
-    scope: "Entidad, procesos, usuarios, roles y permisos.",
-  },
-] as const;
+const rolePermissions = APP_AREAS.map((area) => ({
+  area: area.area,
+  permissions: Object.fromEntries(
+    APP_ROLES.map((role) => [role.value, role.value === "admin" || area.roles.includes(role.value)]),
+  ) as Record<AppRole, boolean>,
+  scope: area.scope,
+}));
 
 function adminClient() {
   const { serviceRoleKey, supabaseUrl } = getSupabaseServerConfig();
@@ -225,12 +123,7 @@ function profileEmailForRole(role: z.infer<typeof userRoleSchema>) {
 }
 
 function permissionsForRole(role: z.infer<typeof userRoleSchema>) {
-  return rolePermissions
-    .filter((item) => item.permissions[role])
-    .map((item) => ({
-      area: item.area,
-      scope: item.scope,
-    }));
+  return areasForRole(role);
 }
 
 function profileMetadata(role: z.infer<typeof userRoleSchema>, entity?: string | null) {
