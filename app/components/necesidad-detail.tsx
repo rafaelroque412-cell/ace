@@ -14,52 +14,65 @@ import {
 } from "lucide-react";
 import {
   NECESIDAD_DOC_KINDS,
-  NECESIDAD_STATUSES,
   necesidadDocKindLabel,
-  necesidadStatusLabel,
   objectTypeLabel,
 } from "@/lib/legal-taxonomy";
+import type { NecesidadDocumento, RiesgoNecesidad } from "@/lib/necesidades";
 
-type Necesidad = {
+const NECESIDAD_STATUSES_EXTENDED = [
+  { value: "borrador", label: "Borrador" },
+  { value: "pendiente_revision", label: "Pendiente de Revisión" },
+  { value: "observado", label: "Observado" },
+  { value: "subsanado", label: "Subsanado" },
+  { value: "aprobado_area_usuaria", label: "Aprobado Área Usuaria" },
+  { value: "enviado_dec", label: "Enviado a la DEC" },
+  { value: "incorporado_cmn", label: "Incorporado al CMN (Derivado)" },
+];
+
+function statusLabel(val: string) {
+  return NECESIDAD_STATUSES_EXTENDED.find((s) => s.value === val)?.label ?? val;
+}
+
+type NecesidadExt = {
   id: string;
   codigo: string | null;
   nombre: string;
-  finalidad_publica: string | null;
-  objetivo: string | null;
+  anio_fiscal: number | null;
+  entidad: string | null;
+  area_usuaria: string | null;
   centro_costo: string | null;
+  tipo_objeto: string;
+  finalidad_publica: string | null;
+  objetivo_contratacion: string | null;
   meta_presupuestal: string | null;
   proyecto_inversion: string | null;
-  tipo_contratacion: string;
-  area_usuaria: string | null;
+  ioarr: string | null;
+  fuente_financiamiento: string | null;
+  monto_estimado: number | null;
+  cantidad: number | null;
+  unidad_medida: string | null;
+  fecha_requerida: string | null;
   status: string;
   summary: string | null;
   process_id: string | null;
-  entity: string | null;
   created_at: string;
-};
-
-type Documento = {
-  id: string;
-  kind: string;
-  title: string;
-  status: string;
-  created_at: string;
+  riesgos?: RiesgoNecesidad[];
 };
 
 type Permisos = { manage: boolean; derivar: boolean };
 
-function Row({ label, value }: { label: string; value: string | null | undefined }) {
+function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
     <div className="fichaRow">
       <span className="fichaLabel">{label}</span>
-      <span className="fichaValue">{value && value.trim() ? value : "—"}</span>
+      <span className="fichaValue">{value !== null && value !== undefined && String(value).trim() !== "" ? String(value) : "—"}</span>
     </div>
   );
 }
 
 export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string; permisos: Permisos }) {
-  const [necesidad, setNecesidad] = useState<Necesidad | null>(null);
-  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [necesidad, setNecesidad] = useState<NecesidadExt | null>(null);
+  const [documentos, setDocumentos] = useState<NecesidadDocumento[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deriving, setDeriving] = useState(false);
@@ -68,8 +81,7 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // La carga se bloquea una vez derivada (la instrucción documental sigue en el expediente).
-  const puedeAdjuntar = permisos.manage && necesidad?.status !== "derivada";
+  const puedeAdjuntar = permisos.manage && necesidad?.status !== "incorporado_cmn";
 
   async function reload() {
     try {
@@ -195,16 +207,16 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
           <h2>{necesidad.nombre}</h2>
           <div className="processDetailMeta">
             <span>{necesidad.codigo ?? "Sin código"}</span>
-            <span>{objectTypeLabel(necesidad.tipo_contratacion)}</span>
+            <span>{necesidad.tipo_objeto ? objectTypeLabel(necesidad.tipo_objeto) : "Sin tipo"}</span>
             <span>{necesidad.area_usuaria ?? "Sin área usuaria"}</span>
           </div>
         </div>
         <div className="processStatusBox">
-          {permisos.manage && necesidad.status !== "derivada" ? (
+          {permisos.manage && necesidad.status !== "incorporado_cmn" ? (
             <label>
-              <span>Estado</span>
+              <span>Estado (Workflow Ley 32069)</span>
               <select onChange={(event) => void changeStatus(event.target.value)} value={necesidad.status}>
-                {NECESIDAD_STATUSES.map((item) => (
+                {NECESIDAD_STATUSES_EXTENDED.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
@@ -212,7 +224,7 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
               </select>
             </label>
           ) : (
-            <span className={`processStatus status-${necesidad.status}`}>{necesidadStatusLabel(necesidad.status)}</span>
+            <span className={`processStatus status-${necesidad.status}`}>{statusLabel(necesidad.status)}</span>
           )}
         </div>
       </header>
@@ -223,22 +235,27 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
         <section className="processPanel">
           <div className="processPanelHead">
             <FileText size={17} />
-            <strong>Ficha de Necesidad</strong>
+            <strong>Ficha de Necesidad (Ampliada)</strong>
           </div>
           <div className="fichaGrid">
-            <Row label="Entidad" value={necesidad.entity} />
+            <Row label="Entidad" value={necesidad.entidad} />
             <Row label="Área usuaria" value={necesidad.area_usuaria} />
-            <Row label="Tipo de contratación" value={objectTypeLabel(necesidad.tipo_contratacion)} />
             <Row label="Centro de costo" value={necesidad.centro_costo} />
+            <Row label="Año fiscal" value={necesidad.anio_fiscal} />
+            <Row label="Tipo de Objeto" value={necesidad.tipo_objeto ? objectTypeLabel(necesidad.tipo_objeto) : null} />
+            <Row label="Cantidad Requerida" value={necesidad.cantidad ? `${necesidad.cantidad} ${necesidad.unidad_medida ?? ""}` : null} />
+            <Row label="Monto Estimado" value={necesidad.monto_estimado ? `S/ ${necesidad.monto_estimado}` : null} />
+            <Row label="Fecha Requerida" value={necesidad.fecha_requerida} />
+            <Row label="Fuente de Financiamiento" value={necesidad.fuente_financiamiento} />
             <Row label="Meta presupuestal" value={necesidad.meta_presupuestal} />
-            <Row label="Proyecto de inversión" value={necesidad.proyecto_inversion} />
+            <Row label="Proyecto de inversión / IOARR" value={necesidad.proyecto_inversion ?? necesidad.ioarr} />
             <Row label="Finalidad pública" value={necesidad.finalidad_publica} />
-            <Row label="Objetivo" value={necesidad.objetivo} />
-            <Row label="Descripción / resumen" value={necesidad.summary} />
+            <Row label="Objetivo / Beneficio" value={necesidad.objetivo_contratacion} />
+            <Row label="Resumen / Descripción" value={necesidad.summary} />
           </div>
           <a className="secondaryButton compactButton" href={`/api/necesidades/${necesidad.id}/ficha`}>
             <Download size={15} />
-            Exportar Ficha (Word)
+            Exportar Ficha Oficial (Word)
           </a>
         </section>
 
@@ -250,7 +267,7 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
             </div>
             {necesidad.process_id ? (
               <>
-                <p className="sideMuted">Esta necesidad ya fue derivada a un expediente de contratación.</p>
+                <p className="sideMuted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
                 <Link className="primaryButton compactButton" href={`/expedientes/${necesidad.process_id}`}>
                   <Briefcase size={15} />
                   Abrir expediente
@@ -259,7 +276,7 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
             ) : (
               <>
                 <p className="sideMuted">
-                  Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a estado “derivada”.
+                  Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a estado “Incorporado al CMN”.
                 </p>
                 <button
                   className="primaryButton compactButton"
@@ -303,7 +320,7 @@ export function NecesidadDetail({ necesidadId, permisos }: { necesidadId: string
             {documentos.length === 0 ? (
               <p className="sideMuted">
                 {puedeAdjuntar
-                  ? "Sin adjuntos. Carga el requerimiento firmado, el TDR/ET u otros sustentos de la necesidad."
+                  ? "Sin adjuntos. Carga el requerimiento, TDR, ET, cotizaciones u otros sustentos."
                   : "Sin adjuntos."}
               </p>
             ) : (

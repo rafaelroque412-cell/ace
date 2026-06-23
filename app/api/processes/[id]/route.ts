@@ -16,6 +16,9 @@ type EvaluationRow = {
 
 type RiskRow = { id: string; items: unknown[]; created_at: string };
 
+const SELECT =
+  "id,nomenclature,object_type,procedure_type,amount,entity,status,summary,necesidad_id,valor_estimado,moneda,tipo_cambio,certificacion_presupuestal,sistema_contratacion,modalidad_ejecucion,formula_reajuste,pluralidad_marcas,resumen_ejecutivo,autoridad_aprobacion,delegacion_facultades,doc_aprobacion_expediente,created_at,updated_at";
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if ("error" in auth) {
@@ -28,7 +31,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const [processes, documents, evaluations, risks] = await Promise.all([
       supabaseUserRest<ProcurementProcess[]>(
         auth.user.accessToken,
-        `procurement_processes?id=eq.${id}&select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,created_at,updated_at`,
+        `procurement_processes?id=eq.${id}&select=${SELECT}`,
       ),
       supabaseUserRest<ProcessDocument[]>(
         auth.user.accessToken,
@@ -78,6 +81,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (data.entity !== undefined) patch.entity = data.entity || null;
   if (data.status !== undefined) patch.status = data.status;
   if (data.summary !== undefined) patch.summary = data.summary || null;
+
+  // Campos Ley 32069
+  if (data.valorEstimado !== undefined) patch.valor_estimado = data.valorEstimado || null;
+  if (data.moneda !== undefined) patch.moneda = data.moneda || null;
+  if (data.tipoCambio !== undefined) patch.tipo_cambio = data.tipoCambio || null;
+  if (data.certificacionPresupuestal !== undefined) patch.certificacion_presupuestal = data.certificacionPresupuestal || null;
+  if (data.sistemaContratacion !== undefined) patch.sistema_contratacion = data.sistemaContratacion || null;
+  if (data.modalidadEjecucion !== undefined) patch.modalidad_ejecucion = data.modalidadEjecucion || null;
+  if (data.formulaReajuste !== undefined) patch.formula_reajuste = data.formulaReajuste || null;
+  if (data.pluralidadMarcas !== undefined) patch.pluralidad_marcas = data.pluralidadMarcas;
+  if (data.resumenEjecutivo !== undefined) patch.resumen_ejecutivo = data.resumenEjecutivo || null;
+  
+  if (data.autoridadAprobacion !== undefined) patch.autoridad_aprobacion = data.autoridadAprobacion || null;
+  if (data.delegacionFacultades !== undefined) patch.delegacion_facultades = data.delegacionFacultades;
+  if (data.docAprobacionExpediente !== undefined) patch.doc_aprobacion_expediente = data.docAprobacionExpediente || null;
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });

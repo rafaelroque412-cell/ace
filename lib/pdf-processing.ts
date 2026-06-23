@@ -44,7 +44,7 @@ const unusableOcrPatterns = [
   "i cannot process",
 ];
 
-type ExtractedPdfText = {
+export type ExtractedPdfText = {
   extractionMethod: "pdf-text" | "openai-ocr";
   ocrPartial: boolean;
   pageCount: number;
@@ -52,7 +52,7 @@ type ExtractedPdfText = {
   text: string;
 };
 
-type TextChunk = {
+export type TextChunk = {
   article: string | null;
   content: string;
   end: number;
@@ -414,7 +414,7 @@ function getMaxChunksPerDocument() {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function chunkPages(pages: Array<{ pageNumber: number; text: string }>) {
+export function chunkPages(pages: Array<{ pageNumber: number; text: string }>) {
   const chunks: TextChunk[] = [];
   const maxChunksPerDocument = getMaxChunksPerDocument();
   let buffer = "";
@@ -815,7 +815,7 @@ Alcance:
   }
 }
 
-async function extractPdfText(file: File): Promise<ExtractedPdfText> {
+export async function extractPdfText(file: File): Promise<ExtractedPdfText> {
   const buffer = await readFileBytes(file);
   const pageTexts: Array<{ pageNumber: number; text: string }> = [];
   let pageNumber = 0;

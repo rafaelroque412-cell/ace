@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Activity,
+  Archive,
   BarChart3,
   Bell,
   BookOpenCheck,
@@ -30,9 +31,11 @@ type AppShellProps = {
     | "busqueda"
     | "validar"
     | "normas"
+    | "archivo"
     | "analizar"
     | "necesidades"
     | "expedientes"
+    | "expedientes-archivo"
     | "documentos"
     | "comparar"
     | "historial"
@@ -59,6 +62,7 @@ const navigation = [
       { href: "/chat", icon: Bot, id: "chat", label: "Chat con fuentes", adminOnly: false },
       { href: "/busqueda", icon: FileSearch, id: "busqueda", label: "Búsqueda documental", adminOnly: false },
       { href: "/normas", icon: Library, id: "normas", label: "Normas por artículo", adminOnly: false },
+      { href: "/archivo", icon: Archive, id: "archivo", label: "Archivo documental", adminOnly: false },
     ],
     label: "Consultar",
   },
@@ -74,6 +78,7 @@ const navigation = [
     items: [
       { href: "/necesidades", icon: ClipboardList, id: "necesidades", label: "Necesidades", adminOnly: false },
       { href: "/expedientes", icon: Briefcase, id: "expedientes", label: "Expedientes", adminOnly: false },
+      { href: "/expedientes-archivo", icon: Library, id: "expedientes-archivo", label: "Biblioteca expedientes", adminOnly: false },
       { href: "/contratos", icon: FileText, id: "contratos", label: "Contratos", adminOnly: false },
     ],
     label: "Trabajo",

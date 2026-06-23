@@ -6,7 +6,7 @@ describe("necesidades schema", () => {
     const r = necesidadCreateSchema.safeParse({ nombre: "Adquisición de equipos" });
     expect(r.success).toBe(true);
     if (r.success) {
-      expect(r.data.tipoContratacion).toBe("bienes");
+      expect(r.data.tipoObjeto).toBe("bienes");
     }
   });
 
@@ -15,12 +15,12 @@ describe("necesidades schema", () => {
   });
 
   it("solo admite los tipos de contratación de la Ley 32069", () => {
-    expect(necesidadCreateSchema.safeParse({ nombre: "Servicio X", tipoContratacion: "servicios" }).success).toBe(true);
-    expect(necesidadCreateSchema.safeParse({ nombre: "Servicio X", tipoContratacion: "otro" }).success).toBe(false);
+    expect(necesidadCreateSchema.safeParse({ nombre: "Servicio X", tipoObjeto: "servicios" }).success).toBe(true);
+    expect(necesidadCreateSchema.safeParse({ nombre: "Servicio X", tipoObjeto: "otro" }).success).toBe(false);
   });
 
   it("el update valida el estado de la necesidad", () => {
-    expect(necesidadUpdateSchema.safeParse({ status: "aprobada" }).success).toBe(true);
+    expect(necesidadUpdateSchema.safeParse({ status: "aprobado_area_usuaria" }).success).toBe(true);
     expect(necesidadUpdateSchema.safeParse({ status: "inexistente" }).success).toBe(false);
   });
 

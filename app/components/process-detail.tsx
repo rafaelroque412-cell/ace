@@ -37,6 +37,21 @@ type Process = {
   entity: string | null;
   status: string;
   summary: string | null;
+  
+  // Campos Ley 32069
+  valor_estimado: number | null;
+  moneda: string | null;
+  tipo_cambio: number | null;
+  certificacion_presupuestal: string | null;
+  sistema_contratacion: string | null;
+  modalidad_ejecucion: string | null;
+  formula_reajuste: string | null;
+  pluralidad_marcas: boolean | null;
+  resumen_ejecutivo: string | null;
+  autoridad_aprobacion: string | null;
+  delegacion_facultades: boolean | null;
+  doc_aprobacion_expediente: string | null;
+
   created_at: string;
   updated_at: string;
 };
@@ -96,6 +111,15 @@ const draftOptions = [
   { label: "Memorando", value: "memorando" },
   { label: "Informe de evaluación", value: "informe_evaluacion" },
 ];
+
+function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="fichaRow">
+      <span className="fichaLabel">{label}</span>
+      <span className="fichaValue">{value !== null && value !== undefined && String(value).trim() !== "" ? String(value) : "—"}</span>
+    </div>
+  );
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" });
@@ -456,6 +480,25 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
       <PhaseTracker canManage={permisos.upload} instruccion={instruccion} onSelectKind={prepareUpload} />
 
       <div className="processDetailGrid">
+        <section className="processPanel">
+          <div className="processPanelHead">
+            <ScanSearch size={17} />
+            <strong>Datos Técnicos y Mercado (Ley 32069)</strong>
+          </div>
+          <div className="fichaGrid">
+            <Row label="Valor Estimado / Ref." value={process.valor_estimado ? `S/ ${process.valor_estimado.toLocaleString("es-PE")}` : null} />
+            <Row label="Moneda" value={process.moneda} />
+            <Row label="Tipo de cambio" value={process.tipo_cambio} />
+            <Row label="Certificación Presupuestal" value={process.certificacion_presupuestal} />
+            <Row label="Sistema de contratación" value={process.sistema_contratacion ? process.sistema_contratacion.replace("_", " ").toUpperCase() : null} />
+            <Row label="Modalidad de ejecución" value={process.modalidad_ejecucion ? process.modalidad_ejecucion.replace(/_/g, " ").toUpperCase() : null} />
+            <Row label="Pluralidad de marcas" value={process.pluralidad_marcas != null ? (process.pluralidad_marcas ? "SÍ" : "NO") : null} />
+            <Row label="Fórmula de reajuste" value={process.formula_reajuste} />
+            <Row label="Resumen ejecutivo" value={process.resumen_ejecutivo} />
+            <Row label="Aprobación del Expediente" value={process.autoridad_aprobacion ? `${process.autoridad_aprobacion.toUpperCase()} - Doc: ${process.doc_aprobacion_expediente ?? ""}` : null} />
+          </div>
+        </section>
+
         <section className="processPanel" ref={uploadSectionRef}>
           <div className="processPanelHead">
             <UploadCloud size={17} />

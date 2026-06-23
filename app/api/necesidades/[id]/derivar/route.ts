@@ -23,7 +23,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const [necesidades] = await Promise.all([
       supabaseUserRest<Necesidad[]>(
         auth.user.accessToken,
-        `necesidades?id=eq.${id}&select=id,codigo,nombre,tipo_contratacion,summary,status,process_id,entity`,
+        `necesidades?id=eq.${id}&select=id,codigo,nombre,tipo_objeto,summary,status,process_id,entidad`,
       ),
     ]);
     const necesidad = necesidades[0];
@@ -41,9 +41,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       {
         body: JSON.stringify({
           nomenclature,
-          object_type: necesidad.tipo_contratacion,
+          object_type: necesidad.tipo_objeto,
           procedure_type: payload.procedureType || null,
-          entity: necesidad.entity || auth.user.entity || null,
+          entity: necesidad.entidad || auth.user.entity || null,
           status: "actuaciones_preparatorias",
           summary: necesidad.summary || null,
           necesidad_id: necesidad.id,
@@ -54,7 +54,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
 
     await supabaseUserRest(auth.user.accessToken, `necesidades?id=eq.${id}`, {
-      body: JSON.stringify({ status: "derivada", process_id: process.id }),
+      body: JSON.stringify({ status: "incorporado_cmn", process_id: process.id }),
       method: "PATCH",
     });
 

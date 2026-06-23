@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: maxPdfSizeBytes,
   },
+  allowedDevOrigins: ['192.168.2.225', 'localhost'],
   poweredByHeader: false,
 };
 

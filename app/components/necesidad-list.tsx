@@ -3,14 +3,28 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ClipboardList, FileStack, Loader, Plus } from "lucide-react";
-import { OBJECT_TYPES, necesidadStatusLabel, objectTypeLabel } from "@/lib/legal-taxonomy";
+import { OBJECT_TYPES, objectTypeLabel } from "@/lib/legal-taxonomy";
 import { useSettingsCatalog } from "./use-settings-catalog";
 
-type Necesidad = {
+const NECESIDAD_STATUSES_EXTENDED = [
+  { value: "borrador", label: "Borrador" },
+  { value: "pendiente_revision", label: "Pendiente de Revisión" },
+  { value: "observado", label: "Observado" },
+  { value: "subsanado", label: "Subsanado" },
+  { value: "aprobado_area_usuaria", label: "Aprobado Área Usuaria" },
+  { value: "enviado_dec", label: "Enviado a la DEC" },
+  { value: "incorporado_cmn", label: "Incorporado al CMN (Derivado)" },
+];
+
+function statusLabel(val: string) {
+  return NECESIDAD_STATUSES_EXTENDED.find((s) => s.value === val)?.label ?? val;
+}
+
+type NecesidadExt = {
   id: string;
   codigo: string | null;
   nombre: string;
-  tipo_contratacion: string;
+  tipo_objeto: string;
   area_usuaria: string | null;
   status: string;
   created_at: string;
@@ -18,14 +32,14 @@ type Necesidad = {
 
 export function NecesidadList({ canManage }: { canManage: boolean }) {
   const { entity: configuredEntity } = useSettingsCatalog();
-  const [necesidades, setNecesidades] = useState<Necesidad[]>([]);
+  const [necesidades, setNecesidades] = useState<NecesidadExt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [nombre, setNombre] = useState("");
-  const [tipoContratacion, setTipoContratacion] = useState("bienes");
+  const [tipoObjeto, setTipoObjeto] = useState("bienes");
   const [finalidadPublica, setFinalidadPublica] = useState("");
   const [objetivo, setObjetivo] = useState("");
   const [centroCosto, setCentroCosto] = useState("");
@@ -67,9 +81,9 @@ export function NecesidadList({ canManage }: { canManage: boolean }) {
       const response = await fetch("/api/necesidades", {
         body: JSON.stringify({
           nombre,
-          tipoContratacion,
+          tipoObjeto,
           finalidadPublica,
-          objetivo,
+          objetivoContratacion: objetivo,
           centroCosto,
           metaPresupuestal,
           proyectoInversion,
@@ -105,7 +119,7 @@ export function NecesidadList({ canManage }: { canManage: boolean }) {
       <div className="processHeader">
         <div>
           <h2>Necesidades</h2>
-          <p>Registro de necesidades del área usuaria. Cada una genera su Ficha y código único y luego se deriva a expediente.</p>
+          <p>Registro de necesidades del área usuaria para el CMN.</p>
         </div>
         {canManage ? (
           <button className="primaryButton" onClick={() => setShowForm((current) => !current)} type="button">
@@ -122,8 +136,8 @@ export function NecesidadList({ canManage }: { canManage: boolean }) {
             <input onChange={(event) => setNombre(event.target.value)} placeholder="Adquisición de equipos de cómputo" value={nombre} />
           </label>
           <label>
-            <span>Tipo de contratación</span>
-            <select onChange={(event) => setTipoContratacion(event.target.value)} value={tipoContratacion}>
+            <span>Tipo de objeto</span>
+            <select onChange={(event) => setTipoObjeto(event.target.value)} value={tipoObjeto}>
               {OBJECT_TYPES.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
@@ -182,11 +196,11 @@ export function NecesidadList({ canManage }: { canManage: boolean }) {
             <Link className="processCard" href={`/necesidades/${necesidad.id}`} key={necesidad.id}>
               <div className="processCardTop">
                 <FileStack size={18} />
-                <span className={`processStatus status-${necesidad.status}`}>{necesidadStatusLabel(necesidad.status)}</span>
+                <span className={`processStatus status-${necesidad.status}`}>{statusLabel(necesidad.status)}</span>
               </div>
               <strong>{necesidad.nombre}</strong>
               <small>
-                {necesidad.codigo ?? "Sin código"} · {objectTypeLabel(necesidad.tipo_contratacion)}
+                {necesidad.codigo ?? "Sin código"} · {necesidad.tipo_objeto ? objectTypeLabel(necesidad.tipo_objeto) : "Sin tipo"}
               </small>
               <div className="processCardMeta">
                 <span>{necesidad.area_usuaria ?? configuredEntity?.name ?? "Sin área"}</span>

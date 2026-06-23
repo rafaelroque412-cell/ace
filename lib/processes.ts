@@ -4,12 +4,30 @@ import { z } from "zod";
 export type ProcurementProcess = {
   id: string;
   nomenclature: string;
-  object_type: "bienes" | "servicios" | "obras" | "consultoria";
+  object_type: "bienes" | "servicios" | "obras" | "consultoria_obra";
   procedure_type: string | null;
   amount: number | null;
   entity: string | null;
   status: string;
   summary: string | null;
+  necesidad_id: string | null;
+
+  // Campos Ley 32069 (Actuaciones Preparatorias / Mercado)
+  valor_estimado: number | null;
+  moneda: string | null;
+  tipo_cambio: number | null;
+  certificacion_presupuestal: string | null;
+  sistema_contratacion: "suma_alzada" | "precios_unitarios" | "esquema_mixto" | "tarifas" | "porcentajes" | "honorario_fijo" | null;
+  modalidad_ejecucion: "llave_en_mano" | "concurso_oferta" | null;
+  formula_reajuste: string | null;
+  pluralidad_marcas: boolean | null;
+  resumen_ejecutivo: string | null;
+
+  // Aprobacion
+  autoridad_aprobacion: "titular" | "aga" | null;
+  delegacion_facultades: boolean | null;
+  doc_aprobacion_expediente: string | null;
+
   created_at: string;
   updated_at: string;
 };
@@ -31,20 +49,22 @@ export type ProcessDocument = {
   created_at: string;
 };
 
+const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
+
 export const processCreateSchema = z.object({
   nomenclature: z.string().trim().min(3).max(200),
-  objectType: z.enum(["bienes", "servicios", "obras", "consultoria"]).default("servicios"),
-  procedureType: z.string().trim().max(80).optional().or(z.literal("")),
-  amount: z.coerce.number().nonnegative().optional().or(z.literal("")),
-  entity: z.string().trim().max(160).optional().or(z.literal("")),
-  summary: z.string().trim().max(2000).optional().or(z.literal("")),
+  objectType: z.enum(["bienes", "servicios", "obras", "consultoria_obra"]).default("servicios"),
+  procedureType: optionalText(80),
+  amount: z.coerce.number().nonnegative().optional(),
+  entity: optionalText(160),
+  summary: optionalText(2000),
 });
 
 export const processUpdateSchema = z.object({
   nomenclature: z.string().trim().min(3).max(200).optional(),
-  procedureType: z.string().trim().max(80).optional(),
+  procedureType: optionalText(80),
   amount: z.coerce.number().nonnegative().optional(),
-  entity: z.string().trim().max(160).optional(),
+  entity: optionalText(160),
   status: z
     .enum([
       "necesidad",
@@ -61,7 +81,22 @@ export const processUpdateSchema = z.object({
       "archivo",
     ])
     .optional(),
-  summary: z.string().trim().max(2000).optional(),
+  summary: optionalText(2000),
+  
+  // Campos Ley 32069
+  valorEstimado: z.coerce.number().nonnegative().optional(),
+  moneda: optionalText(10),
+  tipoCambio: z.coerce.number().nonnegative().optional(),
+  certificacionPresupuestal: optionalText(120),
+  sistemaContratacion: z.enum(["suma_alzada", "precios_unitarios", "esquema_mixto", "tarifas", "porcentajes", "honorario_fijo"]).optional().nullable(),
+  modalidadEjecucion: z.enum(["llave_en_mano", "concurso_oferta"]).optional().nullable(),
+  formulaReajuste: optionalText(2000),
+  pluralidadMarcas: z.boolean().optional().nullable(),
+  resumenEjecutivo: optionalText(4000),
+
+  autoridadAprobacion: z.enum(["titular", "aga"]).optional().nullable(),
+  delegacionFacultades: z.boolean().optional().nullable(),
+  docAprobacionExpediente: optionalText(120),
 });
 
 export const processDocKinds = [
@@ -75,6 +110,7 @@ export const processDocKinds = [
   "ee_tt",
   "informe",
   "carta",
+  "cotizacion",
   "generado",
   "otros",
 ] as const;

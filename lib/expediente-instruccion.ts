@@ -326,5 +326,6 @@ export function instruirExpediente(input: {
     progreso: relevantes > 0 ? fasesCompletas / relevantes : 0,
     alertasSecuencia: detectarAlertasSecuencia(documents, evaluacionesCount),
     desierto: esDesierto,
+    archivado: input.status === "archivo",
   };
 }

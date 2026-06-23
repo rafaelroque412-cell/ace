@@ -10248,3 +10248,15 @@ textarea:focus,
   background: #fff1ef;
   border-color: #e0978f;
 }
+
+/* Biblioteca de expedientes archivados: resumen de ubicacion fisica */
+.expedienteUbicacion {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #b45309;
+  font-weight: 500;
+}
+.expedienteUbicacion svg {
+  flex-shrink: 0;
+}

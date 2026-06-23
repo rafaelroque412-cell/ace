@@ -315,7 +315,7 @@ function fallbackRisks(input: {
   const hasOffer = docs.some((document) => document.kind === "oferta");
   const rules = evaluateProcurementRules({
     amount: input.process.amount ?? "",
-    objectType: input.process.object_type,
+    objectType: input.process.object_type as "bienes" | "servicios" | "obras" | "consultoria",
     procedureType: input.process.procedure_type ?? "",
   });
   const items: ProcessRiskItem[] = [];

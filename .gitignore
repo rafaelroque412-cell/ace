@@ -22,5 +22,9 @@ Thumbs.db
 
 # Corpus PDFs y artefactos sueltos (van en Storage, no en git)
 /normas/
+/documentos/
 /SDD nuevo.pdf
 /Nuevo Documento de Microsoft Word.docx
+
+# Logs del servidor de desarrollo
+dev-server.log
