@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 import { maxPdfSizeBytes } from "./lib/upload-limits";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   experimental: {
     proxyClientMaxBodySize: maxPdfSizeBytes,
   },
