@@ -4,6 +4,9 @@ out
 dist
 build
 .vercel
+.netlify
+.netlify-cache
+.netlify-deploy
 .env
 .env.local
 .env.*.local
@@ -28,3 +31,8 @@ Thumbs.db
 
 # Logs del servidor de desarrollo
 dev-server.log
+
+# Tests de Playwright
+test-results/
+playwright-report/
+playwright/.cache/
