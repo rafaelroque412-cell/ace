@@ -4,8 +4,6 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NPM_FLAGS = "--legacy-peer-deps"
-  NETLIFY_NEXT_PLUGIN_SKIP = "false"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
@@ -16,11 +14,6 @@ directory = "netlify/functions"
 
 [functions."indexing-drain"]
 schedule = "*/5 * * * *"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/included"
-  status = 200
 
 [[headers]]
   for = "/*"
