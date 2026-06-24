@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { requireDec, requireUser } from "@/lib/auth";
+import { requireCapability, requireUser } from "@/lib/auth";
 import { type ProcessDocument, processDocKinds } from "@/lib/processes";
+import { reconcileProcessStatus } from "@/lib/process-status";
 import { extractPdfPlainText } from "@/lib/pdf-processing";
 import {
   downloadStorageObject,
@@ -36,7 +37,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.upload");
   if ("error" in auth) {
     return auth.error;
   }
@@ -87,7 +88,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         entityId: linked.id,
         entityType: "process_document",
       });
-      return NextResponse.json({ document: linked, linked: true }, { status: 201 });
+      const advancedTo = await reconcileProcessStatus(auth.user.accessToken, id);
+      return NextResponse.json({ document: linked, linked: true, statusAdvancedTo: advancedTo }, { status: 201 });
     }
 
     const file = formData.get("file");
@@ -139,6 +141,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       entityType: "process_document",
     });
 
+    const advancedTo = await reconcileProcessStatus(auth.user.accessToken, id);
+
     // Extrae el texto en segundo plano (descargando de Storage para evitar el bug
     // de corrupcion del buffer del File). NO va a Pinecone: no es corpus.
     after(async () => {
@@ -169,7 +173,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
     });
 
-    return NextResponse.json({ document, processing: true }, { status: 202 });
+    return NextResponse.json({ document, processing: true, statusAdvancedTo: advancedTo }, { status: 202 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo subir el documento" },

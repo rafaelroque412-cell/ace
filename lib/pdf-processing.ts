@@ -44,7 +44,7 @@ const unusableOcrPatterns = [
   "i cannot process",
 ];
 
-type ExtractedPdfText = {
+export type ExtractedPdfText = {
   extractionMethod: "pdf-text" | "openai-ocr";
   ocrPartial: boolean;
   pageCount: number;
@@ -52,7 +52,7 @@ type ExtractedPdfText = {
   text: string;
 };
 
-type TextChunk = {
+export type TextChunk = {
   article: string | null;
   content: string;
   end: number;
@@ -134,13 +134,44 @@ function detectSectionTitle(text: string) {
   return heading?.slice(0, 180) ?? null;
 }
 
-function detectDocumentNumber(title: string, text: string) {
-  const source = `${title}\n${text.slice(0, 5000)}`;
+// Token de numero de norma: soporta "32069", "009-2025-EF" y el formato de
+// opiniones/directivas/resoluciones con prefijo de letra y anio ("D026-2025/DTN",
+// "000027-2025-DTN", "0001-2026-EF/54.01").
+const normNumberToken = "[A-Za-z]?[0-9]{1,6}(?:-[0-9]{4})?(?:[-/][A-Za-z0-9.][A-Za-z0-9/.-]*)?";
+
+const documentTypeKeyword: Record<string, string> = {
+  ley: "ley",
+  reglamento: "decreto\\s+supremo|reglamento",
+  directiva: "directiva",
+  opinion: "opini[oó]n",
+  resolucion: "resoluci[oó]n",
+};
+
+function detectDocumentNumber(title: string, text: string, documentType?: string) {
+  const source = `${title}\n${text.slice(0, 6000)}`;
+
+  // 1) Patron del PROPIO tipo del documento primero, para no capturar una norma
+  //    de otro tipo referenciada en el cuerpo (p. ej. una Ley citada dentro de
+  //    una Opinion). El titulo va al inicio del source, asi que su numero gana.
+  const keyword = documentType ? documentTypeKeyword[documentType] : undefined;
+  if (keyword) {
+    const specific = source.match(
+      new RegExp(`\\b(?:${keyword})\\s*[-]?\\s*(?:n(?:\\.|°|º|ro)?\\s*)?(${normNumberToken})`, "i"),
+    );
+    if (specific?.[1]) {
+      return specific[1].replace(/[.,;:]+$/, "");
+    }
+  }
+
+  // 2) Fallback generico (cualquier tipo de norma).
   const match = source.match(
-    /\b(?:ley|decreto\s+supremo|directiva|opini[oó]n|resoluci[oó]n)\s*(?:n(?:\.|°|º|ro)?\s*)?([0-9]{1,5}(?:-[0-9]{4})?(?:-[A-Z/.-]+)?)/i,
+    new RegExp(
+      `\\b(?:ley|decreto\\s+supremo|directiva|opini[oó]n|resoluci[oó]n)\\s*[-]?\\s*(?:n(?:\\.|°|º|ro)?\\s*)?(${normNumberToken})`,
+      "i",
+    ),
   );
 
-  return match?.[1] ?? null;
+  return match?.[1] ? match[1].replace(/[.,;:]+$/, "") : null;
 }
 
 function uniqueLimited(values: string[], limit: number) {
@@ -383,7 +414,7 @@ function getMaxChunksPerDocument() {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function chunkPages(pages: Array<{ pageNumber: number; text: string }>) {
+export function chunkPages(pages: Array<{ pageNumber: number; text: string }>) {
   const chunks: TextChunk[] = [];
   const maxChunksPerDocument = getMaxChunksPerDocument();
   let buffer = "";
@@ -584,6 +615,65 @@ function segmentArticlesFromPages(pages: Array<{ pageNumber: number; text: strin
   return articles;
 }
 
+// Chunking POR ARTICULO: usa los segmentos de articulo como unidad de fragmento
+// (en vez de cortes por tamaño). Cada articulo coherente -> un embedding, con su
+// numero/pagina exactos => mejor precision de recuperacion y citas limpias. Los
+// articulos muy largos se sub-dividen en partes <= chunkSize conservando el
+// numero de articulo y la seccion. Solo para normas con estructura de articulos;
+// el resto (bases, resoluciones, contratos) sigue usando chunkPages.
+function chunkByArticles(segments: ArticleSegment[]): TextChunk[] {
+  const chunks: TextChunk[] = [];
+  const maxChunksPerDocument = getMaxChunksPerDocument();
+
+  function push(content: string, segment: ArticleSegment) {
+    const rawChunk = content.trim();
+    if (rawChunk.length <= 80) {
+      return;
+    }
+    if (maxChunksPerDocument && chunks.length >= maxChunksPerDocument) {
+      throw new Error(
+        `El PDF requiere mas de ${maxChunksPerDocument} fragmentos para indexarse completo. Aumenta PDF_MAX_CHUNKS_PER_DOCUMENT o quita ese limite.`,
+      );
+    }
+    chunks.push({
+      article: segment.articleNumber,
+      content: rawChunk,
+      end: 0,
+      index: chunks.length,
+      pageEnd: segment.pageEnd,
+      pageStart: segment.pageStart,
+      sectionTitle: segment.sectionTitle,
+      start: 0,
+    });
+  }
+
+  for (const segment of segments) {
+    const content = segment.content.trim();
+
+    // Articulo corto/medio: un solo fragmento.
+    if (content.length <= Math.floor(chunkSize * 1.3)) {
+      push(content, segment);
+      continue;
+    }
+
+    // Articulo largo: sub-dividir por frontera de oracion, conservando el articulo.
+    let offset = 0;
+    while (offset < content.length) {
+      const window = content.slice(offset, offset + chunkSize);
+      let cut = window.length;
+      if (offset + chunkSize < content.length) {
+        const sentence = window.lastIndexOf(". ");
+        const newline = window.lastIndexOf("\n");
+        cut = Math.max(sentence, newline, Math.floor(chunkSize * 0.6));
+      }
+      push(content.slice(offset, offset + cut), segment);
+      offset += Math.max(cut, Math.floor(chunkSize * 0.6));
+    }
+  }
+
+  return chunks;
+}
+
 function buildEmbeddingText(input: {
   article: string | null;
   content: string;
@@ -725,7 +815,7 @@ Alcance:
   }
 }
 
-async function extractPdfText(file: File): Promise<ExtractedPdfText> {
+export async function extractPdfText(file: File): Promise<ExtractedPdfText> {
   const buffer = await readFileBytes(file);
   const pageTexts: Array<{ pageNumber: number; text: string }> = [];
   let pageNumber = 0;
@@ -1035,8 +1125,15 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       );
     }
 
-    const chunks = chunkPages(extracted.pages);
     const articleSegments = segmentArticlesFromPages(extracted.pages);
+    // Chunking por articulo SOLO si la estructura de articulos cubre la mayor
+    // parte del texto (leyes, reglamentos, directivas). Si los "articulos" son
+    // pocos y cubren poco (p. ej. Bases con 3 numerales en 59 paginas), se usa el
+    // corte por tamaño para no perder contenido.
+    const articleCoverage = articleSegments.reduce((sum, segment) => sum + segment.content.length, 0);
+    const useArticleChunks =
+      articleSegments.length >= 3 && text.length > 0 && articleCoverage >= text.length * 0.5;
+    const chunks = useArticleChunks ? chunkByArticles(articleSegments) : chunkPages(extracted.pages);
     const structured = extractStructuredLegalMetadata(text);
     const insights = await analyzeDocumentWithAi(text);
     const userDocumentType = document.document_type;
@@ -1047,10 +1144,18 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
     const sourceEntity = document.source_entity ?? insights.sourceEntity ?? structured.issuer ?? null;
     const contentHash = hashText(text);
     const pineconeConfig = getPineconeConfig();
+    const detectedNumber = detectDocumentNumber(document.title, text, documentType);
+    // En opiniones la IA suele capturar una norma referenciada (p. ej. "Ley
+    // 27269") en vez del numero de la propia opinion; por eso aqui la deteccion
+    // deterministica (que lee el numero del titulo/encabezado) tiene prioridad.
     const documentNumber =
-      getInsightString(insights, "number") ??
-      getMetadataString(document.metadata, "number") ??
-      detectDocumentNumber(document.title, text);
+      documentType === "opinion"
+        ? detectedNumber ??
+          getInsightString(insights, "number") ??
+          getMetadataString(document.metadata, "number")
+        : getInsightString(insights, "number") ??
+          getMetadataString(document.metadata, "number") ??
+          detectedNumber;
     // scopeProcessType garantiza que Ley/Reglamento queden en "todos" y las
     // Opiniones en general, sin que la inferencia de IA pueda sobrescribirlo.
     const processType = scopeProcessType(

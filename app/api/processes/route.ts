@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDec, requireUser } from "@/lib/auth";
+import { requireCapability, requireUser } from "@/lib/auth";
 import { type ProcurementProcess, processCreateSchema } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.manage");
   if ("error" in auth) {
     return auth.error;
   }

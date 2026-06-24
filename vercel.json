@@ -2,7 +2,8 @@
   "framework": "nextjs",
   "regions": ["iad1"],
   "env": {
-    "PINECONE_INDEX_NAME": "ace-openai"
+    "PINECONE_INDEX_NAME": "ace-openai",
+    "PINECONE_ARCHIVO_NAMESPACE": "archivo-municipal"
   },
   "crons": [
     {

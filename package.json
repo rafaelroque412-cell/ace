@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Aplicacion web juridica con IA para Ley 32069, OECE, documentos y contratos.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -33,6 +36,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.13.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

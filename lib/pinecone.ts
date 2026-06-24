@@ -217,51 +217,47 @@ function buildVectorMetadata(record: PineconeRecord): Record<string, string | nu
   return metadata;
 }
 
-const defaultRerankModel = "bge-reranker-v2-m3";
 const maxRerankDocuments = 30;
+const defaultCohereRerankModel = "rerank-v3.5";
 
 function getRerankConfig() {
   return {
-    enabled: (process.env.PINECONE_RERANK_ENABLED ?? "true") !== "false",
-    model: process.env.PINECONE_RERANK_MODEL || defaultRerankModel,
+    enabled: (process.env.RERANK_ENABLED ?? process.env.PINECONE_RERANK_ENABLED ?? "true") !== "false",
+    cohereApiKey: process.env.COHERE_API_KEY,
+    cohereModel: process.env.COHERE_RERANK_MODEL || defaultCohereRerankModel,
   };
 }
 
 type RerankInput = { id: string; text: string };
 
-// Reordena documentos por relevancia con un modelo de reranking dedicado
-// (inference API de Pinecone). Devuelve [{ id, score }] ordenado; si falla o
-// esta deshabilitado, devuelve null para que el llamador conserve su orden.
+// Reordena documentos por relevancia con el reranker dedicado de Cohere (rapido,
+// ~100ms; reemplaza el reranker integrado de Pinecone, que tiene tope mensual).
+// Si no hay COHERE_API_KEY o falla, devuelve null y el llamador conserva su orden
+// (ordenamiento heuristico por evidenceQuality: semantico + lexical + jerarquia).
 export async function rerankWithModel(
   query: string,
   documents: RerankInput[],
   topN?: number,
 ): Promise<Array<{ id: string; score: number }> | null> {
-  const { enabled, model } = getRerankConfig();
+  const { enabled, cohereApiKey, cohereModel } = getRerankConfig();
 
-  if (!enabled || documents.length === 0) {
+  if (!enabled || !cohereApiKey || documents.length === 0) {
     return null;
   }
 
-  const { apiKey } = getPineconeConfig();
   const pool = documents.slice(0, maxRerankDocuments);
 
   try {
-    const response = await fetch("https://api.pinecone.io/rerank", {
+    const response = await fetch("https://api.cohere.com/v2/rerank", {
       body: JSON.stringify({
-        documents: pool.map((document) => ({ text: document.text.slice(0, 4000) })),
-        model,
-        parameters: { truncate: "END" },
+        model: cohereModel,
         query: query.slice(0, 4000),
-        rank_fields: ["text"],
-        return_documents: false,
+        documents: pool.map((document) => document.text.slice(0, 4000)),
         top_n: Math.min(topN ?? pool.length, pool.length),
       }),
       headers: {
-        Accept: "application/json",
-        "Api-Key": apiKey,
+        Authorization: `Bearer ${cohereApiKey}`,
         "Content-Type": "application/json",
-        "X-Pinecone-API-Version": pineconeApiVersion,
       },
       method: "POST",
     });
@@ -271,12 +267,12 @@ export async function rerankWithModel(
     }
 
     const payload = (await response.json()) as {
-      data?: Array<{ index: number; score: number }>;
+      results?: Array<{ index: number; relevance_score: number }>;
     };
 
-    return (payload.data ?? [])
+    return (payload.results ?? [])
       .filter((hit) => typeof hit.index === "number" && pool[hit.index])
-      .map((hit) => ({ id: pool[hit.index].id, score: hit.score }));
+      .map((hit) => ({ id: pool[hit.index].id, score: hit.relevance_score }));
   } catch {
     return null;
   }
@@ -306,12 +302,22 @@ function validatePineconeRecords(records: PineconeRecord[]) {
   }
 }
 
+// El host del indice es estable, pero describePineconeIndex se llamaba en cada
+// search/upsert/delete (un round-trip extra a la API por operacion). Cacheamos el
+// descriptor en memoria del modulo con TTL para no pagar esa latencia cada vez.
+const describeCacheTtlMs = 10 * 60 * 1000;
+let describeCache: { value: PineconeIndexInfo; expiresAt: number } | null = null;
+
 export async function describePineconeIndex(): Promise<PineconeIndexInfo> {
+  if (describeCache && describeCache.expiresAt > Date.now()) {
+    return describeCache.value;
+  }
+
   const { apiKey, indexName } = getPineconeConfig();
   const response = await fetch(`https://api.pinecone.io/indexes/${indexName}`, {
     headers: {
       "Api-Key": apiKey,
-      "X-Pinecone-API-Version": "2025-04",
+      "X-Pinecone-API-Version": pineconeApiVersion,
     },
     cache: "no-store",
   });
@@ -320,17 +326,21 @@ export async function describePineconeIndex(): Promise<PineconeIndexInfo> {
     throw new Error(`Pinecone describe index ${response.status}: ${await response.text()}`);
   }
 
-  return (await response.json()) as PineconeIndexInfo;
+  const value = (await response.json()) as PineconeIndexInfo;
+  describeCache = { value, expiresAt: Date.now() + describeCacheTtlMs };
+  return value;
 }
 
-export async function upsertTextRecords(records: PineconeRecord[]) {
+export async function upsertTextRecords(records: PineconeRecord[], namespaceOverride?: string) {
   if (records.length === 0) {
     return;
   }
 
   validatePineconeRecords(records);
 
-  const { apiKey, namespace } = getPineconeConfig();
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
   const index = await describePineconeIndex();
 
   // Embeddings con OpenAI (no con el modelo integrado de Pinecone).
@@ -382,14 +392,18 @@ export async function verifyDocumentIndexedInPinecone(input: {
   documentId: string;
   expectedMinRecords: number;
   query: string;
+  namespace?: string;
 }) {
   const maxAttempts = 5;
   let lastHitCount = 0;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const hits = await searchTextRecords(input.query, Math.min(10, Math.max(1, input.expectedMinRecords)), {
-      documentId: input.documentId,
-    }).catch(() => []);
+    const hits = await searchTextRecords(
+      input.query,
+      Math.min(10, Math.max(1, input.expectedMinRecords)),
+      { documentId: input.documentId },
+      input.namespace,
+    ).catch(() => []);
 
     lastHitCount = hits.length;
 
@@ -411,8 +425,15 @@ export async function verifyDocumentIndexedInPinecone(input: {
   };
 }
 
-export async function searchTextRecords(query: string, topK = 6, filters?: SearchFilters) {
-  const { apiKey, namespace } = getPineconeConfig();
+export async function searchTextRecords(
+  query: string,
+  topK = 6,
+  filters?: SearchFilters,
+  namespaceOverride?: string,
+) {
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
   const index = await describePineconeIndex();
   const filter = compactFilter(filters);
   const [vector] = await embedTexts([query]);
@@ -450,12 +471,14 @@ export async function searchTextRecords(query: string, topK = 6, filters?: Searc
   })) as unknown as Array<PineconeSearchHit & Record<string, unknown>>;
 }
 
-export async function deleteRecords(ids: string[]) {
+export async function deleteRecords(ids: string[], namespaceOverride?: string) {
   if (ids.length === 0) {
     return { deleted: 0 };
   }
 
-  const { apiKey, namespace } = getPineconeConfig();
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
   const index = await describePineconeIndex();
   const response = await fetch(`https://${index.host}/vectors/delete`, {
     body: JSON.stringify({

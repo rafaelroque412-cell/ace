@@ -49,13 +49,41 @@ export const OBJECT_TYPES: TaxonomyOption[] = [
   { label: "Consultoría", value: "consultoria" },
 ];
 
+// Estados = etapas del ciclo de vida de la contratación (Ley 32069), alineados a
+// CICLO_CONTRATACION en lib/contratacion-modulos.ts. "desierto" es salida alterna.
 export const PROCESS_STATUSES: TaxonomyOption[] = [
-  { label: "En preparación", value: "en_preparacion" },
-  { label: "En evaluación", value: "en_evaluacion" },
-  { label: "Otorgado", value: "otorgado" },
+  { label: "Necesidad", value: "necesidad" },
+  { label: "Actuaciones preparatorias", value: "actuaciones_preparatorias" },
+  { label: "Expediente", value: "expediente" },
+  { label: "Aprobación AGA", value: "aprobacion_aga" },
+  { label: "Selección", value: "seleccion" },
+  { label: "Buena pro", value: "buena_pro" },
   { label: "Desierto", value: "desierto" },
-  { label: "En ejecución", value: "en_ejecucion" },
-  { label: "Cerrado", value: "cerrado" },
+  { label: "Contrato", value: "contrato" },
+  { label: "Ejecución", value: "ejecucion" },
+  { label: "Conformidad", value: "conformidad" },
+  { label: "Liquidación", value: "liquidacion" },
+  { label: "Archivo", value: "archivo" },
+];
+
+// Estados de una Necesidad (Módulo 1).
+export const NECESIDAD_STATUSES: TaxonomyOption[] = [
+  { label: "Borrador", value: "borrador" },
+  { label: "Registrada", value: "registrada" },
+  { label: "Observada", value: "observada" },
+  { label: "Aprobada", value: "aprobada" },
+  { label: "Derivada a expediente", value: "derivada" },
+];
+
+// Clases de documento que adjunta una Necesidad (Módulo 1).
+export const NECESIDAD_DOC_KINDS: TaxonomyOption[] = [
+  { label: "Requerimiento firmado", value: "requerimiento" },
+  { label: "Términos de referencia", value: "tdr" },
+  { label: "Especificaciones técnicas", value: "ee_tt" },
+  { label: "Expediente técnico", value: "expediente_tecnico" },
+  { label: "Memoria descriptiva", value: "memoria_descriptiva" },
+  { label: "Informe de necesidad", value: "informe_necesidad" },
+  { label: "Otros", value: "otros" },
 ];
 
 export const PROCESS_DOC_KINDS: TaxonomyOption[] = [
@@ -78,6 +106,18 @@ const processTypeLabels = new Map(PROCESS_TYPES.map((item) => [item.value, item.
 const objectTypeLabels = new Map(OBJECT_TYPES.map((item) => [item.value, item.label]));
 const processStatusLabels = new Map(PROCESS_STATUSES.map((item) => [item.value, item.label]));
 const processDocKindLabels = new Map(PROCESS_DOC_KINDS.map((item) => [item.value, item.label]));
+const necesidadStatusLabels = new Map(NECESIDAD_STATUSES.map((item) => [item.value, item.label]));
+const necesidadDocKindLabels = new Map(NECESIDAD_DOC_KINDS.map((item) => [item.value, item.label]));
+
+export function necesidadStatusLabel(value?: string | null): string {
+  if (!value) return "Sin estado";
+  return necesidadStatusLabels.get(value) ?? value;
+}
+
+export function necesidadDocKindLabel(value?: string | null): string {
+  if (!value) return "Otros";
+  return necesidadDocKindLabels.get(value) ?? value;
+}
 
 export function objectTypeLabel(value?: string | null): string {
   if (!value) return "Sin objeto";

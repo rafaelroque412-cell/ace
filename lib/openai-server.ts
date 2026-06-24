@@ -16,3 +16,6 @@ export const pdfOcrModel = process.env.OPENAI_PDF_OCR_MODEL ?? "gpt-4o-mini";
 // de su cuota mensual). text-embedding-3-small = 1536 dimensiones.
 export const embeddingModel = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 export const embeddingDimensions = Number.parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS ?? "1536", 10);
+// Reranking con LLM (reemplaza el reranker integrado de Pinecone, que tiene tope
+// mensual). Modelo pequeño y rapido; corre con la misma cuota de OpenAI.
+export const rerankModel = process.env.OPENAI_RERANK_MODEL ?? "gpt-4o-mini";

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireDec } from "@/lib/auth";
+import { requireCapability } from "@/lib/auth";
 import { evaluateOfferForProcess, type ProcessDocumentWithText } from "@/lib/process-agents";
 import type { ProcurementProcess } from "@/lib/processes";
+import { reconcileProcessStatus } from "@/lib/process-status";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 90;
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.evaluate");
   if ("error" in auth) {
     return auth.error;
   }
@@ -64,7 +65,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       entityType: "procurement_process",
     });
 
-    return NextResponse.json({ evaluation, result });
+    const advancedTo = await reconcileProcessStatus(auth.user.accessToken, id);
+
+    return NextResponse.json({ evaluation, result, statusAdvancedTo: advancedTo });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo evaluar la oferta" },

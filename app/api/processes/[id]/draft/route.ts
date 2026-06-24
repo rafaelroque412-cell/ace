@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireDec } from "@/lib/auth";
-import { buildAdministrativeDraftDocx, draftKinds, type ProcessEvaluationResult, type ProcessRiskResult } from "@/lib/process-agents";
+import { requireCapability } from "@/lib/auth";
+import {
+  buildAdministrativeDraftDocx,
+  draftKinds,
+  type DraftDocumentRow,
+  type ProcessEvaluationResult,
+  type ProcessRiskResult,
+} from "@/lib/process-agents";
 import type { ProcurementProcess } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -37,7 +43,7 @@ function safeFileName(text: string) {
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireDec();
+  const auth = await requireCapability("expediente.draft");
   if ("error" in auth) {
     return auth.error;
   }
@@ -49,7 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   try {
-    const [processes, evaluations, risks] = await Promise.all([
+    const [processes, evaluations, risks, documents] = await Promise.all([
       supabaseUserRest<ProcurementProcess[]>(
         auth.user.accessToken,
         `procurement_processes?id=eq.${id}&select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,created_at,updated_at`,
@@ -61,6 +67,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       supabaseUserRest<RiskRow[]>(
         auth.user.accessToken,
         `process_risks?process_id=eq.${id}&select=items,model&order=created_at.desc&limit=1`,
+      ).catch(() => []),
+      supabaseUserRest<DraftDocumentRow[]>(
+        auth.user.accessToken,
+        `process_documents?process_id=eq.${id}&select=kind,title,bidder_name,created_at&order=created_at.asc`,
       ).catch(() => []),
     ]);
     const process = processes[0];
@@ -80,6 +90,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const riskResult = risks[0] ? { items: risks[0].items, model: risks[0].model ?? "stored-risks" } : null;
     const buffer = await buildAdministrativeDraftDocx({
       draftKind: payload.data.draftKind as Parameters<typeof buildAdministrativeDraftDocx>[0]["draftKind"],
+      documents,
       evaluation,
       process,
       risks: riskResult,

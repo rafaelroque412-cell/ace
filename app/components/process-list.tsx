@@ -177,7 +177,7 @@ export function ProcessList({ canManage }: { canManage: boolean }) {
         <div className="emptyState">
           <Briefcase size={20} />
           <p>
-            Aún no hay expedientes. {canManage ? "Crea uno con “Nuevo expediente”." : "Crear y gestionar expedientes requiere rol DEC o administrador."}
+            Aún no hay expedientes. {canManage ? "Crea uno con “Nuevo expediente”." : "Crear y gestionar expedientes requiere un rol con gestión (DEC, AGA, Titular o administrador)."}
           </p>
         </div>
       ) : (

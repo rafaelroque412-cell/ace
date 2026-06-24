@@ -1,5 +1,6 @@
 import type { AppRole, SessionUser } from "./auth";
 import { PROCESS_TYPES, type TaxonomyOption } from "./legal-taxonomy";
+import { areasForRole } from "./permisos-contratacion";
 import { supabaseRest } from "./supabase-server";
 
 export type CatalogEntity = {
@@ -58,38 +59,6 @@ type ProcessTypeRow = {
   sort_order: number | null;
 };
 
-const rolePermissionMatrix: Record<AppRole, CatalogPermission[]> = {
-  admin: [
-    { area: "Consulta documental", scope: "Chat, busqueda, normas, historial y guardados." },
-    { area: "Expedientes", scope: "Crear, actualizar y gestionar expedientes institucionales." },
-    { area: "Biblioteca documental", scope: "Subir, reindexar y eliminar documentos del corpus." },
-    { area: "Analisis juridico", scope: "Revision legal, riesgos, informes y fundamento juridico." },
-    { area: "Validacion de procedimientos", scope: "Validar procedencia y fuentes; verificacion de corpus." },
-    { area: "Evaluacion IA", scope: "Banco de preguntas, corridas y feedback institucional." },
-    { area: "Monitoreo y auditoria", scope: "Metricas, auditoria, integraciones y verificacion operativa." },
-    { area: "Configuracion", scope: "Entidad, procesos, usuarios, roles y permisos." },
-  ],
-  area_usuaria: [
-    { area: "Consulta documental", scope: "Chat, busqueda, normas, historial y guardados." },
-    { area: "Validacion de procedimientos", scope: "Validar procedencia y fuentes." },
-  ],
-  consulta: [
-    { area: "Consulta documental", scope: "Chat, busqueda, normas, historial y guardados." },
-    { area: "Validacion de procedimientos", scope: "Validar procedencia y fuentes." },
-  ],
-  dec: [
-    { area: "Consulta documental", scope: "Chat, busqueda, normas, historial y guardados." },
-    { area: "Expedientes", scope: "Crear, actualizar y gestionar expedientes institucionales." },
-    { area: "Biblioteca documental", scope: "Subir, reindexar y eliminar documentos del corpus." },
-    { area: "Validacion de procedimientos", scope: "Validar procedencia y fuentes." },
-  ],
-  legal: [
-    { area: "Consulta documental", scope: "Chat, busqueda, normas, historial y guardados." },
-    { area: "Analisis juridico", scope: "Revision legal, riesgos, informes y fundamento juridico." },
-    { area: "Validacion de procedimientos", scope: "Validar procedencia y fuentes." },
-  ],
-};
-
 const emptyEntity: CatalogEntity = {
   address: "",
   executingUnit: "",
@@ -139,11 +108,11 @@ function processRowsToOptions(rows: ProcessTypeRow[]): CatalogProcessType[] {
 }
 
 function permissionsForUser(user: SessionUser): CatalogPermission[] {
-  return user.permissions.length > 0 ? user.permissions : rolePermissionMatrix[user.role];
+  return user.permissions.length > 0 ? user.permissions : areasForRole(user.role);
 }
 
 export function permissionsForRole(role: AppRole): CatalogPermission[] {
-  return rolePermissionMatrix[role];
+  return areasForRole(role);
 }
 
 export async function getSettingsCatalog(user: SessionUser): Promise<SettingsCatalog> {
