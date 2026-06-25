@@ -11618,14 +11618,6 @@ textarea:focus,
   font-weight: 500;
 }
 
-.formMessage:has-text("✗"),
-.formMessage:has-text("Error"),
-.formMessage:has-text("error") {
-  background: #fee2e2;
-  border-left-color: #dc2626;
-  color: #991b1b;
-}
-
 /* --- Document item hover state --- */
 .documentItem {
   transition: background 120ms ease, border-color 120ms ease;
