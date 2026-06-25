@@ -137,7 +137,11 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
           <button
             type="button"
             className="expTourClose"
-            onClick={onClose}
+            onClick={() => {
+              // Cerrar con X = descartar (no volver a mostrar)
+              onComplete?.();
+              onClose();
+            }}
             aria-label="Cerrar tutorial"
           >
             <X size={16} />
@@ -198,22 +202,39 @@ const TOUR_KEY = "exp-tour-completed-v1";
 
 export function useTour(steps: TourStep[], storageKey = TOUR_KEY) {
   const [open, setOpen] = useState(false);
+  // Inicializar desde localStorage de forma síncrona (solo en cliente)
+  const [hasCompleted, setHasCompleted] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(storageKey) === "true";
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
-    try {
-      const completed = window.localStorage.getItem(storageKey);
-      if (!completed) {
-        const timer = setTimeout(() => setOpen(true), 800);
-        return () => clearTimeout(timer);
-      }
-    } catch {
-      // Ignorar si localStorage no está disponible
-    }
-  }, [storageKey]);
+    if (hasCompleted) return;
+    const timer = setTimeout(() => setOpen(true), 800);
+    return () => clearTimeout(timer);
+  }, [hasCompleted, storageKey]);
 
   const complete = useCallback(() => {
     try {
       window.localStorage.setItem(storageKey, "true");
+      setHasCompleted(true);
+    } catch {
+      // Ignorar
+    }
+  }, [storageKey]);
+
+  const close = useCallback(() => setOpen(false), []);
+
+  // Cierra el tour Y lo marca como completado (para que no vuelva a aparecer)
+  const dismiss = useCallback(() => {
+    setOpen(false);
+    try {
+      window.localStorage.setItem(storageKey, "true");
+      setHasCompleted(true);
     } catch {
       // Ignorar
     }
@@ -223,9 +244,7 @@ export function useTour(steps: TourStep[], storageKey = TOUR_KEY) {
     setOpen(true);
   }, []);
 
-  const close = useCallback(() => setOpen(false), []);
-
-  return { open, close, complete, restart, Tour: OnboardingTour, steps };
+  return { open, close, dismiss, complete, restart, Tour: OnboardingTour, steps };
 }
 
 export function TourTrigger({ onClick }: { onClick: () => void }) {

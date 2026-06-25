@@ -401,7 +401,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         else if (replaceExp) setReplaceExp(null);
         else if (helpOpen) setHelpOpen(false);
         else if (confirm) closeConfirm();
-        else if (tour.open) tour.close();
+        else if (tour.open) tour.dismiss();
       }
     }
     window.addEventListener("keydown", onKey);
