@@ -18,7 +18,6 @@ import {
   Loader2,
   Lock,
   MapPin,
-  MessageCircle,
   Moon,
   Plus,
   RefreshCw,
@@ -30,15 +29,11 @@ import {
   UploadCloud,
   X,
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
   FileUp,
-  Undo2,
   History,
   BookOpen,
   Compass,
   PlusCircle,
-  LayoutGrid,
   Maximize2,
   Minimize2,
   ArrowRight,
@@ -296,7 +291,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const { density, toggle: toggleDensity } = useDensity();
 
   const [tab, setTab] = useState<"buscar" | "subir">(prefs.tab);
-  const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 50,
@@ -351,7 +345,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [file, setFile] = useState<File | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>(0);
   const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [reindexingId, setReindexingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -392,29 +385,11 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setConfirm(null);
   }
 
-  async function withConfirm(dialog: ConfirmDialog) {
-    return new Promise<boolean>((resolve) => {
-      setConfirm({
-        ...dialog,
-        onConfirm: async () => {
-          await dialog.onConfirm();
-          setConfirm(null);
-          resolve(true);
-        },
-      });
-      // El usuario puede cancelar con el botón Cancelar
-      window.requestAnimationFrame(() => {
-        // Marcar que se puede cancelar revisando si aún está montado
-      });
-    });
-  }
-
   const loadExpedientes = useCallback(async (page = 1) => {
     try {
       const result = await loadExpedientesAction({ page, limit: 50 });
       setExpedientes((result.expedientes as ExpedienteItem[]) ?? []);
       setPagination(result.pagination);
-      setCurrentPage(page);
     } catch {
       // Silenciar
     } finally {
@@ -643,10 +618,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
           key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,
       ).length;
       if (fieldsFound === 0) {
-        showToast(
-          "No se detectaron datos automaticos. Completa el formulario manualmente.",
-          "info",
-        );
+        const method = data.extractionMethod ?? "none";
+        const reason =
+          method === "none"
+            ? "El PDF no tiene texto legible (posible escaneado sin OCR)."
+            : method === "deterministic"
+            ? "Solo se detectaron datos básicos. La IA no devolvió campos semánticos."
+            : "La IA no devolvió campos. Verifica tu API key de OpenAI o intenta con otro PDF.";
+        showToast(reason, "warning");
       } else {
         showToast(
           `Se detectaron ${fieldsFound} campos. Revisa y aplica los datos.`,
@@ -656,7 +635,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "No se pudo extraer datos del PDF";
-      showToast(msg, "error");
+      showToast(`Error: ${msg}`, "error");
+      console.error("[expedientes] extractFromPdf fallo:", err);
     } finally {
       setExtracting(false);
     }
@@ -736,7 +716,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }
 
     setUploading(true);
-    setUploadMessage("Subiendo PDF...");
     setUploadProgress(0);
 
     try {
@@ -767,7 +746,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         const errorMsg =
           (result.body as { error?: string })?.error ?? "No se pudo subir el expediente";
         showToast(errorMsg, "error");
-        setUploadMessage(errorMsg);
         return;
       }
 
@@ -775,7 +753,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       setFile(null);
       setForm(EMPTY_FORM);
       setWizardStep(0);
-      setUploadMessage(null);
       setUploadProgress(0);
       showToast(
         `Expediente "${uploadedTitle}" subido. Se está procesando con OCR e indexando.`,

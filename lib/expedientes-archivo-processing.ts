@@ -87,6 +87,11 @@ ${text.slice(0, analysisTextLimit)}`,
       temperature: 0,
     });
     const parsed = parseJsonObject(response.output_text);
+    if (Object.keys(parsed).length === 0) {
+      console.warn(
+        `[expedientes] analyzeExpedienteWithAi: respuesta vacia o sin JSON. output_text len=${response.output_text?.length ?? 0}`,
+      );
+    }
     return {
       asunto: asText(parsed.asunto),
       materia: asText(parsed.materia),
@@ -94,7 +99,9 @@ ${text.slice(0, analysisTextLimit)}`,
       remitente: asText(parsed.remitente),
       destinatario: asText(parsed.destinatario),
     };
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[expedientes] analyzeExpedienteWithAi fallo: ${message}`);
     return { asunto: null, materia: null, resumen: null, remitente: null, destinatario: null };
   }
 }
@@ -327,44 +334,53 @@ export async function extractExpedienteInventory(
     extractionMethod: "none",
   };
 
+  let extracted;
   try {
-    const extracted = await extractPdfText(file);
-    const text = extracted.text ?? "";
+    extracted = await extractPdfText(file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[expedientes] extractPdfText fallo: ${message}`);
+    throw new Error(
+      `No se pudo leer el PDF. Verifica que no esté dañado o protegido con contraseña. (${message})`,
+    );
+  }
 
-    if (text.length < 50) {
-      return inventory;
-    }
+  const text = extracted.text ?? "";
 
-    // Extractores deterministas
-    const numero = extractExpedienteNumber(titleHint, text);
-    if (numero) {
-      inventory.numeroExpediente = numero;
-      inventory.extractionMethod = "deterministic";
-    }
-    const fecha = extractFecha(text);
-    if (fecha) {
-      inventory.fecha = fecha;
-      const yearMatch = fecha.match(/^(\d{4})-/);
-      if (yearMatch) {
-        inventory.anio = Number.parseInt(yearMatch[1], 10);
-      }
-      inventory.extractionMethod = "deterministic";
-    }
-
-    // IA para campos semanticos
-    const insights = await analyzeExpedienteWithAi(text);
-    if (insights.asunto) inventory.asunto = insights.asunto;
-    if (insights.materia) inventory.materia = insights.materia;
-    if (insights.remitente) inventory.remitente = insights.remitente;
-    if (insights.destinatario) inventory.destinatario = insights.destinatario;
-    if (insights.resumen) inventory.resumen = insights.resumen;
-
-    if (insights.asunto || insights.materia || insights.resumen) {
-      inventory.extractionMethod = inventory.extractionMethod === "deterministic" ? "hybrid" : "ai";
-    }
-
-    return inventory;
-  } catch {
+  if (text.length < 50) {
+    console.warn(
+      `[expedientes] PDF con poco texto (${text.length} chars). Probable escaneado sin OCR.`,
+    );
     return inventory;
   }
+
+  // Extractores deterministas
+  const numero = extractExpedienteNumber(titleHint, text);
+  if (numero) {
+    inventory.numeroExpediente = numero;
+    inventory.extractionMethod = "deterministic";
+  }
+  const fecha = extractFecha(text);
+  if (fecha) {
+    inventory.fecha = fecha;
+    const yearMatch = fecha.match(/^(\d{4})-/);
+    if (yearMatch) {
+      inventory.anio = Number.parseInt(yearMatch[1], 10);
+    }
+    inventory.extractionMethod = "deterministic";
+  }
+
+  // IA para campos semanticos
+  const insights = await analyzeExpedienteWithAi(text);
+  if (insights.asunto) inventory.asunto = insights.asunto;
+  if (insights.materia) inventory.materia = insights.materia;
+  if (insights.remitente) inventory.remitente = insights.remitente;
+  if (insights.destinatario) inventory.destinatario = insights.destinatario;
+  if (insights.resumen) inventory.resumen = insights.resumen;
+
+  if (insights.asunto || insights.materia || insights.resumen) {
+    inventory.extractionMethod = inventory.extractionMethod === "deterministic" ? "hybrid" : "ai";
+  }
+
+  return inventory;
 }
