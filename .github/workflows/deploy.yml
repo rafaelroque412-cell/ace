@@ -42,7 +42,7 @@ jobs:
           COHERE_RERANK_MODEL: rerank-v3.5
           NEXT_PUBLIC_APP_URL: https://ace-360.netlify.app
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-      - uses: nwtgck/actions-netlify@v5.0
+      - uses: nwtgck/actions-netlify@v3.0
         with:
           publish-dir: '.next'
           production-branch: main
