@@ -15,16 +15,16 @@ const schema = z.object({
 });
 
 const SELECT =
-  "id,sgd_expediente,title,anio,asunto,materia,oficina,tipo_almacenamiento,nro_estante,nro_piso,nro_local,status,created_at";
+  "id,sgd_expediente,title,anio,asunto,materia,ubicacion,codigo_ubicacion,nro_archivador,nro_caja,status,created_at";
 
 type ExpedienteResumen = Pick<
   ExpedienteArchivo,
-  "id" | "title" | "anio" | "oficina" | "status" | "nro_estante"
+  "id" | "title" | "anio" | "status" | "ubicacion" | "nro_archivador"
 > & { matches: string };
 
 // Interpreta una consulta en lenguaje natural del usuario y devuelve un
 // subconjunto filtrado de los expedientes del archivo. La IA decide cuáles
-// campos matchear (título, oficina, materia, año) basándose en la
+// campos matchear (título, ubicación, materia, año) basándose en la
 // intención del usuario.
 export async function POST(request: Request) {
   try {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       id: e.id,
       title: e.title,
       anio: e.anio,
-      oficina: e.oficina,
+      ubicacion: e.ubicacion,
       materia: e.materia,
       asunto: e.asunto,
     }));
@@ -76,7 +76,7 @@ El usuario hace una consulta en lenguaje natural. Devuelve SOLO JSON válido con
 Reglas:
 - Devuelve como máximo ${limit} resultados
 - Si la búsqueda menciona un año, filtra por anio
-- Si menciona una oficina o área, filtra por oficina (case-insensitive, partial match)
+- Si menciona una ubicación física o área, filtra por ubicacion (case-insensitive, partial match)
 - Si menciona un tema o materia (contratación, personal, etc.), filtra por materia o asunto
 - Si la búsqueda es ambigua, incluye los más probables y explica por qué
 - Si no hay coincidencias claras, devuelve matches: [] y explica por qué
@@ -107,9 +107,9 @@ ${JSON.stringify(compact, null, 0)}`,
           id: exp.id,
           title: exp.title,
           anio: exp.anio,
-          oficina: exp.oficina,
+          ubicacion: exp.ubicacion,
           status: exp.status,
-          nro_estante: exp.nro_estante,
+          nro_archivador: exp.nro_archivador,
           matches: m.razon,
         };
       })

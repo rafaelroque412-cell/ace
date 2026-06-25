@@ -291,3 +291,80 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     throw error;
   }
 }
+
+// Extrae informacion del PDF para autocompletar el formulario de registro
+// del archivo fisico. No guarda nada ni indexa; solo devuelve los datos
+// detectados (numero/fecha/asunto/materia/remitente/destinatario/resumen/folios).
+export type ExpedienteInventory = {
+  numeroExpediente: string | null;
+  numeroDocumento: string | null;
+  fecha: string | null;
+  anio: number | null;
+  asunto: string | null;
+  materia: string | null;
+  remitente: string | null;
+  destinatario: string | null;
+  resumen: string | null;
+  nroFolios: number | null;
+  extractionMethod: "ai" | "deterministic" | "hybrid" | "none";
+};
+
+export async function extractExpedienteInventory(
+  file: File,
+  titleHint: string = "",
+): Promise<ExpedienteInventory> {
+  const inventory: ExpedienteInventory = {
+    numeroExpediente: null,
+    numeroDocumento: null,
+    fecha: null,
+    anio: null,
+    asunto: null,
+    materia: null,
+    remitente: null,
+    destinatario: null,
+    resumen: null,
+    nroFolios: null,
+    extractionMethod: "none",
+  };
+
+  try {
+    const extracted = await extractPdfText(file);
+    const text = extracted.text ?? "";
+
+    if (text.length < 50) {
+      return inventory;
+    }
+
+    // Extractores deterministas
+    const numero = extractExpedienteNumber(titleHint, text);
+    if (numero) {
+      inventory.numeroExpediente = numero;
+      inventory.extractionMethod = "deterministic";
+    }
+    const fecha = extractFecha(text);
+    if (fecha) {
+      inventory.fecha = fecha;
+      const yearMatch = fecha.match(/^(\d{4})-/);
+      if (yearMatch) {
+        inventory.anio = Number.parseInt(yearMatch[1], 10);
+      }
+      inventory.extractionMethod = "deterministic";
+    }
+
+    // IA para campos semanticos
+    const insights = await analyzeExpedienteWithAi(text);
+    if (insights.asunto) inventory.asunto = insights.asunto;
+    if (insights.materia) inventory.materia = insights.materia;
+    if (insights.remitente) inventory.remitente = insights.remitente;
+    if (insights.destinatario) inventory.destinatario = insights.destinatario;
+    if (insights.resumen) inventory.resumen = insights.resumen;
+
+    if (insights.asunto || insights.materia || insights.resumen) {
+      inventory.extractionMethod = inventory.extractionMethod === "deterministic" ? "hybrid" : "ai";
+    }
+
+    return inventory;
+  } catch {
+    return inventory;
+  }
+}

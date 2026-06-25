@@ -3,7 +3,7 @@ import { requireEditor } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
   normalizeCatalogValue,
-  normalizeTipoAlmacenamiento,
+  normalizeContenedorTipo,
 } from "@/lib/expedientes-archivo";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         const v = asString(src, formKey);
         if (v !== null) updates[dbKey] = v;
       }
-      const tipoAlm = normalizeTipoAlmacenamiento(src.tipoAlmacenamiento);
+      const tipoAlm = normalizeContenedorTipo(src.tipoAlmacenamiento);
       if (tipoAlm) updates.tipo_almacenamiento = tipoAlm;
       const color = normalizeCatalogValue(src.colorArchivador, ARCHIVO_COLORES);
       if (color) updates.color_archivador = color;
