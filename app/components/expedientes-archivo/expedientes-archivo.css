@@ -592,6 +592,148 @@
   border-top: 1px solid rgba(15, 118, 110, 0.15);
 }
 
+/* --- Editable extracted field --- */
+.expExtractedBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: var(--exp-brand);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 999px;
+}
+
+.expExtractedField {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 8px 12px;
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+  transition: all 120ms ease;
+}
+
+.expExtractedField:hover {
+  border-color: var(--exp-brand);
+  background: var(--exp-brand-soft);
+}
+
+.expExtractedField:focus-within {
+  border-color: var(--exp-brand);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  background: var(--exp-panel);
+}
+
+.expExtractedFieldFull {
+  grid-column: 1 / -1;
+}
+
+.expExtractedFieldEmpty {
+  opacity: 0.6;
+}
+
+.expExtractedFieldHasValue {
+  border-color: rgba(15, 118, 110, 0.3);
+}
+
+.expExtractedFieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--exp-brand);
+}
+
+.expExtractedFieldLabel svg {
+  flex-shrink: 0;
+}
+
+.expExtractedFieldInput {
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--exp-ink);
+  font-family: inherit;
+  width: 100%;
+  padding: 2px 0;
+  outline: none;
+  font-weight: 500;
+}
+
+.expExtractedFieldInput::placeholder {
+  color: var(--exp-muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.expExtractedFieldTextarea {
+  resize: vertical;
+  min-height: 38px;
+  line-height: 1.4;
+}
+
+.expExtractedFieldRemove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: var(--exp-line-soft);
+  color: var(--exp-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 120ms ease;
+}
+
+.expExtractedField:hover .expExtractedFieldRemove,
+.expExtractedField:focus-within .expExtractedFieldRemove {
+  opacity: 1;
+}
+
+.expExtractedFieldRemove:hover {
+  background: var(--exp-danger);
+  color: #fff;
+}
+
+[data-theme="dark"] .expExtractedField {
+  background: var(--exp-panel);
+  border-color: var(--exp-line);
+}
+
+[data-theme="dark"] .expExtractedFieldInput {
+  color: var(--exp-ink);
+}
+
+[data-theme="dark"] .expExtractedField:hover {
+  background: var(--exp-brand-soft);
+}
+
+[data-theme="dark"] .expExtractedField:focus-within {
+  background: var(--exp-panel);
+}
+
+[data-theme="dark"] .expExtractedFieldRemove {
+  background: var(--exp-line);
+}
+
+[data-theme="dark"] .expExtractedFieldRemove:hover {
+  background: var(--exp-danger);
+  color: #fff;
+}
+
 [data-theme="dark"] .expExtractedPreview {
   background: linear-gradient(135deg, var(--exp-brand-soft) 0%, var(--exp-panel) 100%);
   border-color: var(--exp-brand);

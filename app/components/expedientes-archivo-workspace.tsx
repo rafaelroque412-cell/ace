@@ -219,6 +219,75 @@ type ConfirmDialog = {
   onConfirm: () => void | Promise<void>;
 };
 
+/**
+ * Campo editable para el preview de datos extraídos del PDF.
+ * Permite al usuario revisar, modificar o eliminar cada campo
+ * antes de aplicarlo al formulario.
+ */
+function EditableExtractedField({
+  label,
+  icon,
+  value,
+  onChange,
+  onRemove,
+  placeholder,
+  type = "text",
+  fullWidth = false,
+  multiline = false,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  value: string;
+  onChange: (value: string) => void;
+  onRemove: () => void;
+  placeholder?: string;
+  type?: "text" | "number" | "date";
+  fullWidth?: boolean;
+  multiline?: boolean;
+}) {
+  const hasValue = value.trim().length > 0;
+  return (
+    <div
+      className={
+        "expExtractedField" +
+        (fullWidth ? " expExtractedFieldFull" : "") +
+        (hasValue ? " expExtractedFieldHasValue" : " expExtractedFieldEmpty")
+      }
+    >
+      <label className="expExtractedFieldLabel">
+        {icon}
+        <span>{label}</span>
+      </label>
+      {multiline ? (
+        <textarea
+          className="expExtractedFieldInput expExtractedFieldTextarea"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+        />
+      ) : (
+        <input
+          className="expExtractedFieldInput"
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+      )}
+      <button
+        type="button"
+        className="expExtractedFieldRemove"
+        onClick={onRemove}
+        aria-label={`Quitar campo ${label}`}
+        title={`Quitar ${label}`}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
 export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean }) {
   const prefs = useExpedientesPreferences();
   const { stack: undoStack, push: pushUndo, execute: executeUndo, dismiss: dismissUndo } =
@@ -554,34 +623,47 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   // vacíos para no pisar lo que el usuario ya escribió.
   function applyExtractedData() {
     if (!extractedData) return;
+    let appliedCount = 0;
     setForm((prev) => {
       const next = { ...prev };
-      if (extractedData.numeroExpediente && !prev.sgdExpediente) {
-        next.sgdExpediente = extractedData.numeroExpediente;
-      }
-      if (extractedData.numeroDocumento && !prev.serieDocumento) {
-        next.serieDocumento = extractedData.numeroDocumento;
-      }
-      if (extractedData.anio && !prev.anio) {
-        next.anio = String(extractedData.anio);
-      }
-      if (extractedData.materia && !prev.materia) {
-        next.materia = extractedData.materia;
-      }
-      if (extractedData.asunto && !prev.asunto) {
-        next.asunto = extractedData.asunto;
-      }
-      if (extractedData.resumen && !prev.resumen) {
-        next.resumen = extractedData.resumen;
-      }
-      if (!prev.title && extractedData.numeroExpediente) {
-        next.title = extractedData.numeroExpediente;
+      // Solo aplica campos no vacios y solo si el form no tiene valor
+      const tryApply = (
+        extractedValue: string | number | null | undefined,
+        formKey: keyof SubirForm,
+        transform: (v: string | number) => string = (v) => String(v),
+      ) => {
+        const str = extractedValue == null ? "" : String(extractedValue).trim();
+        if (!str) return;
+        const current = next[formKey];
+        if (current && String(current).trim() !== "") return;
+        next[formKey] = transform(extractedValue as string | number) as never;
+        appliedCount += 1;
+      };
+      tryApply(extractedData.numeroExpediente, "sgdExpediente");
+      tryApply(extractedData.numeroDocumento, "serieDocumento");
+      tryApply(extractedData.anio, "anio");
+      tryApply(extractedData.materia, "materia");
+      tryApply(extractedData.asunto, "asunto");
+      tryApply(extractedData.resumen, "resumen");
+      // Si el titulo esta vacio, usar el SGD como fallback
+      if (!next.title?.trim() && extractedData.numeroExpediente?.trim()) {
+        next.title = extractedData.numeroExpediente.trim();
+        appliedCount += 1;
       }
       return next;
     });
-    showToast("Datos aplicados al formulario", "success");
+    if (appliedCount === 0) {
+      showToast(
+        "No se aplicaron datos (el formulario ya tiene esos campos llenos o los datos estaban vacíos)",
+        "info",
+      );
+    } else {
+      showToast(
+        `Se aplicaron ${appliedCount} campo${appliedCount === 1 ? "" : "s"} al formulario`,
+        "success",
+      );
+    }
     setExtractedData(null);
-    // Avanzar automaticamente al paso 1 (Contenido) si estamos en paso 0
     if (wizardStep === 0) {
       setWizardStep(1);
     }
@@ -1837,17 +1919,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </div>
                   ) : null}
 
-                  {/* Preview de datos extraídos */}
+                  {/* Preview de datos extraídos (editables) */}
                   {extractedData ? (
-                    <div className="expExtractedPreview" role="region" aria-label="Datos extraídos del PDF">
+                    <div
+                      className="expExtractedPreview"
+                      role="region"
+                      aria-label="Datos extraídos del PDF (editables)"
+                    >
                       <div className="expExtractedHeader">
                         <div>
                           <strong>
                             <Sparkles size={12} /> Datos detectados en el PDF
+                            <span className="expExtractedBadge">editables</span>
                           </strong>
                           <span className="expHelpText" style={{ marginTop: 0 }}>
-                            Revisa los datos y aplícalos al formulario. Solo se
-                            completan los campos vacíos.
+                            Edita o elimina los campos antes de aplicar. Solo
+                            se rellenan los campos vacíos del formulario.
                           </span>
                         </div>
                         {extractedData.extractionMethod ? (
@@ -1871,86 +1958,216 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         ) : null}
                       </div>
                       <div className="expExtractedChips">
-                        {extractedData.numeroExpediente ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">SGD:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.numeroExpediente}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.numeroDocumento ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Serie:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.numeroDocumento}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.anio ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Año:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.anio}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.fecha ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Fecha:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.fecha}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.materia ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Materia:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.materia}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.asunto ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Asunto:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.asunto}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.remitente ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Remitente:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.remitente}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.destinatario ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Destinatario:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.destinatario}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.nroFolios ? (
-                          <div className="expExtractedChip">
-                            <span className="expExtractedChipLabel">Folios:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.nroFolios}
-                            </span>
-                          </div>
-                        ) : null}
-                        {extractedData.resumen ? (
-                          <div className="expExtractedChip expExtractedChipFull">
-                            <span className="expExtractedChipLabel">Resumen:</span>
-                            <span className="expExtractedChipValue">
-                              {extractedData.resumen}
-                            </span>
-                          </div>
-                        ) : null}
+                        <EditableExtractedField
+                          label="SGD"
+                          icon={<FileText size={11} />}
+                          value={extractedData.numeroExpediente ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    numeroExpediente: v.trim() || null,
+                                  }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, numeroExpediente: null }
+                                : prev,
+                            )
+                          }
+                          placeholder="Número SGD"
+                        />
+                        <EditableExtractedField
+                          label="Serie"
+                          icon={<FileText size={11} />}
+                          value={extractedData.numeroDocumento ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    numeroDocumento: v.trim() || null,
+                                  }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, numeroDocumento: null }
+                                : prev,
+                            )
+                          }
+                          placeholder="Serie documental"
+                        />
+                        <EditableExtractedField
+                          label="Año"
+                          icon={<History size={11} />}
+                          value={extractedData.anio?.toString() ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) => {
+                              if (!prev) return prev;
+                              const year = v.trim()
+                                ? Number.parseInt(v.trim(), 10)
+                                : null;
+                              return {
+                                ...prev,
+                                anio: year && !Number.isNaN(year) ? year : null,
+                              };
+                            })
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, anio: null } : prev,
+                            )
+                          }
+                          placeholder="2024"
+                          type="number"
+                        />
+                        <EditableExtractedField
+                          label="Fecha"
+                          icon={<History size={11} />}
+                          value={extractedData.fecha ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, fecha: v.trim() || null }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, fecha: null } : prev,
+                            )
+                          }
+                          placeholder="YYYY-MM-DD"
+                          type="date"
+                        />
+                        <EditableExtractedField
+                          label="Materia"
+                          icon={<Info size={11} />}
+                          value={extractedData.materia ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, materia: v.trim() || null }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, materia: null } : prev,
+                            )
+                          }
+                          placeholder="Materia del documento"
+                        />
+                        <EditableExtractedField
+                          label="Asunto"
+                          icon={<Info size={11} />}
+                          value={extractedData.asunto ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, asunto: v.trim() || null }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, asunto: null } : prev,
+                            )
+                          }
+                          placeholder="Asunto o sumilla"
+                        />
+                        <EditableExtractedField
+                          label="Remitente"
+                          icon={<Info size={11} />}
+                          value={extractedData.remitente ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, remitente: v.trim() || null }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, remitente: null } : prev,
+                            )
+                          }
+                          placeholder="Quién emite"
+                        />
+                        <EditableExtractedField
+                          label="Destinatario"
+                          icon={<Info size={11} />}
+                          value={extractedData.destinatario ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    destinatario: v.trim() || null,
+                                  }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, destinatario: null }
+                                : prev,
+                            )
+                          }
+                          placeholder="A quién se dirige"
+                        />
+                        <EditableExtractedField
+                          label="Folios"
+                          icon={<FileText size={11} />}
+                          value={extractedData.nroFolios?.toString() ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) => {
+                              if (!prev) return prev;
+                              const n = v.trim()
+                                ? Number.parseInt(v.trim(), 10)
+                                : null;
+                              return {
+                                ...prev,
+                                nroFolios: n && !Number.isNaN(n) ? n : null,
+                              };
+                            })
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, nroFolios: null } : prev,
+                            )
+                          }
+                          placeholder="Nº folios"
+                          type="number"
+                        />
+                        <EditableExtractedField
+                          label="Resumen"
+                          icon={<FileText size={11} />}
+                          value={extractedData.resumen ?? ""}
+                          onChange={(v) =>
+                            setExtractedData((prev) =>
+                              prev
+                                ? { ...prev, resumen: v.trim() || null }
+                                : prev,
+                            )
+                          }
+                          onRemove={() =>
+                            setExtractedData((prev) =>
+                              prev ? { ...prev, resumen: null } : prev,
+                            )
+                          }
+                          placeholder="Resumen ejecutivo"
+                          fullWidth
+                          multiline
+                        />
                       </div>
                       <div className="expExtractedActions">
                         <button
@@ -1958,7 +2175,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           className="expBtn expBtn-ghost expBtn-small"
                           onClick={dismissExtractedData}
                         >
-                          <X size={14} /> Descartar
+                          <X size={14} /> Descartar todos
                         </button>
                         <button
                           type="button"
