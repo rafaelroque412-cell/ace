@@ -100,7 +100,10 @@ export async function detectDuplicates(params: {
 }
 
 /** Llama al endpoint /extract para extraer metadata de un PDF */
-export async function autoFillFromPdf(file: File, title: string): Promise<PdfInventory> {
+export async function autoFillFromPdf(
+  file: File,
+  title: string,
+): Promise<PdfInventory> {
   if (!file) throw new Error("No se proporcionó archivo");
   if (file.type !== "application/pdf") throw new Error("Solo se permiten archivos PDF");
   if (file.size > maxPdfSizeBytes) {
@@ -114,7 +117,6 @@ export async function autoFillFromPdf(file: File, title: string): Promise<PdfInv
     body: formData,
   });
   if (!res.ok) {
-    // 422 = error operacional (PDF no procesable), el resto son errores del servidor
     if (res.status === 422) {
       throw await parseError(res, "El PDF no se pudo procesar con OCR");
     }

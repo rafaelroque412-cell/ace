@@ -54,6 +54,7 @@ import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import type {
   ChatAnswer,
   ExpedienteItem,
+  PdfInventory,
   SearchMode,
   SearchResult,
   SortBy,
@@ -86,6 +87,7 @@ import {
   chatWithExpedientes,
   loadExpedientes as loadExpedientesAction,
   searchExpedientes,
+  autoFillFromPdf as autoFillFromPdfAction,
 } from "@/lib/expedientes-archivo-actions";
 
 function formatBytes(bytes: number) {
@@ -285,6 +287,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState<PdfInventory | null>(null);
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
@@ -506,6 +510,85 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     } finally {
       setSearching(false);
     }
+  }
+
+  // Extrae datos del PDF cargado y rellena automaticamente los campos del
+  // formulario. Usa IA + extractores deterministas del backend.
+  async function extractFromPdf() {
+    if (!file) {
+      showToast("Selecciona un PDF primero", "warning");
+      return;
+    }
+    if (extracting) return;
+
+    setExtracting(true);
+    setExtractedData(null);
+    try {
+      const data = await autoFillFromPdfAction(file, form.title);
+      setExtractedData(data);
+      const fieldsFound = Object.entries(data).filter(
+        ([key, value]) =>
+          key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,
+      ).length;
+      if (fieldsFound === 0) {
+        showToast(
+          "No se detectaron datos automaticos. Completa el formulario manualmente.",
+          "info",
+        );
+      } else {
+        showToast(
+          `Se detectaron ${fieldsFound} campos. Revisa y aplica los datos.`,
+          "success",
+        );
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "No se pudo extraer datos del PDF";
+      showToast(msg, "error");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  // Aplica los datos extraídos al formulario. Solo sobreescribe campos
+  // vacíos para no pisar lo que el usuario ya escribió.
+  function applyExtractedData() {
+    if (!extractedData) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      if (extractedData.numeroExpediente && !prev.sgdExpediente) {
+        next.sgdExpediente = extractedData.numeroExpediente;
+      }
+      if (extractedData.numeroDocumento && !prev.serieDocumento) {
+        next.serieDocumento = extractedData.numeroDocumento;
+      }
+      if (extractedData.anio && !prev.anio) {
+        next.anio = String(extractedData.anio);
+      }
+      if (extractedData.materia && !prev.materia) {
+        next.materia = extractedData.materia;
+      }
+      if (extractedData.asunto && !prev.asunto) {
+        next.asunto = extractedData.asunto;
+      }
+      if (extractedData.resumen && !prev.resumen) {
+        next.resumen = extractedData.resumen;
+      }
+      if (!prev.title && extractedData.numeroExpediente) {
+        next.title = extractedData.numeroExpediente;
+      }
+      return next;
+    });
+    showToast("Datos aplicados al formulario", "success");
+    setExtractedData(null);
+    // Avanzar automaticamente al paso 1 (Contenido) si estamos en paso 0
+    if (wizardStep === 0) {
+      setWizardStep(1);
+    }
+  }
+
+  function dismissExtractedData() {
+    setExtractedData(null);
   }
 
   async function uploadExpediente(event: React.FormEvent) {
@@ -1696,6 +1779,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           onClick={(e) => {
                             e.preventDefault();
                             setFile(null);
+                            setExtractedData(null);
                           }}
                         >
                           <X size={14} /> Quitar
@@ -1722,6 +1806,170 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       onChange={(e) => onFileSelect(e.target.files?.[0] ?? null)}
                     />
                   </label>
+
+                  {/* Botón para extraer datos automáticamente del PDF */}
+                  {file && canManage ? (
+                    <div className="expExtractSection">
+                      <button
+                        type="button"
+                        className="expBtn expBtn-secondary expExtractBtn"
+                        onClick={extractFromPdf}
+                        disabled={extracting}
+                        aria-label="Obtener datos del PDF automaticamente"
+                      >
+                        {extracting ? (
+                          <>
+                            <Loader2 size={16} className="expSpin" />
+                            Analizando PDF con IA...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={16} />
+                            Obtener datos del PDF
+                          </>
+                        )}
+                      </button>
+                      <span className="expHelpText" style={{ marginTop: 0 }}>
+                        <Info size={12} />
+                        Usa OCR + IA para extraer número, fecha, materia, asunto y resumen.
+                        No modifica el archivo ni indexa nada.
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {/* Preview de datos extraídos */}
+                  {extractedData ? (
+                    <div className="expExtractedPreview" role="region" aria-label="Datos extraídos del PDF">
+                      <div className="expExtractedHeader">
+                        <div>
+                          <strong>
+                            <Sparkles size={12} /> Datos detectados en el PDF
+                          </strong>
+                          <span className="expHelpText" style={{ marginTop: 0 }}>
+                            Revisa los datos y aplícalos al formulario. Solo se
+                            completan los campos vacíos.
+                          </span>
+                        </div>
+                        {extractedData.extractionMethod ? (
+                          <span
+                            className={`expStatus expStatus-${
+                              extractedData.extractionMethod === "ai"
+                                ? "indexed"
+                                : extractedData.extractionMethod === "deterministic"
+                                  ? "uploaded"
+                                  : "processing"
+                            }`}
+                          >
+                            {extractedData.extractionMethod === "ai"
+                              ? "IA"
+                              : extractedData.extractionMethod === "deterministic"
+                                ? "Automático"
+                                : extractedData.extractionMethod === "hybrid"
+                                  ? "Híbrido"
+                                  : "Sin datos"}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="expExtractedChips">
+                        {extractedData.numeroExpediente ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">SGD:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.numeroExpediente}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.numeroDocumento ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Serie:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.numeroDocumento}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.anio ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Año:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.anio}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.fecha ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Fecha:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.fecha}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.materia ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Materia:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.materia}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.asunto ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Asunto:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.asunto}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.remitente ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Remitente:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.remitente}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.destinatario ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Destinatario:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.destinatario}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.nroFolios ? (
+                          <div className="expExtractedChip">
+                            <span className="expExtractedChipLabel">Folios:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.nroFolios}
+                            </span>
+                          </div>
+                        ) : null}
+                        {extractedData.resumen ? (
+                          <div className="expExtractedChip expExtractedChipFull">
+                            <span className="expExtractedChipLabel">Resumen:</span>
+                            <span className="expExtractedChipValue">
+                              {extractedData.resumen}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="expExtractedActions">
+                        <button
+                          type="button"
+                          className="expBtn expBtn-ghost expBtn-small"
+                          onClick={dismissExtractedData}
+                        >
+                          <X size={14} /> Descartar
+                        </button>
+                        <button
+                          type="button"
+                          className="expBtn expBtn-primary"
+                          onClick={applyExtractedData}
+                        >
+                          <Check size={14} /> Aplicar al formulario
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="expFormSection">

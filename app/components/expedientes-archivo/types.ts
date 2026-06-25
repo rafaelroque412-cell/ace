@@ -136,15 +136,19 @@ export type DuplicateMatch = {
   status: string;
 };
 
-/** Resultado de autocompletar PDF con IA */
+/** Resultado de autocompletar PDF con IA / extractores deterministas */
 export type PdfInventory = {
-  titleGuess?: string;
-  serieDocumento?: string;
-  anio?: number;
-  materia?: string;
-  asunto?: string;
-  resumen?: string;
-  tipoDocumento?: string;
+  numeroExpediente?: string | null;
+  numeroDocumento?: string | null;
+  fecha?: string | null;
+  anio?: number | null;
+  asunto?: string | null;
+  materia?: string | null;
+  resumen?: string | null;
+  remitente?: string | null;
+  destinatario?: string | null;
+  nroFolios?: number | null;
+  extractionMethod?: "ai" | "deterministic" | "hybrid" | "none";
 };
 
 /** Datos detectados por la IA del PDF (preview de chips) */
