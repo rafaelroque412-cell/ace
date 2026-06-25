@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   description: "Gestion documental, busqueda semantica y asistencia juridica con IA.",
 };
 
+// App interna detrás de auth: todas las páginas consultan sesión/datos vía
+// Supabase en el servidor. Render dinámico global para no prerenderizar en
+// build-time (donde no hay env vars). Se propaga a todas las rutas hijas.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: {

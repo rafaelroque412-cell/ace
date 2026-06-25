@@ -3,10 +3,6 @@ import { Bot } from "lucide-react";
 import { AppShell } from "../components/app-shell";
 import { NewsFeed } from "../components/news-feed";
 
-// AppShell consulta sesión/datos vía Supabase en el servidor; render dinámico
-// para no instanciar el cliente en build-time (prerender sin env vars).
-export const dynamic = "force-dynamic";
-
 export default function AlertasPage() {
   return (
     <AppShell
