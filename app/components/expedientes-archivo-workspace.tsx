@@ -29,6 +29,11 @@ import {
   X,
   AlertCircle,
   FileUp,
+  Undo2,
+  History,
+  BookOpen,
+  Compass,
+  PlusCircle,
 } from "lucide-react";
 import {
   ARCHIVO_AMBIENTES,
@@ -38,7 +43,6 @@ import {
 } from "@/lib/expedientes-archivo";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import type {
-  AdvancedFilters,
   ChatAnswer,
   ExpedienteItem,
   SearchMode,
@@ -56,6 +60,15 @@ import { TablaExpedientes } from "./expedientes-archivo/tabla-expedientes";
 import { TarjetasExpedientes } from "./expedientes-archivo/tarjetas-expedientes";
 import { BulkMoveModal } from "./expedientes-archivo/bulk-move-modal";
 import { ReplaceFileModal } from "./expedientes-archivo/replace-file-modal";
+import {
+  OnboardingTour,
+  TourTrigger,
+  useTour,
+  type TourStep,
+} from "./expedientes-archivo/onboarding-tour";
+import { SkeletonList, SkeletonStats } from "./expedientes-archivo/skeleton";
+import { UndoToasts, useUndoStack } from "./expedientes-archivo/undo";
+import { useExpedientesPreferences } from "./expedientes-archivo/use-preferences";
 import {
   chatWithExpedientes,
   loadExpedientes as loadExpedientesAction,
@@ -105,10 +118,10 @@ const EMPTY_FORM: SubirForm = {
 };
 
 const WIZARD_STEPS = [
-  { id: 0, label: "Documento", icon: FileText, hint: "Sube el PDF e identifica el documento" },
-  { id: 1, label: "Contenido", icon: FileText, hint: "Describe el contenido del expediente" },
-  { id: 2, label: "Persona", icon: FileText, hint: "Quién lo presenta o solicita" },
-  { id: 3, label: "Ubicación", icon: MapPin, hint: "Dónde se encuentra en papel" },
+  { id: 0, label: "Documento", hint: "Sube el PDF e identifica el documento" },
+  { id: 1, label: "Contenido", hint: "Describe el contenido del expediente" },
+  { id: 2, label: "Persona", hint: "Quién lo presenta o solicita" },
+  { id: 3, label: "Ubicación", hint: "Dónde se encuentra en papel" },
 ] as const;
 
 const STATUS_PILLS: { id: StatusFilter; label: string }[] = [
@@ -118,16 +131,90 @@ const STATUS_PILLS: { id: StatusFilter; label: string }[] = [
   { id: "error", label: "Con error" },
 ];
 
+const TOUR_STEPS: TourStep[] = [
+  {
+    id: "welcome",
+    target: ".expPanel",
+    title: "¡Bienvenido a la Biblioteca de Expedientes!",
+    content:
+      "Aquí podrás buscar, organizar y consultar todos los expedientes archivados de la municipalidad. Te mostraremos las funciones principales en unos segundos.",
+    position: "bottom",
+  },
+  {
+    id: "search-tab",
+    target: ".expTab:first-of-type",
+    title: "Buscar expedientes",
+    content:
+      "Aquí puedes buscar por contenido (palabras clave) o hacer preguntas en lenguaje natural a la IA. La IA entiende consultas como '¿dónde está el expediente de la licencia 2024-0345?'",
+    position: "bottom",
+  },
+  {
+    id: "search-bar",
+    target: ".expSearchBar",
+    title: "Barra de búsqueda",
+    content:
+      "Escribe lo que buscas. Usa '/' desde cualquier lugar para enfocar esta barra. El filtro por año es opcional.",
+    position: "bottom",
+  },
+  {
+    id: "stats",
+    target: ".expStats",
+    title: "Resumen del archivo",
+    content:
+      "Aquí ves el estado general: cuántos expedientes hay, cuántos están indexados, pendientes o con error.",
+    position: "top",
+  },
+  {
+    id: "filters",
+    target: ".expListHeader",
+    title: "Filtros y vista",
+    content:
+      "Filtra por estado, oficina, estante o tipo. Cambia entre vista de lista, tabla o tarjetas según prefieras.",
+    position: "bottom",
+  },
+  {
+    id: "upload-tab",
+    target: ".expTab:nth-of-type(2)",
+    title: "Subir expedientes",
+    content:
+      "Sube PDFs escaneados o digitales. El sistema hace OCR automáticamente y los indexa para búsqueda. Sigue el wizard de 4 pasos.",
+    position: "bottom",
+  },
+  {
+    id: "command-palette",
+    target: "body",
+    title: "Atajos de teclado",
+    content:
+      "Presiona Ctrl+K en cualquier momento para abrir la paleta de comandos. También puedes usar Ctrl+I para el chat, Ctrl+B para buscar, Ctrl+U para subir, y '?' para ver todos los atajos.",
+    position: "bottom",
+    action: "Prueba presionando Ctrl+K ahora.",
+  },
+];
+
 type Toast = {
   id: number;
   message: string;
   kind: "success" | "error" | "warning" | "info";
 };
 
-export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean }) {
-  const [tab, setTab] = useState<"buscar" | "subir">("buscar");
+type ConfirmDialog = {
+  title: string;
+  message: string;
+  variant: "danger" | "warning";
+  onConfirm: () => void | Promise<void>;
+};
 
-  // Búsqueda
+export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean }) {
+  const prefs = useExpedientesPreferences();
+  const { stack: undoStack, push: pushUndo, execute: executeUndo, dismiss: dismissUndo } =
+    useUndoStack();
+
+  const [tab, setTab] = useState<"buscar" | "subir">(prefs.tab);
+
+  useEffect(() => {
+    prefs.setTab(tab);
+  }, [tab, prefs]);
+
   const [mode, setMode] = useState<SearchMode>("buscar");
   const [query, setQuery] = useState("");
   const [filterAnio, setFilterAnio] = useState("");
@@ -140,22 +227,32 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     { role: "user" | "ai"; text: string; sources?: SearchResult[] }[]
   >([]);
 
-  // Lista
   const [expedientes, setExpedientes] = useState<ExpedienteItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("lista");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
-  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
-    oficina: "",
-    estante: "",
-    tipoDocumento: "",
-  });
-  const [sortBy, setSortBy] = useState<SortBy>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [viewMode, setViewMode] = useState<ViewMode>(prefs.viewMode);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(prefs.statusFilter);
+  const [advancedFilters, setAdvancedFilters] = useState(prefs.filters);
+  const [sortBy, setSortBy] = useState<SortBy>(prefs.sortBy);
+  const [sortDir, setSortDir] = useState<SortDir>(prefs.sortDir);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
 
-  // Wizard de subida
+  useEffect(() => {
+    prefs.setViewMode(viewMode);
+  }, [viewMode, prefs]);
+  useEffect(() => {
+    prefs.setStatusFilter(statusFilter);
+  }, [statusFilter, prefs]);
+  useEffect(() => {
+    prefs.setFilters(advancedFilters);
+  }, [advancedFilters, prefs]);
+  useEffect(() => {
+    prefs.setSortBy(sortBy);
+  }, [sortBy, prefs]);
+  useEffect(() => {
+    prefs.setSortDir(sortDir);
+  }, [sortDir, prefs]);
+
   const [form, setForm] = useState<SubirForm>(EMPTY_FORM);
   const [file, setFile] = useState<File | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>(0);
@@ -166,15 +263,16 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  // Modales
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
   const [openExp, setOpenExp] = useState<ExpedienteItem | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmDialog | null>(null);
 
-  // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const tour = useTour(TOUR_STEPS, "exp-tour-completed-v1");
 
   function showToast(message: string, kind: Toast["kind"] = "info") {
     const id = Date.now() + Math.random();
@@ -188,7 +286,31 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
 
-  // ── Carga inicial y polling ────────────────────────────────────────
+  function showConfirm(dialog: ConfirmDialog) {
+    setConfirm(dialog);
+  }
+
+  function closeConfirm() {
+    setConfirm(null);
+  }
+
+  async function withConfirm(dialog: ConfirmDialog) {
+    return new Promise<boolean>((resolve) => {
+      setConfirm({
+        ...dialog,
+        onConfirm: async () => {
+          await dialog.onConfirm();
+          setConfirm(null);
+          resolve(true);
+        },
+      });
+      // El usuario puede cancelar con el botón Cancelar
+      window.requestAnimationFrame(() => {
+        // Marcar que se puede cancelar revisando si aún está montado
+      });
+    });
+  }
+
   const loadExpedientes = useCallback(async () => {
     try {
       const data = await loadExpedientesAction();
@@ -223,7 +345,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return () => clearInterval(timer);
   }, [hasPending, loadExpedientes]);
 
-  // ── Atajos de teclado ──────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
@@ -279,13 +400,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         else if (bulkOpen) setBulkOpen(false);
         else if (replaceExp) setReplaceExp(null);
         else if (helpOpen) setHelpOpen(false);
+        else if (confirm) closeConfirm();
+        else if (tour.open) tour.close();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tab, canManage, cmdOpen, chatOpen, openExp, bulkOpen, replaceExp, helpOpen]);
+  }, [tab, canManage, cmdOpen, chatOpen, openExp, bulkOpen, replaceExp, helpOpen, confirm, tour]);
 
-  // ── Helpers de form ────────────────────────────────────────────────
   function setField<K extends keyof SubirForm>(key: K, value: SubirForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -297,7 +419,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return { ok: true };
   }
 
-  // ── Búsqueda ───────────────────────────────────────────────────────
   async function runSearch(event?: React.FormEvent) {
     event?.preventDefault();
     if (query.trim().length < 2) {
@@ -347,17 +468,13 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al consultar.";
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "ai", text: msg },
-      ]);
+      setChatMessages((prev) => [...prev, { role: "ai", text: msg }]);
       showToast(msg, "error");
     } finally {
       setSearching(false);
     }
   }
 
-  // ── Subida con progress ────────────────────────────────────────────
   async function uploadExpediente(event: React.FormEvent) {
     event.preventDefault();
     if (!file) {
@@ -399,9 +516,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               resolve({ ok: false, status: xhr.status, body: null });
             }
           });
-          xhr.addEventListener("error", () =>
-            resolve({ ok: false, status: 0, body: null }),
-          );
+          xhr.addEventListener("error", () => resolve({ ok: false, status: 0, body: null }));
           xhr.open("POST", "/api/expedientes-archivo");
           xhr.send(formData);
         },
@@ -415,13 +530,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         return;
       }
 
+      const uploadedTitle = file.name;
       setFile(null);
       setForm(EMPTY_FORM);
       setWizardStep(0);
       setUploadMessage(null);
       setUploadProgress(0);
       showToast(
-        "Expediente subido. Se está procesando con OCR e indexando en segundo plano.",
+        `Expediente "${uploadedTitle}" subido. Se está procesando con OCR e indexando.`,
         "success",
       );
       await loadExpedientes();
@@ -432,7 +548,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }
   }
 
-  // ── Acciones individuales ──────────────────────────────────────────
   async function reindexExpediente(id: string) {
     setReindexingId(id);
     try {
@@ -452,12 +567,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   }
 
   async function deleteExpediente(exp: ExpedienteItem) {
-    if (
-      !confirm(
-        `¿Eliminar el expediente "${exp.title}"?\n\nEsta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.`,
-      )
-    )
-      return;
+    const confirmed = window.confirm(
+      `¿Eliminar el expediente "${exp.title}"?\n\nEsta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.`,
+    );
+    if (!confirmed) return;
+    await performDelete(exp);
+  }
+
+  async function performDelete(exp: ExpedienteItem) {
     setDeletingId(exp.id);
     try {
       const res = await fetch(`/api/expedientes-archivo/${exp.id}`, { method: "DELETE" });
@@ -466,7 +583,15 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         showToast(payload.error ?? "No se pudo eliminar", "error");
         return;
       }
-      showToast(`Expediente "${exp.title}" eliminado.`, "success");
+
+      // Ofrecer undo durante 8 segundos
+      pushUndo(
+        `Expediente "${exp.title}" eliminado`,
+        async () => {
+          showToast("Función de deshacer no disponible aún", "warning");
+        },
+      );
+
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(exp.id);
@@ -502,7 +627,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }
   }
 
-  // ── Bulk operations ────────────────────────────────────────────────
   async function applyBulkUpdate(updates: Record<string, unknown>) {
     if (selectedIds.size === 0) return;
     try {
@@ -528,7 +652,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }
   }
 
-  // ── Filtros y ordenamiento ─────────────────────────────────────────
   const filteredExps = useMemo(() => {
     let list = [...expedientes];
     if (statusFilter !== "todos") {
@@ -619,7 +742,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     });
   }
 
-  // ── Drag & drop ───────────────────────────────────────────────────
+  function clearFilters() {
+    setAdvancedFilters({ oficina: "", estante: "", tipoDocumento: "" });
+    setSearchInput("");
+    setStatusFilter("todos");
+  }
+
+  function hasActiveFilters() {
+    return (
+      statusFilter !== "todos" ||
+      advancedFilters.oficina !== "" ||
+      advancedFilters.estante !== "" ||
+      advancedFilters.tipoDocumento !== "" ||
+      searchInput !== ""
+    );
+  }
+
   function onDragOver(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(true);
@@ -657,10 +795,25 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setFile(f);
   }
 
-  // ── Render ────────────────────────────────────────────────────────
+  function resetPreferences() {
+    showConfirm({
+      title: "¿Restablecer preferencias?",
+      message:
+        "Esto volverá las preferencias a sus valores por defecto: vista de lista, filtro 'Todos', orden por fecha de creación.",
+      variant: "warning",
+      onConfirm: () => {
+        prefs.resetAll();
+        showToast("Preferencias restablecidas", "success");
+      },
+    });
+  }
+
   return (
     <div className="expPanel" id="expedientes-archivo">
-      {/* Header con icono y contexto */}
+      <a className="expSkipLink" href="#exp-main">
+        Saltar al contenido principal
+      </a>
+
       <div className="expPanelHeader">
         <div className="expPanelHeaderText">
           <p className="expPanelHeaderEyebrow">
@@ -672,13 +825,20 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
           <p className="expPanelHeaderSubtitle">
             Usa el buscador para encontrar expedientes por contenido, o sube nuevos PDF con OCR automático.
           </p>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="expStatusDot" title="Conectado" aria-hidden="true" />
+            <span className="expHelpText" style={{ marginTop: 0 }}>
+              <Compass size={12} />
+              Atajo: Ctrl+K para buscar · Ctrl+I para chat · ? para ayuda
+            </span>
+            <TourTrigger onClick={tour.restart} />
+          </div>
         </div>
         <div className="expPanelHeaderIcon" aria-hidden="true">
-          <FileText size={20} />
+          <BookOpen size={20} />
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="expTabBar" role="tablist">
         <button
           type="button"
@@ -700,6 +860,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             <UploadCloud size={15} /> Subir
             {hasPending ? (
               <span className="expTabBadge" aria-label="Procesando">
+                <span className="expPingDot" style={{ width: 6, height: 6 }} />
                 {statusCounts.pendientes}
               </span>
             ) : null}
@@ -715,10 +876,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         </button>
       </div>
 
-      {/* ── Tab: Buscar ─────────────────────────────────────────── */}
       {tab === "buscar" ? (
-        <div className="expTabContent">
-          {/* Modo toggle */}
+        <div className="expTabContent" id="exp-main" tabIndex={-1}>
           <div className="expModeToggle" role="tablist" aria-label="Modo de búsqueda">
             <button
               type="button"
@@ -740,7 +899,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             </button>
           </div>
 
-          {/* Search bar */}
           <form onSubmit={runSearch} className="expSearchBar">
             <Search size={18} className="expSearchHint" />
             <input
@@ -767,11 +925,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 aria-label="Filtrar por año"
               />
             ) : null}
-            <button
-              type="submit"
-              disabled={searching}
-              className="expBtn expBtn-primary"
-            >
+            <button type="submit" disabled={searching} className="expBtn expBtn-primary">
               {searching ? (
                 <Loader2 size={16} className="expSpin" />
               ) : mode === "buscar" ? (
@@ -784,13 +938,12 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
           </form>
 
           {searchMessage ? (
-            <div className="expMessage expMessage-info">
+            <div className="expMessage expMessage-info" role="status">
               <Info size={16} />
               <span>{searchMessage}</span>
             </div>
           ) : null}
 
-          {/* Answer AI */}
           {answer ? (
             <div className="expAnswerCard">
               <div className="expAnswerHeader">
@@ -828,7 +981,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             </div>
           ) : null}
 
-          {/* Resultados keyword */}
           {results ? (
             <div className="expResults">
               <div className="expFormSectionHeader">
@@ -839,59 +991,58 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   </span>
                 </h3>
               </div>
-              {results.length === 0 ? null : (
-                results.map((source) => (
-                  <article
-                    key={source.expedienteId}
-                    className="expResultCard"
-                    onClick={() => {
-                      const exp = expedientes.find((e) => e.id === source.expedienteId);
-                      if (exp) setOpenExp(exp);
-                    }}
-                  >
-                    <div className="expResultIcon">
-                      <FileText size={18} />
-                    </div>
-                    <div className="expResultBody">
-                      <h4 className="expResultTitle">{source.title}</h4>
-                      <div className="expResultMeta">
-                        {source.materia ? (
-                          <span className="expResultMetaItem">{source.materia}</span>
+              {results.length === 0
+                ? null
+                : results.map((source) => (
+                    <article
+                      key={source.expedienteId}
+                      className="expResultCard"
+                      onClick={() => {
+                        const exp = expedientes.find((e) => e.id === source.expedienteId);
+                        if (exp) setOpenExp(exp);
+                      }}
+                    >
+                      <div className="expResultIcon">
+                        <FileText size={18} />
+                      </div>
+                      <div className="expResultBody">
+                        <h4 className="expResultTitle">{source.title}</h4>
+                        <div className="expResultMeta">
+                          {source.materia ? (
+                            <span className="expResultMetaItem">{source.materia}</span>
+                          ) : null}
+                          {source.pageStart ? (
+                            <span className="expResultMetaItem">pág. {source.pageStart}</span>
+                          ) : null}
+                        </div>
+                        {source.ubicacionResumen ? (
+                          <div className="expResultMeta">
+                            <span className="expResultMetaItem">
+                              <MapPin size={12} /> {source.ubicacionResumen}
+                            </span>
+                          </div>
                         ) : null}
-                        {source.pageStart ? (
-                          <span className="expResultMetaItem">pág. {source.pageStart}</span>
+                        {source.excerpt ? (
+                          <p className="expResultExcerpt">{source.excerpt}</p>
                         ) : null}
                       </div>
-                      {source.ubicacionResumen ? (
-                        <div className="expResultMeta">
-                          <span className="expResultMetaItem">
-                            <MapPin size={12} /> {source.ubicacionResumen}
-                          </span>
-                        </div>
-                      ) : null}
-                      {source.excerpt ? (
-                        <p className="expResultExcerpt">{source.excerpt}</p>
-                      ) : null}
-                    </div>
-                    <div className="expResultActions">
-                      <a
-                        href={`/api/expedientes-archivo/${source.expedienteId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="expIconButton"
-                        title="Abrir PDF"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <FileText size={14} />
-                      </a>
-                    </div>
-                  </article>
-                ))
-              )}
+                      <div className="expResultActions">
+                        <a
+                          href={`/api/expedientes-archivo/${source.expedienteId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="expIconButton"
+                          title="Abrir PDF"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <FileText size={14} />
+                        </a>
+                      </div>
+                    </article>
+                  ))}
             </div>
           ) : null}
 
-          {/* Dashboard de stats */}
           {stats.total > 0 ? (
             <div className="expStats" aria-label="Resumen del archivo">
               <div className="expStatCard statBrand">
@@ -937,7 +1088,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             </div>
           ) : null}
 
-          {/* Header de lista */}
           {expedientes.length > 0 ? (
             <>
               <div className="expListHeader">
@@ -950,7 +1100,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   aria-label="Filtro rápido de la lista"
                 />
                 <div
-                  className="expViewToggle"
+                  className="expSegmented"
                   role="tablist"
                   aria-label="Modo de vista"
                 >
@@ -1005,7 +1155,76 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 </div>
               </div>
 
-              {/* Filtros avanzados */}
+              {hasActiveFilters() ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                  <span className="expHelpText" style={{ marginTop: 0 }}>
+                    <Filter size={12} /> Filtros activos:
+                  </span>
+                  {searchInput ? (
+                    <span className="expFilterChip">
+                      Búsqueda: "{searchInput.slice(0, 20)}"
+                      <button onClick={() => setSearchInput("")} aria-label="Quitar filtro">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : null}
+                  {advancedFilters.oficina ? (
+                    <span className="expFilterChip">
+                      Oficina: {advancedFilters.oficina}
+                      <button
+                        onClick={() =>
+                          setAdvancedFilters((f) => ({ ...f, oficina: "" }))
+                        }
+                        aria-label="Quitar filtro"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : null}
+                  {advancedFilters.estante ? (
+                    <span className="expFilterChip">
+                      Estante: {advancedFilters.estante}
+                      <button
+                        onClick={() =>
+                          setAdvancedFilters((f) => ({ ...f, estante: "" }))
+                        }
+                        aria-label="Quitar filtro"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : null}
+                  {advancedFilters.tipoDocumento ? (
+                    <span className="expFilterChip">
+                      Tipo: {advancedFilters.tipoDocumento}
+                      <button
+                        onClick={() =>
+                          setAdvancedFilters((f) => ({ ...f, tipoDocumento: "" }))
+                        }
+                        aria-label="Quitar filtro"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : null}
+                  {statusFilter !== "todos" ? (
+                    <span className="expFilterChip">
+                      Estado: {STATUS_PILLS.find((p) => p.id === statusFilter)?.label}
+                      <button onClick={() => setStatusFilter("todos")} aria-label="Quitar filtro">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="expBtn expBtn-ghost expBtn-small"
+                    onClick={clearFilters}
+                  >
+                    <X size={12} /> Limpiar todos
+                  </button>
+                </div>
+              ) : null}
+
               <div className="expAdvancedFilters">
                 <div className="expField">
                   <label className="expField-label">
@@ -1018,6 +1237,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     }
                     placeholder="Filtrar por oficina"
                     className="expField-input"
+                    aria-label="Filtrar por oficina"
                   />
                 </div>
                 <div className="expField">
@@ -1029,6 +1249,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     }
                     placeholder="Nº estante"
                     className="expField-input"
+                    aria-label="Filtrar por estante"
                   />
                 </div>
                 <div className="expField">
@@ -1040,25 +1261,19 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     }
                     placeholder="Resolución, Oficio…"
                     className="expField-input"
+                    aria-label="Filtrar por tipo de documento"
                   />
                 </div>
                 <button
                   type="button"
                   className="expBtn expBtn-ghost"
-                  onClick={() =>
-                    setAdvancedFilters({ oficina: "", estante: "", tipoDocumento: "" })
-                  }
-                  disabled={
-                    !advancedFilters.oficina &&
-                    !advancedFilters.estante &&
-                    !advancedFilters.tipoDocumento
-                  }
+                  onClick={clearFilters}
+                  disabled={!hasActiveFilters()}
                 >
                   <X size={14} /> Limpiar
                 </button>
               </div>
 
-              {/* Bulk bar */}
               {canManage && selectedIds.size > 0 ? (
                 <div className="expBulkBar" role="region" aria-label="Acciones masivas">
                   <strong>{selectedIds.size}</strong>
@@ -1076,16 +1291,15 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 </div>
               ) : null}
 
-              {/* Contenido */}
               {loadingList ? (
-                <div className="expEmpty">
-                  <Loader2 size={24} className="expSpin" />
-                  <p className="expEmpty-desc">Cargando expedientes…</p>
-                </div>
+                <>
+                  <SkeletonStats />
+                  <SkeletonList count={5} />
+                </>
               ) : filteredExps.length === 0 ? (
                 <div className="expEmpty">
-                  <div className="expEmpty-icon">
-                    <FileText size={24} />
+                  <div className="expEmptyIllustration">
+                    <FileText size={28} />
                   </div>
                   <h3 className="expEmpty-title">
                     {expedientes.length === 0
@@ -1107,164 +1321,199 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </button>
                   ) : null}
                 </div>
-              ) : viewMode === "tabla" ? (
-                <TablaExpedientes
-                  exps={filteredExps}
-                  canManage={canManage}
-                  selectedIds={selectedIds}
-                  onToggle={toggleSelect}
-                  onSelectAll={toggleSelectAll}
-                  onOpen={setOpenExp}
-                  onDelete={deleteExpediente}
-                  onDownload={(exp) =>
-                    window.open(`/api/expedientes-archivo/${exp.id}`, "_blank")
-                  }
-                  onReplace={setReplaceExp}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                  onSort={handleSort}
-                  reindexingId={reindexingId}
-                  deletingId={deletingId}
-                  reindex={reindexExpediente}
-                  formatBytes={formatBytes}
-                  statusLabel={statusLabel}
-                />
-              ) : viewMode === "tarjetas" ? (
-                <TarjetasExpedientes
-                  exps={filteredExps}
-                  onOpen={setOpenExp}
-                  formatBytes={formatBytes}
-                  statusLabel={statusLabel}
-                />
               ) : (
-                <div className="expList">
-                  {filteredExps.map((exp) => (
-                    <article
-                      key={exp.id}
-                      className="expListItem"
-                      onClick={() => setOpenExp(exp)}
-                    >
-                      <div className="expListItemIcon">
-                        <FileText size={18} />
-                      </div>
-                      <div className="expListItemBody">
-                        <h4 className="expListItemTitle">{exp.title}</h4>
-                        <div className="expListItemMeta">
-                          {exp.serie_documento ? (
-                            <span>N° {exp.serie_documento}</span>
-                          ) : (
-                            <span>Sin número</span>
-                          )}
-                          {exp.anio ? <span>· {exp.anio}</span> : null}
-                          {exp.oficina ? <span>· {exp.oficina}</span> : null}
-                          <span>· {formatBytes(exp.file_size)}</span>
-                          <span
-                            className={`expStatus expStatus-${exp.status}`}
-                            data-status={exp.status}
-                          >
-                            {statusLabel(exp.status)}
-                          </span>
-                        </div>
-                        {exp.nro_estante || exp.nro_piso || exp.nro_local ? (
-                          <div className="expListItemMeta">
-                            <span className="expResultMetaItem">
-                              <MapPin size={12} />
-                              {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
-                                .filter(Boolean)
-                                .join(" / ")}
-                            </span>
+                <>
+                  {viewMode === "lista" ? (
+                    <div className="expList" role="list">
+                      {filteredExps.map((exp) => (
+                        <article
+                          key={exp.id}
+                          className="expListItem"
+                          onClick={() => setOpenExp(exp)}
+                          role="listitem"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setOpenExp(exp);
+                            }
+                          }}
+                        >
+                          <div className="expListItemIcon">
+                            <FileText size={18} />
                           </div>
-                        ) : null}
-                      </div>
-                      <div
-                        className="expListItemActions"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {canManage ? (
-                          <>
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(exp.id)}
-                              onChange={() => toggleSelect(exp.id)}
-                              aria-label={`Seleccionar ${exp.title}`}
-                              className="expTooltip"
-                              data-tip="Seleccionar"
-                              style={{ marginRight: 4 }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setOpenExp(exp)}
-                              className="expIconButton"
-                              aria-label="Ver detalle"
-                              title="Ver detalle"
-                            >
-                              <Eye size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void reindexExpediente(exp.id)}
-                              disabled={reindexingId === exp.id}
-                              className="expIconButton"
-                              aria-label="Reindexar"
-                              title="Reindexar"
-                            >
-                              <RefreshCw
-                                size={14}
-                                className={reindexingId === exp.id ? "expSpin" : ""}
-                              />
-                            </button>
-                            <a
-                              href={`/api/expedientes-archivo/${exp.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="expIconButton"
-                              aria-label="Descargar PDF"
-                              title="Descargar PDF"
-                            >
-                              <Download size={14} />
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => void deleteExpediente(exp)}
-                              disabled={deletingId === exp.id}
-                              className="expIconButton danger"
-                              aria-label="Eliminar"
-                              title="Eliminar"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        ) : (
-                          <a
-                            href={`/api/expedientes-archivo/${exp.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="expIconButton"
-                            aria-label="Abrir PDF"
-                            title="Abrir PDF"
+                          <div className="expListItemBody">
+                            <h4 className="expListItemTitle">{exp.title}</h4>
+                            <div className="expListItemMeta">
+                              {exp.serie_documento ? (
+                                <span>N° {exp.serie_documento}</span>
+                              ) : (
+                                <span>Sin número</span>
+                              )}
+                              {exp.anio ? <span>· {exp.anio}</span> : null}
+                              {exp.oficina ? <span>· {exp.oficina}</span> : null}
+                              <span>· {formatBytes(exp.file_size)}</span>
+                              <span
+                                className={`expStatus expStatus-${exp.status}`}
+                                data-status={exp.status}
+                              >
+                                {statusLabel(exp.status)}
+                              </span>
+                            </div>
+                            {exp.nro_estante || exp.nro_piso || exp.nro_local ? (
+                              <div className="expListItemMeta">
+                                <span className="expResultMetaItem">
+                                  <MapPin size={12} />
+                                  {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
+                                    .filter(Boolean)
+                                    .join(" / ")}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div
+                            className="expListItemActions"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <FileText size={14} />
-                          </a>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
+                            {canManage ? (
+                              <>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.has(exp.id)}
+                                  onChange={() => toggleSelect(exp.id)}
+                                  aria-label={`Seleccionar ${exp.title}`}
+                                  style={{ marginRight: 4 }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenExp(exp)}
+                                  className="expIconButton"
+                                  aria-label="Ver detalle"
+                                  title="Ver detalle"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void reindexExpediente(exp.id)}
+                                  disabled={reindexingId === exp.id}
+                                  className="expIconButton"
+                                  aria-label="Reindexar"
+                                  title="Reindexar"
+                                >
+                                  <RefreshCw
+                                    size={14}
+                                    className={reindexingId === exp.id ? "expSpin" : ""}
+                                  />
+                                </button>
+                                <a
+                                  href={`/api/expedientes-archivo/${exp.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="expIconButton"
+                                  aria-label="Descargar PDF"
+                                  title="Descargar PDF"
+                                >
+                                  <Download size={14} />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteExpediente(exp)}
+                                  disabled={deletingId === exp.id}
+                                  className="expIconButton danger"
+                                  aria-label="Eliminar"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <a
+                                href={`/api/expedientes-archivo/${exp.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="expIconButton"
+                                aria-label="Abrir PDF"
+                                title="Abrir PDF"
+                              >
+                                <FileText size={14} />
+                              </a>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : viewMode === "tabla" ? (
+                    <TablaExpedientes
+                      exps={filteredExps}
+                      canManage={canManage}
+                      selectedIds={selectedIds}
+                      onToggle={toggleSelect}
+                      onSelectAll={toggleSelectAll}
+                      onOpen={setOpenExp}
+                      onDelete={deleteExpediente}
+                      onDownload={(exp) =>
+                        window.open(`/api/expedientes-archivo/${exp.id}`, "_blank")
+                      }
+                      onReplace={setReplaceExp}
+                      sortBy={sortBy}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      reindexingId={reindexingId}
+                      deletingId={deletingId}
+                      reindex={reindexExpediente}
+                      formatBytes={formatBytes}
+                      statusLabel={statusLabel}
+                    />
+                  ) : (
+                    <TarjetasExpedientes
+                      exps={filteredExps}
+                      onOpen={setOpenExp}
+                      formatBytes={formatBytes}
+                      statusLabel={statusLabel}
+                    />
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: 16,
+                      padding: "12px 14px",
+                      background: "var(--exp-line-soft)",
+                      borderRadius: "var(--exp-radius)",
+                      fontSize: 12,
+                      color: "var(--exp-muted)",
+                    }}
+                  >
+                    <span>
+                      Mostrando <strong>{filteredExps.length}</strong> de{" "}
+                      {expedientes.length} expediente{expedientes.length === 1 ? "" : "s"}
+                    </span>
+                    {hasActiveFilters() ? (
+                      <button
+                        type="button"
+                        className="expBtn expBtn-ghost expBtn-small"
+                        onClick={resetPreferences}
+                      >
+                        <History size={12} /> Restablecer preferencias
+                      </button>
+                    ) : null}
+                  </div>
+                </>
               )}
             </>
           ) : null}
         </div>
       ) : null}
 
-      {/* ── Tab: Subir (wizard 4 pasos) ─────────────────────────── */}
       {tab === "subir" && canManage ? (
         <div className="expTabContent">
           <form onSubmit={uploadExpediente}>
-            {/* Wizard progress */}
             <div className="expWizard">
-              <div className="expWizardProgress">
+              <div className="expWizardProgress" role="tablist" aria-label="Pasos del wizard">
                 {WIZARD_STEPS.map((step, idx) => {
-                  const Icon = step.icon;
                   const isActive = wizardStep === idx;
                   const isDone = wizardStep > idx;
                   return (
@@ -1272,6 +1521,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       <button
                         key={step.id}
                         type="button"
+                        role="tab"
+                        aria-selected={isActive}
                         onClick={() => setWizardStep(idx as WizardStep)}
                         className={
                           "expWizardStep" +
@@ -1285,18 +1536,26 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         <span className="expWizardStepLabel">{step.label}</span>
                       </button>
                       {idx < WIZARD_STEPS.length - 1 ? (
-                        <div
-                          key={`conn-${idx}`}
-                          className="expWizardStepConnector"
-                        />
+                        <div key={`conn-${idx}`} className="expWizardStepConnector" />
                       ) : null}
                     </>
                   );
                 })}
               </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  fontSize: 12,
+                  color: "var(--exp-muted)",
+                }}
+              >
+                <Info size={12} />
+                <span>{WIZARD_STEPS[wizardStep].hint}</span>
+              </div>
             </div>
 
-            {/* Paso 0: Documento */}
             {wizardStep === 0 ? (
               <>
                 <div className="expFormSection">
@@ -1390,9 +1649,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       />
                     </div>
                     <div className="expField">
-                      <label className="expField-label">
-                        Serie documental
-                      </label>
+                      <label className="expField-label">Serie documental</label>
                       <input
                         value={form.serieDocumento}
                         onChange={(e) => setField("serieDocumento", e.target.value)}
@@ -1401,9 +1658,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       />
                     </div>
                     <div className="expField">
-                      <label className="expField-label">
-                        Tipo de documento
-                      </label>
+                      <label className="expField-label">Tipo de documento</label>
                       <select
                         value={form.tipoDocumento}
                         onChange={(e) => setField("tipoDocumento", e.target.value)}
@@ -1422,9 +1677,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </div>
                     {form.tipoDocumento === "otro" ? (
                       <div className="expField">
-                        <label className="expField-label">
-                          Especificar tipo
-                        </label>
+                        <label className="expField-label">Especificar tipo</label>
                         <input
                           value={form.tipoDocumentoCustom}
                           onChange={(e) => setField("tipoDocumentoCustom", e.target.value)}
@@ -1477,8 +1730,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         placeholder="Si lo dejas vacío se usa el nombre del archivo"
                         className="expField-input"
                       />
-                      <span className="expField-hint">
-                        El título se mostrará en los resultados de búsqueda.
+                      <span className="expHelpText">
+                        <Info size={12} /> El título se mostrará en los resultados de búsqueda.
                       </span>
                     </div>
                   </div>
@@ -1486,7 +1739,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </>
             ) : null}
 
-            {/* Paso 1: Contenido */}
             {wizardStep === 1 ? (
               <div className="expFormSection">
                 <div className="expFormSectionHeader">
@@ -1546,7 +1798,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
             ) : null}
 
-            {/* Paso 2: Persona */}
             {wizardStep === 2 ? (
               <div className="expFormSection">
                 <div className="expFormSectionHeader">
@@ -1600,7 +1851,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
             ) : null}
 
-            {/* Paso 3: Ubicación */}
             {wizardStep === 3 ? (
               <div className="expFormSection">
                 <div className="expFormSectionHeader">
@@ -1715,7 +1965,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
             ) : null}
 
-            {/* Acciones del wizard */}
             <div
               style={{
                 display: "flex",
@@ -1740,9 +1989,18 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   type="button"
                   className="expBtn expBtn-ghost"
                   onClick={() => {
-                    setForm(EMPTY_FORM);
-                    setFile(null);
-                    setWizardStep(0);
+                    showConfirm({
+                      title: "¿Cancelar subida?",
+                      message:
+                        "Se perderán los datos del formulario y el PDF seleccionado. ¿Estás seguro?",
+                      variant: "warning",
+                      onConfirm: () => {
+                        setForm(EMPTY_FORM);
+                        setFile(null);
+                        setWizardStep(0);
+                        showToast("Subida cancelada", "info");
+                      },
+                    });
                   }}
                 >
                   <X size={14} /> Cancelar
@@ -1767,7 +2025,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="expBtn expBtn-primary"
+                  className="expBtn expBtn-primary expBtn-large"
                 >
                   {uploading ? (
                     <Loader2 size={16} className="expSpin" />
@@ -1792,8 +2050,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       ) : tab === "subir" && !canManage ? (
         <div className="expTabContent">
           <div className="expEmpty">
-            <div className="expEmpty-icon">
-              <Lock size={24} />
+            <div className="expEmptyIllustration">
+              <Lock size={28} />
             </div>
             <h3 className="expEmpty-title">Acceso restringido</h3>
             <p className="expEmpty-desc">
@@ -1811,7 +2069,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         </div>
       ) : null}
 
-      {/* ── Modales y slide-overs ─────────────────────────────────── */}
       {openExp ? (
         <div className="expSlideOverOverlay" onClick={() => setOpenExp(null)}>
           <aside
@@ -2046,8 +2303,76 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         </div>
       ) : null}
 
-      {/* ── Toasts ─────────────────────────────────────────────── */}
-      <div aria-live="polite" aria-atomic="true">
+      {confirm ? (
+        <div className="expConfirm" onClick={closeConfirm}>
+          <div
+            className="expConfirmDialog"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-labelledby="expConfirmTitle"
+            aria-describedby="expConfirmBody"
+          >
+            <div className="expConfirmHeader">
+              <div
+                className={`expConfirmIcon ${confirm.variant === "danger" ? "danger" : "warning"}`}
+              >
+                {confirm.variant === "danger" ? (
+                  <Trash2 size={20} />
+                ) : (
+                  <AlertCircle size={20} />
+                )}
+              </div>
+              <h3 className="expConfirmTitle" id="expConfirmTitle">
+                {confirm.title}
+              </h3>
+            </div>
+            <p className="expConfirmBody" id="expConfirmBody">
+              {confirm.message}
+            </p>
+            <div className="expConfirmFooter">
+              <button type="button" className="expBtn expBtn-ghost" onClick={closeConfirm}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={`expBtn ${confirm.variant === "danger" ? "expBtn-danger" : "expBtn-primary"}`}
+                onClick={() => {
+                  void confirm.onConfirm();
+                }}
+              >
+                {confirm.variant === "danger" ? "Eliminar" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <OnboardingTour
+        steps={TOUR_STEPS}
+        open={tour.open}
+        onClose={tour.close}
+        onComplete={tour.complete}
+      />
+
+      <UndoToasts stack={undoStack} onExecute={executeUndo} onDismiss={dismissUndo} />
+
+      <button
+        type="button"
+        className="expFab"
+        onClick={() => (canManage ? setTab("subir") : tour.restart())}
+        aria-label={canManage ? "Subir nuevo expediente" : "Ver tutorial"}
+        title={canManage ? "Subir nuevo expediente" : "Ver tutorial"}
+      >
+        {canManage ? <PlusCircle size={22} /> : <Compass size={22} />}
+      </button>
+
+      <div aria-live="polite" aria-atomic="true" className="expSrOnly">
+        {toasts.map((t) => (
+          <span key={t.id}>{t.message}</span>
+        ))}
+      </div>
+
+      <div>
         {toasts.map((toast) => {
           const Icon =
             toast.kind === "success"

@@ -2630,8 +2630,603 @@
   .expWizardProgress {
     padding: 10px;
   }
-  
+
   .expStatValue {
     font-size: 22px;
   }
+}
+
+/* ==========================================================================
+   Mejoras UX adicionales — Onboarding tour, undo, preferencias
+   ========================================================================== */
+
+/* --- Onboarding tour --- */
+.expTour {
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius-lg);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  animation: expPopIn 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.expTourHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--exp-line);
+  background: linear-gradient(135deg, var(--exp-brand-soft) 0%, var(--exp-panel) 100%);
+}
+
+.expTourBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--exp-brand);
+  background: var(--exp-panel);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--exp-brand);
+}
+
+.expTourClose {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--exp-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 120ms ease;
+}
+
+.expTourClose:hover {
+  background: var(--exp-line-soft);
+  color: var(--exp-ink);
+}
+
+.expTourBody {
+  padding: 16px 18px;
+}
+
+.expTourTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--exp-ink);
+}
+
+.expTourContent {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--exp-ink-soft);
+}
+
+.expTourAction {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--exp-brand-soft);
+  border-radius: var(--exp-radius);
+  font-size: 12px;
+  color: var(--exp-brand);
+  font-weight: 500;
+}
+
+.expTourFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--exp-line);
+  background: var(--exp-line-soft);
+}
+
+.expTourProgress {
+  display: flex;
+  gap: 4px;
+}
+
+.expTourDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--exp-line);
+  transition: all 120ms ease;
+}
+
+.expTourDot.active {
+  width: 18px;
+  background: var(--exp-brand);
+  border-radius: 999px;
+}
+
+.expTourActions {
+  display: flex;
+  gap: 6px;
+}
+
+.expBtn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.expTourTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--exp-line);
+  background: var(--exp-panel);
+  color: var(--exp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.expTourTrigger:hover {
+  background: var(--exp-line-soft);
+  color: var(--exp-brand);
+  border-color: var(--exp-brand);
+}
+
+/* --- Skeleton loaders --- */
+.expSkeleton {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    var(--exp-line-soft) 0%,
+    rgba(15, 118, 110, 0.08) 50%,
+    var(--exp-line-soft) 100%
+  );
+  background-size: 200% 100%;
+  animation: expShimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+@keyframes expShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* --- Skip link (accesibilidad) --- */
+.expSkipLink {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--exp-brand);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  z-index: 999;
+  transition: top 200ms ease;
+  text-decoration: none;
+}
+
+.expSkipLink:focus {
+  top: 8px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* --- Live region para screen readers --- */
+.expSrOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Onboarding tour focus pulse --- */
+@keyframes expTourPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0);
+  }
+}
+
+[role="dialog"][aria-label*="Tutorial"] {
+  animation: expTourPulse 2s ease-in-out infinite;
+}
+
+/* --- Empty state con ilustración --- */
+.expEmptyIllustration {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--exp-brand-soft) 0%, var(--exp-info-soft) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.expEmptyIllustration::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px dashed var(--exp-brand);
+  opacity: 0.3;
+  animation: expSpin 20s linear infinite;
+}
+
+/* --- Connection status indicator --- */
+.expStatusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--exp-success);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.expStatusDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: expPulse 2s ease-in-out infinite;
+}
+
+.expStatusDot.offline {
+  background: var(--exp-muted);
+}
+
+.expStatusDot.offline::after {
+  display: none;
+}
+
+.expStatusDot.error {
+  background: var(--exp-danger);
+}
+
+/* --- Counter badges en headers --- */
+.expHeaderCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--exp-muted);
+  background: var(--exp-line-soft);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.expHeaderCount strong {
+  color: var(--exp-ink);
+  font-size: 13px;
+}
+
+/* --- Quick action floating button (mobile) --- */
+.expFab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 50;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--exp-brand);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.4);
+  transition: all 200ms ease;
+}
+
+.expFab:hover {
+  background: var(--exp-brand-dark);
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.5);
+}
+
+.expFab:active {
+  transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+  .expFab {
+    display: inline-flex;
+  }
+}
+
+/* --- Confirmation dialog (custom) --- */
+.expConfirm {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: expFadeIn 160ms ease;
+}
+
+.expConfirmDialog {
+  background: var(--exp-panel);
+  border-radius: var(--exp-radius-lg);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  max-width: 420px;
+  width: 100%;
+  overflow: hidden;
+  animation: expPopIn 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.expConfirmHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--exp-line);
+}
+
+.expConfirmIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.expConfirmIcon.danger {
+  background: var(--exp-danger-soft);
+  color: var(--exp-danger);
+}
+
+.expConfirmIcon.warning {
+  background: var(--exp-warning-soft);
+  color: var(--exp-warning);
+}
+
+.expConfirmTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--exp-ink);
+}
+
+.expConfirmBody {
+  padding: 18px 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--exp-ink-soft);
+}
+
+.expConfirmFooter {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 20px;
+  border-top: 1px solid var(--exp-line);
+  background: var(--exp-line-soft);
+}
+
+/* --- Inline loading indicator --- */
+.expInlineLoading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--exp-muted);
+}
+
+.expInlineLoading svg {
+  animation: expSpin 1s linear infinite;
+}
+
+/* --- Pulsing dot indicator --- */
+@keyframes expPing {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.expPingDot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--exp-brand);
+}
+
+.expPingDot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: expPing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* --- Keyboard hint chip --- */
+.expKeyHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--exp-muted);
+  background: var(--exp-line-soft);
+  border: 1px solid var(--exp-line);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.expKeyHint kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: 3px;
+  padding: 0 4px;
+  color: var(--exp-brand);
+  font-weight: 600;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* --- Helper text inline --- */
+.expHelpText {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--exp-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.expHelpText svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* --- Highlighted element during tour --- */
+.expHighlight {
+  position: relative;
+  z-index: 199;
+  border-radius: 8px;
+  animation: expTourHighlight 2s ease-in-out infinite;
+}
+
+@keyframes expTourHighlight {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.3);
+  }
+}
+
+/* --- View mode segmented control --- */
+.expSegmented {
+  display: inline-flex;
+  background: var(--exp-line-soft);
+  border: 1px solid var(--exp-line);
+  border-radius: 8px;
+  padding: 2px;
+  position: relative;
+}
+
+.expSegmented button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--exp-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  transition: all 120ms ease;
+  position: relative;
+  z-index: 1;
+}
+
+.expSegmented button:hover {
+  color: var(--exp-ink);
+}
+
+.expSegmented button.active {
+  background: var(--exp-panel);
+  color: var(--exp-brand);
+  box-shadow: var(--exp-shadow-sm);
+}
+
+/* --- Drag indicator --- */
+.expDragIndicator {
+  position: fixed;
+  pointer-events: none;
+  z-index: 199;
+  background: var(--exp-brand);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.4);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.expDragIndicator.visible {
+  opacity: 1;
+}
+
+/* --- Filter chip removable --- */
+.expFilterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  background: var(--exp-brand-soft);
+  color: var(--exp-brand);
+  border: 1px solid var(--exp-brand);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.expFilterChip button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.expFilterChip button:hover {
+  opacity: 1;
 }
