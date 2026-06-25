@@ -727,6 +727,42 @@
   align-self: center;
 }
 
+/* --- Indexing in progress banner --- */
+.expIndexingBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  background: linear-gradient(
+    90deg,
+    var(--exp-info-soft) 0%,
+    transparent 100%
+  );
+  border-left: 3px solid var(--exp-info);
+  border-radius: var(--exp-radius);
+  font-size: 13px;
+  color: var(--exp-info);
+  animation: expSlideDown 200ms ease;
+}
+
+.expIndexingBanner svg {
+  flex-shrink: 0;
+}
+
+.expIndexingBanner strong {
+  font-weight: 700;
+}
+
+[data-theme="dark"] .expIndexingBanner {
+  background: linear-gradient(
+    90deg,
+    rgba(59, 130, 246, 0.15) 0%,
+    transparent 100%
+  );
+  color: #93c5fd;
+}
+
 [data-theme="dark"] .expRecentItem {
   background: var(--exp-panel);
   border-color: var(--exp-line);

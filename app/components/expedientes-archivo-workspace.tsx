@@ -467,6 +467,25 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return () => clearInterval(timer);
   }, [hasPending, loadExpedientes]);
 
+  // Polling de la lista de recientes cuando hay items pendientes
+  const hasRecentPending = useMemo(
+    () => recentUploads.some((exp) => exp.status === "uploaded" || exp.status === "processing"),
+    [recentUploads],
+  );
+  useEffect(() => {
+    if (!hasRecentPending) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (attempts > 75) {
+        clearInterval(timer);
+        return;
+      }
+      void refreshRecentUploads();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [hasRecentPending, refreshRecentUploads]);
+
   // Refs estables para evitar memory leak en el keyboard listener
   const tourOpenRef = useRef(tour.open);
   const tourDismissRef = useRef(tour.dismiss);
@@ -2663,6 +2682,17 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   </button>
                 ) : null}
               </div>
+
+              {hasRecentPending ? (
+                <div className="expIndexingBanner" role="status">
+                  <Loader2 size={14} className="expSpin" />
+                  <span>
+                    <strong>Indexando con Pinecone...</strong> Los expedientes
+                    marcados como "Procesando" están siendo vectorizados y
+                    fragmentados. La lista se actualiza automáticamente cada 4s.
+                  </span>
+                </div>
+              ) : null}
 
               {loadingRecent && recentUploads.length === 0 ? (
                 <SkeletonList count={3} />
