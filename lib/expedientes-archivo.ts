@@ -83,26 +83,39 @@ export function normalizeCatalogValue(value: unknown, catalog: readonly string[]
 
 export type ExpedienteStatus = "uploaded" | "processing" | "indexed" | "error";
 
+export type PersonaTipo = "natural" | "juridica";
+
+// Esquema canónico (single source of truth). Debe coincidir 1:1 con
+// app/components/expedientes-archivo/types.ts -> ExpedienteItem.
 export type ExpedienteArchivo = {
   id: string;
-  numero_expediente: string | null;
-  numero_documento: string | null;
-  fecha: string | null;
+  // Identificación documental
+  sgd_expediente: string | null;
+  serie_documento: string | null;
   anio: number | null;
+  tipo_documento: string | null;
   asunto: string | null;
   materia: string | null;
   resumen: string | null;
-  remitente: string | null;
-  destinatario: string | null;
   title: string;
-  tipo_contenedor: ContenedorTipo;
+  oficina: string | null;
+  // Almacenamiento físico
+  tipo_almacenamiento: ContenedorTipo | null;
   nro_archivador: string | null;
-  nro_caja: string | null;
-  color: string | null;
-  ubicacion: string | null;
-  codigo_ubicacion: string | null;
-  nro_folios: number | null;
+  nro_paquete: string | null;
+  empastado: boolean | null;
+  color_archivador: string | null;
+  // Ubicación física exacta
+  nro_estante: string | null;
+  nro_piso: string | null;
+  nro_local: string | null;
+  folio: string | null;
   observaciones: string | null;
+  // Persona interesada
+  persona_tipo: PersonaTipo | null;
+  persona_documento: string | null;
+  persona_nombre: string | null;
+  // Archivo digital
   file_name: string;
   file_size: number;
   mime_type: string;
@@ -110,17 +123,22 @@ export type ExpedienteArchivo = {
   storage_path: string;
   status: ExpedienteStatus;
   error_message: string | null;
+  body_text?: string | null;
   metadata: Record<string, unknown>;
   uploaded_by: string | null;
   created_at: string;
   updated_at: string;
 };
 
+export function normalizePersonaTipo(value: unknown): PersonaTipo | null {
+  return value === "natural" || value === "juridica" ? value : null;
+}
+
 // ── Esquemas de consulta ──────────────────────────────────────────────────────
 
 export const expedienteSearchSchema = z.object({
   query: z.string().trim().min(2, "Escribe al menos 2 caracteres").max(500),
-  numeroDocumento: z.string().trim().optional(),
+  serieDocumento: z.string().trim().optional(),
   anio: z.coerce.number().int().min(1900).max(2200).optional(),
   topK: z.number().int().min(1).max(20).optional(),
 });

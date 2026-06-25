@@ -40,24 +40,34 @@ export type ExpedienteItem = {
 /** Resultado de búsqueda por palabra clave (modo "Buscar") */
 export type SearchResult = {
   expedienteId: string;
+  sgdExpediente: string | null;
+  serieDocumento: string | null;
+  tipoDocumento: string | null;
   title: string;
   asunto: string | null;
   materia: string | null;
+  oficina: string | null;
+  anio: number | null;
   pageStart: number | null;
+  pageEnd: number | null;
   excerpt: string;
   citation: string;
   ubicacionResumen: string;
   ubicacion: Ubicacion;
 };
 
+/** Ubicación física estructurada (debe coincidir con ExpedienteUbicacion del backend) */
 export type Ubicacion = {
-  tipoContenedorLabel: string;
-  nroCaja: string | null;
+  tipoAlmacenamiento: string;
+  tipoAlmacenamientoLabel: string;
   nroArchivador: string | null;
+  nroPaquete: string | null;
+  empastado: boolean | null;
   color: string | null;
-  ubicacion: string | null;
-  codigoUbicacion: string | null;
-  nroFolios: number | null;
+  nroEstante: string | null;
+  nroPiso: string | null;
+  nroLocal: string | null;
+  folio: string | null;
 };
 
 /** Resultado del chat con IA (modo "Chat con IA") */

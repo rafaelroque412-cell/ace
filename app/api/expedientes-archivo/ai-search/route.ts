@@ -16,12 +16,23 @@ const schema = z.object({
 });
 
 const SELECT =
-  "id,sgd_expediente,title,anio,asunto,materia,ubicacion,codigo_ubicacion,nro_archivador,nro_caja,status,created_at";
+  "id,sgd_expediente,serie_documento,title,anio,asunto,materia,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,nro_estante,nro_piso,nro_local,status,created_at";
 
-type ExpedienteResumen = Pick<
-  ExpedienteArchivo,
-  "id" | "title" | "anio" | "status" | "ubicacion" | "nro_archivador"
-> & { matches: string };
+function ubicacionResumen(e: ExpedienteArchivo): string {
+  return [
+    e.nro_archivador ? `Archivador ${e.nro_archivador}` : null,
+    e.nro_estante ? `Estante ${e.nro_estante}` : null,
+    e.nro_piso ? `Piso ${e.nro_piso}` : null,
+    e.nro_local ? `Local ${e.nro_local}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+type ExpedienteResumen = Pick<ExpedienteArchivo, "id" | "title" | "anio" | "status" | "oficina"> & {
+  ubicacion: string;
+  matches: string;
+};
 
 export async function POST(request: Request) {
   try {
@@ -59,7 +70,8 @@ export async function POST(request: Request) {
       id: e.id,
       title: e.title,
       anio: e.anio,
-      ubicacion: e.ubicacion,
+      oficina: e.oficina,
+      ubicacion: ubicacionResumen(e),
       materia: e.materia,
       asunto: e.asunto,
     }));
@@ -113,9 +125,9 @@ ${JSON.stringify(compact, null, 0)}`,
           id: exp.id,
           title: exp.title,
           anio: exp.anio,
-          ubicacion: exp.ubicacion,
+          oficina: exp.oficina,
+          ubicacion: ubicacionResumen(exp),
           status: exp.status,
-          nro_archivador: exp.nro_archivador,
           matches: m.razon,
         };
       })

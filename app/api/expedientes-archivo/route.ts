@@ -3,10 +3,10 @@ import { after, NextResponse } from "next/server";
 import { requireEditor, requireUser } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
-  ARCHIVO_AMBIENTES,
   type ExpedienteArchivo,
   normalizeCatalogValue,
   normalizeContenedorTipo,
+  normalizePersonaTipo,
 } from "@/lib/expedientes-archivo";
 import { processExpedienteDocument } from "@/lib/expedientes-archivo-processing";
 import {
@@ -29,7 +29,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const SELECT =
-  "id,numero_expediente,numero_documento,fecha,anio,asunto,materia,resumen,remitente,destinatario,title,tipo_contenedor,nro_archivador,nro_caja,color,ubicacion,codigo_ubicacion,nro_folios,observaciones,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
 
 function safeName(name: string) {
   return name
@@ -140,20 +140,24 @@ export async function POST(request: Request) {
 
     const { storageBucket } = getSupabaseServerConfig();
     const title = formText(formData, "title", 300) ?? file.name;
-    const fechaRaw = formData.get("fecha");
-    const fecha =
-      typeof fechaRaw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw.trim())
-        ? fechaRaw.trim()
-        : null;
 
     const storagePath = `expedientes/${randomUUID()}-${safeName(file.name)}`;
     await uploadPdfToStorage(storagePath, file);
 
-    // Construir payload solo con columnas que existen en la DB.
-    // Esto permite que el backend funcione aunque la migración
-    // docs/supabase/expedientes-archivo-add-columns.sql no se haya
-    // ejecutado todavia. Cuando se ejecute, todos los campos se envian.
-    const basePayload: Record<string, unknown> = {
+    // tipo_documento es texto libre: la UI ofrece un catálogo + "otro" con valor libre.
+    const tipoDocumentoRaw = formText(formData, "tipoDocumento", 60);
+    const tipoDocumento =
+      tipoDocumentoRaw === "otro" ? formText(formData, "tipoDocumentoCustom", 60) : tipoDocumentoRaw;
+
+    const empastadoRaw = formData.get("empastado");
+    const empastado =
+      empastadoRaw === "si" || empastadoRaw === "true"
+        ? true
+        : empastadoRaw === "no" || empastadoRaw === "false"
+          ? false
+          : null;
+
+    const payload: Record<string, unknown> = {
       title,
       file_name: file.name,
       file_size: file.size,
@@ -165,91 +169,48 @@ export async function POST(request: Request) {
       metadata: { uploadSource: "web" },
     };
 
-    // Campos opcionales: solo se envian si tienen valor
+    // Campos opcionales: solo se envian si tienen valor (esquema canónico).
     const optionalFields: Array<[string, unknown]> = [
+      ["sgd_expediente", formText(formData, "sgdExpediente", 120)],
+      ["serie_documento", formText(formData, "serieDocumento", 120)],
+      ["tipo_documento", tipoDocumento],
       ["anio", formInt(formData, "anio")],
       ["asunto", formText(formData, "asunto")],
       ["materia", formText(formData, "materia", 200)],
-      ["remitente", formText(formData, "remitente", 300)],
-      ["destinatario", formText(formData, "destinatario", 300)],
+      ["resumen", formText(formData, "resumen", 2000)],
+      ["oficina", formText(formData, "oficina", 200)],
+      ["folio", formText(formData, "folio", 60)],
       ["observaciones", formText(formData, "observaciones", 1000)],
-      ["numero_documento", formText(formData, "numeroDocumento", 120)],
-      ["numero_expediente", formText(formData, "numeroExpediente", 120)],
       ["nro_archivador", formText(formData, "nroArchivador", 60)],
-      ["nro_folios", formInt(formData, "nroFolios")],
-      ["color", normalizeCatalogValue(formData.get("color"), ARCHIVO_COLORES)],
-      ["ubicacion", normalizeCatalogValue(formData.get("ubicacion"), ARCHIVO_AMBIENTES)],
-      ["fecha", fecha],
+      ["nro_paquete", formText(formData, "nroPaquete", 60)],
+      ["nro_estante", formText(formData, "nroEstante", 60)],
+      ["nro_piso", formText(formData, "nroPiso", 60)],
+      ["nro_local", formText(formData, "nroLocal", 60)],
+      ["color_archivador", normalizeCatalogValue(formData.get("colorArchivador"), ARCHIVO_COLORES)],
+      ["persona_tipo", normalizePersonaTipo(formData.get("personaTipo"))],
+      ["persona_documento", formText(formData, "personaDocumento", 20)],
+      ["persona_nombre", formText(formData, "personaNombre", 200)],
     ];
     for (const [key, value] of optionalFields) {
       if (value !== null && value !== "" && value !== undefined) {
-        basePayload[key] = value;
+        payload[key] = value;
       }
     }
 
-    // Campos nuevos (requieren migracion): se envian solo si existen en la DB
-    // para no romper el POST. Una vez aplicada la migracion, se envian siempre.
-    const codigoUbicacion = formText(formData, "codigoUbicacion", 120);
-    if (codigoUbicacion) basePayload.codigo_ubicacion = codigoUbicacion;
-    const tipoContenedor = normalizeContenedorTipo(formData.get("tipoContenedor"));
-    if (tipoContenedor) basePayload.tipo_contenedor = tipoContenedor;
-    const nroCaja = formText(formData, "nroCaja", 60);
-    if (nroCaja) basePayload.nro_caja = nroCaja;
-
-    // Intentar el POST. Si falla por columnas faltantes, reintentar
-    // sin las columnas nuevas (codigo_ubicacion, tipo_contenedor, nro_caja)
-    type InsertResult = { ok: true; data: ExpedienteArchivo[] } | { ok: false; message: string };
-
-    const tryInsert = async (payload: Record<string, unknown>): Promise<InsertResult> => {
-      try {
-        const data = await supabaseRest<ExpedienteArchivo[]>(
-          `expedientes_archivo?select=id`,
-          {
-            body: JSON.stringify(payload),
-            method: "POST",
-          },
-        );
-        return { ok: true, data };
-      } catch (e) {
-        return { ok: false, message: e instanceof Error ? e.message : String(e) };
-      }
-    };
-
-    let insertResult: InsertResult = await tryInsert(basePayload);
-
-    // Si fallo por columnas faltantes (PGRST204), reintentar sin ellas
-    if (!insertResult.ok) {
-      const errorMsg = insertResult.message;
-      const missingColumns = [
-        "codigo_ubicacion",
-        "tipo_contenedor",
-        "nro_caja",
-      ].filter((col) => errorMsg.includes(`'${col}'`));
-
-      if (missingColumns.length > 0) {
-        // Log para que el operador sepa que debe ejecutar la migracion
-        console.warn(
-          `[expedientes_archivo] Columnas faltantes detectadas: ${missingColumns.join(", ")}. ` +
-            `Ejecuta docs/supabase/expedientes-archivo-add-columns.sql para habilitar todos los campos.`,
-        );
-        const fallbackPayload = { ...basePayload };
-        for (const col of missingColumns) {
-          delete fallbackPayload[col];
-        }
-        insertResult = await tryInsert(fallbackPayload);
-      }
+    // tipo_almacenamiento: catálogo cerrado (la DB tiene default 'folder').
+    const tipoAlm = formData.get("tipoAlmacenamiento");
+    if (typeof tipoAlm === "string" && tipoAlm.trim()) {
+      payload.tipo_almacenamiento = normalizeContenedorTipo(tipoAlm);
+    }
+    if (empastado !== null) {
+      payload.empastado = empastado;
     }
 
-    if (!insertResult.ok) {
-      // Extraer mensaje limpio de Supabase
-      const match = insertResult.message.match(/"message":"([^"]+)"/);
-      const cleanMsg = match ? match[1] : insertResult.message;
-      return NextResponse.json(
-        { error: cleanMsg },
-        { status: 500 },
-      );
-    }
-    const expediente = insertResult.data[0];
+    const inserted = await supabaseRest<ExpedienteArchivo[]>(`expedientes_archivo?select=id`, {
+      body: JSON.stringify(payload),
+      method: "POST",
+    });
+    const expediente = inserted[0];
 
     await writeAuditLog({
       action: "expedientes.upload",

@@ -1,6 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { requireEditor, requireUser } from "@/lib/auth";
-import { type ExpedienteArchivo, getExpedientesNamespace } from "@/lib/expedientes-archivo";
+import {
+  ARCHIVO_COLORES,
+  type ExpedienteArchivo,
+  getExpedientesNamespace,
+  normalizeCatalogValue,
+  normalizeContenedorTipo,
+  normalizePersonaTipo,
+} from "@/lib/expedientes-archivo";
 import { processExpedienteDocument } from "@/lib/expedientes-archivo-processing";
 import { deleteRecords } from "@/lib/pinecone";
 import {
@@ -8,16 +16,52 @@ import {
   downloadStorageObject,
   getSupabaseServerConfig,
   supabaseRest,
+  uploadPdfToStorage,
   writeAuditLog,
 } from "@/lib/supabase-server";
+import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
+
+function safeName(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9.\-_]+/g, "-")
+    .slice(0, 80);
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const SELECT =
-  "id,numero_expediente,numero_documento,fecha,anio,asunto,materia,resumen,remitente,destinatario,title,tipo_contenedor,nro_archivador,nro_caja,color,ubicacion,codigo_ubicacion,nro_folios,observaciones,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+
+// Columnas editables vía PATCH (whitelist; nunca status/storage/uploaded_by).
+const PATCHABLE_COLUMNS = new Set<string>([
+  "sgd_expediente",
+  "serie_documento",
+  "anio",
+  "tipo_documento",
+  "asunto",
+  "materia",
+  "resumen",
+  "title",
+  "oficina",
+  "tipo_almacenamiento",
+  "nro_archivador",
+  "nro_paquete",
+  "empastado",
+  "color_archivador",
+  "nro_estante",
+  "nro_piso",
+  "nro_local",
+  "folio",
+  "observaciones",
+  "persona_tipo",
+  "persona_documento",
+  "persona_nombre",
+]);
 
 type ChunkVector = { pinecone_vector_id: string | null };
 
@@ -159,6 +203,160 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo eliminar el expediente" },
+      { status: 500 },
+    );
+  }
+}
+
+// PATCH: edita metadata del expediente (whitelist). No toca el PDF ni reindexa.
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireEditor();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    getSupabaseServerConfig();
+    const { id } = await context.params;
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const updates: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(body)) {
+      if (!PATCHABLE_COLUMNS.has(key)) {
+        continue;
+      }
+      if (key === "empastado") {
+        if (typeof value === "boolean") updates.empastado = value;
+        else if (value === "si" || value === "true") updates.empastado = true;
+        else if (value === "no" || value === "false") updates.empastado = false;
+      } else if (key === "tipo_almacenamiento") {
+        updates.tipo_almacenamiento = normalizeContenedorTipo(value);
+      } else if (key === "color_archivador") {
+        updates.color_archivador = normalizeCatalogValue(value, ARCHIVO_COLORES);
+      } else if (key === "persona_tipo") {
+        updates.persona_tipo = normalizePersonaTipo(value);
+      } else if (key === "anio") {
+        const n = typeof value === "number" ? value : Number.parseInt(String(value), 10);
+        updates.anio = Number.isFinite(n) ? n : null;
+      } else if (value === null || typeof value === "string") {
+        updates[key] = typeof value === "string" ? value.trim().slice(0, 2000) : null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No hay campos válidos para actualizar" }, { status: 400 });
+    }
+
+    await supabaseRest(`expedientes_archivo?id=eq.${id}`, {
+      body: JSON.stringify(updates),
+      method: "PATCH",
+    });
+
+    await writeAuditLog({
+      action: "expedientes-archivo.update",
+      actorReference: auth.user.email ?? auth.user.id,
+      details: { fields: Object.keys(updates) },
+      entityId: id,
+      entityType: "expediente_archivo",
+      module: "expedientes-archivo",
+    });
+
+    return NextResponse.json({ updated: Object.keys(updates) });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "No se pudo actualizar el expediente" },
+      { status: 500 },
+    );
+  }
+}
+
+// PUT: reemplaza el PDF del expediente. Borra el PDF/vectores/chunks viejos y
+// reprocesa el nuevo en segundo plano (status -> processing -> indexed/error).
+export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireEditor();
+    if ("error" in auth) {
+      return auth.error;
+    }
+
+    const rl = checkRateLimit(getRateLimitKey(request, auth.user.id, "reindex"), RATE_LIMITS.reindex);
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
+    }
+
+    const { storageBucket } = getSupabaseServerConfig();
+    const { id } = await context.params;
+
+    const formData = await request.formData();
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "Debes adjuntar un archivo PDF" }, { status: 400 });
+    }
+    if (file.type !== "application/pdf") {
+      return NextResponse.json({ error: "Solo se permiten archivos PDF" }, { status: 400 });
+    }
+    if (file.size > maxPdfSizeBytes) {
+      return NextResponse.json({ error: `El PDF supera el limite de ${maxPdfSizeLabel}` }, { status: 400 });
+    }
+
+    const [expediente] = await supabaseRest<ExpedienteArchivo[]>(
+      `expedientes_archivo?id=eq.${id}&select=${SELECT}`,
+    );
+    if (!expediente) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+
+    const oldPath = expediente.storage_path;
+    const newPath = `expedientes/${randomUUID()}-${safeName(file.name)}`;
+    await uploadPdfToStorage(newPath, file);
+
+    await supabaseRest(`expedientes_archivo?id=eq.${id}`, {
+      body: JSON.stringify({
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type || "application/pdf",
+        storage_path: newPath,
+        status: "processing",
+        error_message: null,
+      }),
+      method: "PATCH",
+    });
+
+    await writeAuditLog({
+      action: "expedientes.replaceFile",
+      actorReference: auth.user.email ?? auth.user.id,
+      details: { newFileName: file.name, newSize: file.size },
+      entityId: id,
+      entityType: "expediente_archivo",
+      module: "expedientes-archivo",
+    });
+
+    after(async () => {
+      try {
+        const namespace = getExpedientesNamespace();
+        const vectorIds = await getVectorIds(id);
+        await deleteRecords(vectorIds, namespace).catch(() => undefined);
+        await supabaseRest(`expedientes_archivo_chunks?expediente_id=eq.${id}`, { method: "DELETE" });
+        if (oldPath && oldPath !== newPath) {
+          await deleteStorageObjects(storageBucket, [oldPath]).catch(() => undefined);
+        }
+        const [full] = await supabaseRest<ExpedienteArchivo[]>(
+          `expedientes_archivo?id=eq.${id}&select=${SELECT}`,
+        );
+        const blob = await downloadStorageObject(storageBucket, newPath);
+        const pdfFile = new File([blob], file.name, { type: "application/pdf" });
+        if (full) {
+          await processExpedienteDocument(full, pdfFile);
+        }
+      } catch {
+        // processExpedienteDocument ya persiste el error en el expediente.
+      }
+    });
+
+    return NextResponse.json({ replaced: true, processing: true }, { status: 202 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "No se pudo reemplazar el PDF" },
       { status: 500 },
     );
   }

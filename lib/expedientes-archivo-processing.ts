@@ -108,26 +108,24 @@ ${text.slice(0, analysisTextLimit)}`,
 
 function buildExpedienteEmbeddingText(input: {
   title: string;
-  numeroDocumento: string | null;
-  numeroExpediente: string | null;
-  fecha: string | null;
+  sgdExpediente: string | null;
+  serieDocumento: string | null;
+  tipoDocumento: string | null;
+  oficina: string | null;
   asunto: string | null;
   materia: string | null;
-  remitente: string | null;
-  destinatario: string | null;
   pageStart: number | null;
   pageEnd: number | null;
   content: string;
 }) {
   const header = [
     `Expediente: ${input.title}`,
-    input.numeroExpediente ? `Nº de expediente: ${input.numeroExpediente}` : null,
-    input.numeroDocumento ? `Nº de documento: ${input.numeroDocumento}` : null,
-    input.fecha ? `Fecha: ${input.fecha}` : null,
+    input.sgdExpediente ? `Nº SGD: ${input.sgdExpediente}` : null,
+    input.serieDocumento ? `Serie documento: ${input.serieDocumento}` : null,
+    input.tipoDocumento ? `Tipo: ${input.tipoDocumento}` : null,
+    input.oficina ? `Oficina: ${input.oficina}` : null,
     input.materia ? `Materia: ${input.materia}` : null,
     input.asunto ? `Asunto: ${input.asunto}` : null,
-    input.remitente ? `Remitente: ${input.remitente}` : null,
-    input.destinatario ? `Destinatario: ${input.destinatario}` : null,
     input.pageStart
       ? input.pageEnd && input.pageEnd !== input.pageStart
         ? `Páginas: ${input.pageStart}-${input.pageEnd}`
@@ -184,14 +182,14 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     const insights = await analyzeExpedienteWithAi(text);
 
     // El dato del usuario manda; si no lo dio, se usa lo detectado/IA.
-    const numeroDocumento =
-      asText(expediente.numero_documento) ?? extractExpedienteNumber(expediente.title, text);
-    const numeroExpediente = asText(expediente.numero_expediente);
-    const fecha = asText(expediente.fecha) ?? extractFecha(text);
+    const serieDocumento =
+      asText(expediente.serie_documento) ?? extractExpedienteNumber(expediente.title, text);
+    const sgdExpediente = asText(expediente.sgd_expediente);
+    const tipoDocumento = asText(expediente.tipo_documento);
+    const oficina = asText(expediente.oficina);
+    const fecha = extractFecha(text);
     const asunto = asText(expediente.asunto) ?? insights.asunto;
     const materia = asText(expediente.materia) ?? insights.materia;
-    const remitente = asText(expediente.remitente) ?? insights.remitente;
-    const destinatario = asText(expediente.destinatario) ?? insights.destinatario;
     const resumen = asText(expediente.resumen) ?? insights.resumen;
     const anio =
       expediente.anio ?? (fecha ? Number.parseInt(fecha.slice(0, 4), 10) : undefined);
@@ -201,9 +199,10 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       content: chunk.content,
       expediente_id: expediente.id,
       metadata: {
-        numeroDocumento,
-        fecha,
+        serieDocumento,
+        anio: Number.isFinite(anio) ? anio : null,
         materia,
+        tipoDocumento,
         pageEnd: chunk.pageEnd,
         pageStart: chunk.pageStart,
       },
@@ -219,7 +218,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       chunk_id: chunk.id,
       chunk_index: chunk.chunk_index,
       document_id: expediente.id,
-      document_number: numeroDocumento ?? undefined,
+      document_number: serieDocumento ?? undefined,
       document_type: "expediente",
       page_end: chunk.page_end ?? undefined,
       page_start: chunk.page_start ?? undefined,
@@ -228,14 +227,13 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       text: buildExpedienteEmbeddingText({
         asunto,
         content: chunk.content,
-        destinatario,
-        fecha,
         materia,
-        numeroDocumento,
-        numeroExpediente,
+        oficina,
         pageEnd: chunk.page_end,
         pageStart: chunk.page_start,
-        remitente,
+        serieDocumento,
+        sgdExpediente,
+        tipoDocumento,
         title: expediente.title,
       }),
       title: expediente.title,
@@ -249,7 +247,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       documentId: expediente.id,
       expectedMinRecords: records.length,
       namespace,
-      query: [expediente.title, numeroDocumento, numeroExpediente, asunto, materia]
+      query: [expediente.title, serieDocumento, sgdExpediente, asunto, materia]
         .filter(Boolean)
         .join(" "),
     });
@@ -259,8 +257,6 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
         anio: Number.isFinite(anio) ? anio : null,
         asunto,
         body_text: text.slice(0, 200000),
-        destinatario,
-        fecha,
         materia,
         metadata: {
           ...expediente.metadata,
@@ -276,8 +272,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
           },
           textLength: text.length,
         },
-        numero_documento: numeroDocumento,
-        remitente,
+        serie_documento: serieDocumento,
         resumen,
         status: "indexed",
       }),
