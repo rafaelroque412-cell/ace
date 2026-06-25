@@ -415,6 +415,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   // Carga inicial de recientes cuando el usuario abre la pestana Subir
   useEffect(() => {
     if (tab === "subir" && canManage) {
+      // Carga de datos al montar/cambiar de tab; el setState ocurre tras await.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void refreshRecentUploads();
     }
   }, [tab, canManage, refreshRecentUploads]);
@@ -425,6 +427,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   );
 
   useEffect(() => {
+    // Carga inicial de la lista; el setState ocurre tras await.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadExpedientes();
   }, [loadExpedientes]);
 
@@ -1440,7 +1444,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   </span>
                   {searchInput ? (
                     <span className="expFilterChip">
-                      Búsqueda: "{searchInput.slice(0, 20)}"
+                      Búsqueda: &quot;{searchInput.slice(0, 20)}&quot;
                       <button onClick={() => setSearchInput("")} aria-label="Quitar filtro">
                         <X size={12} />
                       </button>
@@ -2665,7 +2669,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   <Loader2 size={14} className="expSpin" />
                   <span>
                     <strong>Indexando con Pinecone...</strong> Los expedientes
-                    marcados como "Procesando" están siendo vectorizados y
+                    marcados como &quot;Procesando&quot; están siendo vectorizados y
                     fragmentados. La lista se actualiza automáticamente cada 4s.
                   </span>
                 </div>
