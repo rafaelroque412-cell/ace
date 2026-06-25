@@ -1,8 +1,11 @@
 name: Deploy to Netlify
 
+# DESHABILITADO el auto-deploy en push: este workflow hace `publish-dir: .next`
+# (deploy de .next crudo), que NO es válido para Next.js — el sitio necesita el
+# build nativo de Netlify con @netlify/plugin-nextjs (ver netlify.toml). Ejecutarlo
+# sobrescribía el deploy nativo y rompía producción (404 en todas las rutas).
+# Queda solo en manual (workflow_dispatch) hasta rehacerlo con `netlify build`.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
