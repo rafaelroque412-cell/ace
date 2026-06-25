@@ -29,6 +29,8 @@ export function useTheme() {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
       const initial: Theme = stored ?? "system";
+      // Lectura de localStorage post-montaje (evita mismatch de hidratación SSR).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setThemeState(initial);
       const r = initial === "system" ? getSystemTheme() : initial;
       setResolved(r);

@@ -14,6 +14,8 @@ export function useDensity() {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY) as Density | null;
       if (stored === "comfortable" || stored === "compact") {
+        // Lectura de localStorage post-montaje (evita mismatch de hidratación SSR).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDensityState(stored);
         document.documentElement.setAttribute("data-density", stored);
       }

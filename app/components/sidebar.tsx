@@ -151,6 +151,8 @@ export function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
+    // Lectura de localStorage post-montaje (evita mismatch de hidratación SSR).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCollapsed(readCollapsed());
   }, []);
 

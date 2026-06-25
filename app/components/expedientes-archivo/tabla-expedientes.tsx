@@ -12,6 +12,34 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
   );
 }
 
+// Componente a nivel de módulo (no dentro del render) para no resetear estado
+// en cada render — react-hooks/static-components.
+function SortBtn({
+  col,
+  children,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  col: string;
+  children: React.ReactNode;
+  sortBy: string;
+  sortDir: string;
+  onSort: (col: string) => void;
+}) {
+  const arrow = sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+  return (
+    <button
+      type="button"
+      className={`expTableSortBtn ${sortBy === col ? "activeSort" : ""}`}
+      onClick={() => onSort(col)}
+    >
+      {children}
+      {arrow}
+    </button>
+  );
+}
+
 export const TablaExpedientes = memo(function TablaExpedientes({
   exps,
   canManage,
@@ -31,20 +59,6 @@ export const TablaExpedientes = memo(function TablaExpedientes({
   formatBytes,
   statusLabel,
 }: TablaExpedientesProps) {
-  const arrow = (col: string) =>
-    sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
-  const SortBtn = ({ col, children }: { col: string; children: React.ReactNode }) => (
-    <button
-      type="button"
-      className={`expTableSortBtn ${sortBy === col ? "activeSort" : ""}`}
-      onClick={() => onSort(col)}
-    >
-      {children}
-      {arrow(col)}
-    </button>
-  );
-
   return (
     <div className="expTableWrap">
       <table className="expTable">
@@ -61,17 +75,25 @@ export const TablaExpedientes = memo(function TablaExpedientes({
               </th>
             ) : null}
             <th>
-              <SortBtn col="title">Título</SortBtn>
+              <SortBtn col="title" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
+                Título
+              </SortBtn>
             </th>
             <th>
-              <SortBtn col="anio">Año</SortBtn>
+              <SortBtn col="anio" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
+                Año
+              </SortBtn>
             </th>
             <th>Ubicación</th>
             <th>
-              <SortBtn col="file_size">Tamaño</SortBtn>
+              <SortBtn col="file_size" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
+                Tamaño
+              </SortBtn>
             </th>
             <th>
-              <SortBtn col="status">Estado</SortBtn>
+              <SortBtn col="status" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
+                Estado
+              </SortBtn>
             </th>
             {canManage ? <th style={{ width: 140 }}>Acciones</th> : null}
           </tr>
