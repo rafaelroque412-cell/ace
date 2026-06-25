@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./styles.css";
+import "./components/expedientes-archivo/expedientes-archivo.css";
 
 export const metadata: Metadata = {
   title: "ACE IA Juridica",
@@ -8,12 +9,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body suppressHydrationWarning>{children}</body>
+    <html lang="es">
+      <body>{children}</body>
     </html>
   );
 }

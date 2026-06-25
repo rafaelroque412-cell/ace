@@ -12,7 +12,6 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
   const [nroArchivador, setNroArchivador] = useState("");
   const [color, setColor] = useState("");
 
-  // Contar cuántos campos tienen valor (para habilitar el botón)
   const filledCount = [oficina, nroEstante, nroPiso, nroLocal, nroArchivador, color]
     .filter((v) => v.trim().length > 0).length;
 
@@ -28,72 +27,90 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
   }
 
   return (
-    <div className="subirSlideOverOverlay" onClick={onClose}>
+    <div className="expSlideOverOverlay" onClick={onClose}>
       <aside
-        className="subirSlideOver subirSlideOverModal"
+        className="expSlideOver expSlideOver-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Mover o reasignar expedientes"
       >
-        <header className="subirSlideOverHead">
+        <div className="expSlideOver-header">
           <div>
-            <strong>Mover / reasignar {count} expediente(s)</strong>
-            <span>Solo se aplican los campos con valor. El resto se preserva.</span>
+            <h3 className="expSlideOver-title">
+              Mover / reasignar {count} expediente{count === 1 ? "" : "s"}
+            </h3>
+            <p className="expSlideOver-subtitle">
+              Solo se aplican los campos con valor. El resto se preserva.
+            </p>
           </div>
           <button
             type="button"
-            className="subirSlideOverClose"
+            className="expSlideOver-close"
             onClick={onClose}
             aria-label="Cerrar"
           >
             <X size={18} />
           </button>
-        </header>
-        <div className="subirSlideOverBody">
-          <div className="formGrid">
-            <label className="fullSpan">
-              <span>Oficina</span>
+        </div>
+        <div className="expSlideOver-body">
+          <div className="expMessage expMessage-info" style={{ margin: 0 }}>
+            <strong style={{ fontWeight: 700 }}>
+              {filledCount} campo{filledCount === 1 ? "" : "s"} a modificar
+            </strong>
+          </div>
+          <div className="expBulkMove-grid">
+            <div className="expField" style={{ gridColumn: "1 / -1" }}>
+              <label className="expField-label">Oficina</label>
               <input
                 value={oficina}
                 onChange={(e) => setOficina(e.target.value)}
                 placeholder="Si lo dejas vacío no se cambia"
+                className="expField-input"
               />
-            </label>
-            <label>
-              <span>Estante</span>
+            </div>
+            <div className="expField">
+              <label className="expField-label">Estante</label>
               <input
                 value={nroEstante}
                 onChange={(e) => setNroEstante(e.target.value)}
                 placeholder="Ej. 3"
+                className="expField-input"
               />
-            </label>
-            <label>
-              <span>Piso</span>
+            </div>
+            <div className="expField">
+              <label className="expField-label">Piso</label>
               <input
                 value={nroPiso}
                 onChange={(e) => setNroPiso(e.target.value)}
                 placeholder="Ej. 2"
+                className="expField-input"
               />
-            </label>
-            <label>
-              <span>Local / ambiente</span>
+            </div>
+            <div className="expField">
+              <label className="expField-label">Local / ambiente</label>
               <input
                 value={nroLocal}
                 onChange={(e) => setNroLocal(e.target.value)}
                 placeholder="Ej. A-1"
+                className="expField-input"
               />
-            </label>
-            <label>
-              <span>Nº archivador</span>
+            </div>
+            <div className="expField">
+              <label className="expField-label">Nº archivador</label>
               <input
                 value={nroArchivador}
                 onChange={(e) => setNroArchivador(e.target.value)}
                 placeholder="Opcional"
+                className="expField-input"
               />
-            </label>
-            <label>
-              <span>Color</span>
-              <select value={color} onChange={(e) => setColor(e.target.value)}>
+            </div>
+            <div className="expField" style={{ gridColumn: "1 / -1" }}>
+              <label className="expField-label">Color</label>
+              <select
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="expField-select"
+              >
                 <option value="">— Sin cambio —</option>
                 <option value="rojo">Rojo</option>
                 <option value="azul">Azul</option>
@@ -106,22 +123,21 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
                 <option value="plomo">Plomo</option>
                 <option value="otros">Otros</option>
               </select>
-            </label>
+            </div>
           </div>
-          <div className="subirSlideOverActions">
-            <button type="button" className="subirGhostBtn" onClick={onClose}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="primaryButton"
-              onClick={apply}
-              disabled={filledCount === 0}
-              title={filledCount === 0 ? "Completa al menos un campo" : `Aplicar ${filledCount} campo(s)`}
-            >
-              <Save size={16} /> Aplicar a {count} expediente(s) ({filledCount} campo{filledCount === 1 ? "" : "s"})
-            </button>
-          </div>
+        </div>
+        <div className="expSlideOver-footer">
+          <button type="button" className="expBtn expBtn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="expBtn expBtn-primary"
+            onClick={apply}
+            disabled={filledCount === 0}
+          >
+            <Save size={16} /> Aplicar a {count} ({filledCount} campo{filledCount === 1 ? "" : "s"})
+          </button>
         </div>
       </aside>
     </div>

@@ -1,22 +1,25 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bot, X, Sparkles } from "lucide-react";
+import { Bot, X, Sparkles, Send } from "lucide-react";
 import type { ChatPanelProps } from "./types";
 
 export function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenExpediente }: ChatPanelProps) {
   const [draft, setDraft] = useState(query);
   const lastSyncedQueryRef = useRef(query);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Sincronizar el draft con la query externa (solo si realmente cambió).
-  // El ref evita re-sincronizar cuando el usuario ya está escribiendo.
   useEffect(() => {
     if (query !== lastSyncedQueryRef.current) {
       lastSyncedQueryRef.current = query;
       setDraft(query);
     }
   }, [query]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   function submit() {
     const text = draft.trim();
@@ -36,88 +39,120 @@ export function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenEx
   const showSuggestion = !searching && lastAi && (!lastAi.sources || lastAi.sources.length === 0);
 
   return (
-    <div className="subirSlideOverOverlay" onClick={onClose}>
+    <div className="expSlideOverOverlay" onClick={onClose}>
       <aside
-        className="subirChatPanel"
+        className="expChatPanel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Chat con IA"
       >
-        <header className="subirSlideOverHead">
+        <div className="expSlideOver-header">
           <div>
-            <strong>Chat con IA</strong>
-            <span>Pregunta en lenguaje natural sobre los expedientes</span>
+            <h3 className="expSlideOver-title">Chat con IA</h3>
+            <p className="expSlideOver-subtitle">
+              Pregunta en lenguaje natural sobre los expedientes
+            </p>
           </div>
           <button
             type="button"
-            className="subirSlideOverClose"
+            className="expSlideOver-close"
             onClick={onClose}
             aria-label="Cerrar chat"
           >
             <X size={18} />
           </button>
-        </header>
-        <div className="subirChatBody">
+        </div>
+        <div className="expChat-body">
           {messages.length === 0 ? (
-            <div className="subirChatEmpty">
-              <Bot size={28} />
+            <div className="expChatEmpty">
+              <div className="expChatEmpty-icon">
+                <Bot size={24} />
+              </div>
               <p>Pregúntame lo que quieras sobre los expedientes archivados.</p>
-              <p className="subirChatHint">Ejemplos:</p>
-              <ul>
-                <li>&ldquo;¿Cuántos expedientes de contratación hay en 2024?&rdquo;</li>
-                <li>&ldquo;¿Dónde está el expediente de la licencia 2024-0345?&rdquo;</li>
-                <li>&ldquo;Resúmeme los expedientes de subgerencia de tránsito&rdquo;</li>
+              <p className="expChatEmpty-hint">Ejemplos para empezar</p>
+              <ul className="expChatEmpty-examples">
+                <li
+                  onClick={() => setDraft("¿Cuántos expedientes de contratación hay en 2024?")}
+                >
+                  ¿Cuántos expedientes de contratación hay en 2024?
+                </li>
+                <li
+                  onClick={() =>
+                    setDraft("¿Dónde está el expediente de la licencia 2024-0345?")
+                  }
+                >
+                  ¿Dónde está el expediente de la licencia 2024-0345?
+                </li>
+                <li
+                  onClick={() =>
+                    setDraft("Resúmeme los expedientes de subgerencia de tránsito")
+                  }
+                >
+                  Resúmeme los expedientes de subgerencia de tránsito
+                </li>
               </ul>
             </div>
           ) : (
-            messages.map((m, i) => (
-              <div key={i} className={`subirChatMsg ${m.role === "user" ? "user" : "ai"}`}>
-                <div className="subirChatMsgAvatar">
-                  {m.role === "user" ? "Tú" : <Bot size={14} />}
+            <>
+              {messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`expChat-msg ${m.role}`}
+                >
+                  <div className="expChat-avatar">
+                    {m.role === "user" ? "Tú" : <Bot size={14} />}
+                  </div>
+                  <div className="expChat-bubble">
+                    <p style={{ margin: 0 }}>{m.text}</p>
+                    {m.sources && m.sources.length > 0 ? (
+                      <div className="expChat-sources">
+                        {m.sources.map((s, j) => (
+                          <button
+                            key={j}
+                            type="button"
+                            className="expCitation"
+                            onClick={() => onOpenExpediente(s.expedienteId)}
+                            style={{ width: "100%" }}
+                          >
+                            <span className="expCitationNumber">{j + 1}</span>
+                            <span className="expCitationTitle">{s.title}</span>
+                            <span className="expCitationSource">{s.citation}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="subirChatMsgBody">
-                  <p>{m.text}</p>
-                  {m.sources && m.sources.length > 0 ? (
-                    <div className="subirChatSources">
-                      {m.sources.map((s, j) => (
-                        <button
-                          key={j}
-                          type="button"
-                          className="subirSourceChip"
-                          onClick={() => onOpenExpediente(s.expedienteId)}
-                        >
-                          <span className="subirSourceChipBadge">[{j + 1}]</span>
-                          <span className="subirSourceChipTitle">{s.title}</span>
-                          <span className="subirSourceChipCitation">{s.citation}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+              ))}
+              {searching ? (
+                <div className="expChat-msg ai">
+                  <div className="expChat-avatar">
+                    <Bot size={14} />
+                  </div>
+                  <div className="expChat-bubble">
+                    <p className="expChat-thinking" style={{ margin: 0 }}>
+                      <Sparkles size={14} /> Pensando…
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))
+              ) : null}
+              {showSuggestion ? (
+                <div className="expChat-suggestion">
+                  <Sparkles size={16} />
+                  <div>
+                    <strong>No encontré coincidencias claras</strong>
+                    <p>
+                      Prueba con otros términos, o sube un nuevo expediente desde la pestaña
+                      Subir.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <div ref={messagesEndRef} />
+            </>
           )}
-          {searching ? (
-            <div className="subirChatMsg ai">
-              <div className="subirChatMsgAvatar"><Bot size={14} /></div>
-              <div className="subirChatMsgBody">
-                <p className="subirChatThinking">
-                  <Sparkles size={14} /> Pensando…
-                </p>
-              </div>
-            </div>
-          ) : null}
-          {showSuggestion ? (
-            <div className="subirChatSuggestion">
-              <Sparkles size={14} />
-              <div>
-                <strong>No encontré coincidencias claras</strong>
-                <p>Prueba con otros términos, o sube un nuevo expediente desde la pestaña Subir.</p>
-              </div>
-            </div>
-          ) : null}
         </div>
-        <div className="subirChatInput">
+        <div className="expChat-input">
           <textarea
             ref={textareaRef}
             value={draft}
@@ -129,11 +164,11 @@ export function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenEx
           />
           <button
             type="button"
-            className="primaryButton"
+            className="expBtn expBtn-primary"
             onClick={() => void submit()}
             disabled={!draft.trim() || searching}
           >
-            Preguntar
+            <Send size={16} /> Preguntar
           </button>
         </div>
       </aside>

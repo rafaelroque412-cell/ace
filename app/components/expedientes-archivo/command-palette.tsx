@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, X, UploadCloud, FileText, HelpCircle, Download } from "lucide-react";
+import {
+  Search,
+  X,
+  UploadCloud,
+  FileText,
+  HelpCircle,
+  Download,
+  MessageCircle,
+} from "lucide-react";
 import type { ExpedienteItem } from "./types";
 
 export type CommandAction = {
@@ -38,13 +46,10 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Reset al montar (el componente se monta solo cuando se abre gracias al `key`
-  // en el padre, así que el estado inicial es siempre limpio).
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 10);
   }, []);
 
-  // Acciones siempre disponibles
   const baseActions: CommandAction[] = useMemo(
     () => [
       {
@@ -62,8 +67,8 @@ export function CommandPalette({
       {
         id: "open-chat",
         label: "Abrir chat con IA",
-        description: "Panel lateral para conversación multi-turn",
-        icon: <FileText size={16} />,
+        description: "Panel lateral para conversación multi-turno",
+        icon: <MessageCircle size={16} />,
         shortcut: "Ctrl+I",
         onSelect: () => {
           onOpenChat();
@@ -98,7 +103,6 @@ export function CommandPalette({
     [onGoToSubir, onOpenChat, onShowHelp, onClose],
   );
 
-  // Resultados de expedientes (top 8 por relevancia)
   const expedienteResults: CommandAction[] = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
@@ -120,7 +124,7 @@ export function CommandPalette({
           e.anio ? `${e.anio}` : null,
           e.oficina,
           e.materia,
-          (e.status as string),
+          e.status,
         ]
           .filter(Boolean)
           .join(" · "),
@@ -144,15 +148,12 @@ export function CommandPalette({
 
   const allItems = [...expedienteResults, ...filteredActions];
 
-  // Mantener activeIndex dentro de rango
   useEffect(() => {
     if (activeIndex >= allItems.length && allItems.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- adjust active index when list shrinks
       setActiveIndex(0);
     }
   }, [allItems.length, activeIndex]);
 
-  // Scroll al item activo
   useEffect(() => {
     if (!listRef.current) return;
     const el = listRef.current.querySelector<HTMLElement>(`[data-cmd-idx="${activeIndex}"]`);
@@ -179,9 +180,9 @@ export function CommandPalette({
   if (!open) return null;
 
   return (
-    <div className="cmdPaletteOverlay" onClick={onClose} role="dialog" aria-label="Búsqueda rápida">
-      <div className="cmdPalette" onClick={(e) => e.stopPropagation()}>
-        <div className="cmdPaletteInput">
+    <div className="expCmdOverlay" onClick={onClose} role="dialog" aria-label="Búsqueda rápida">
+      <div className="expCmd" onClick={(e) => e.stopPropagation()}>
+        <div className="expCmd-header">
           <Search size={18} />
           <input
             ref={inputRef}
@@ -193,65 +194,72 @@ export function CommandPalette({
             }}
             onKeyDown={onKeyDown}
             placeholder="Busca un expediente o una acción…"
+            className="expCmd-input"
             aria-label="Búsqueda rápida"
           />
-          <kbd>Esc</kbd>
+          <kbd style={{ fontSize: 11, color: "var(--exp-muted)" }}>Esc</kbd>
         </div>
-        <ul className="cmdPaletteList" ref={listRef}>
+        <ul className="expCmd-list" ref={listRef}>
           {allItems.length === 0 ? (
-            <li className="cmdPaletteEmpty">
+            <li className="expCmd-empty">
               Sin resultados para &ldquo;{query}&rdquo;
             </li>
           ) : (
             <>
-              {expedienteResults.length > 0 && (
-                <li className="cmdPaletteGroup" aria-hidden="true">
+              {expedienteResults.length > 0 ? (
+                <li className="expCmd-group" aria-hidden="true">
                   Expedientes ({expedienteResults.length})
                 </li>
-              )}
+              ) : null}
               {expedienteResults.map((item, idx) => (
                 <li
                   key={item.id}
                   data-cmd-idx={idx}
-                  className={`cmdPaletteItem ${idx === activeIndex ? "active" : ""}`}
+                  className={`expCmd-item ${idx === activeIndex ? "active" : ""}`}
                   onMouseEnter={() => setActiveIndex(idx)}
                   onClick={item.onSelect}
                 >
                   {item.icon}
-                  <div className="cmdPaletteItemBody">
+                  <div className="expCmd-itemBody">
                     <strong>{item.label}</strong>
                     {item.description ? <span>{item.description}</span> : null}
                   </div>
                 </li>
               ))}
-              {filteredActions.length > 0 && (
-                <li className="cmdPaletteGroup" aria-hidden="true">
+              {filteredActions.length > 0 ? (
+                <li className="expCmd-group" aria-hidden="true">
                   Acciones
                 </li>
-              )}
+              ) : null}
               {filteredActions.map((item, idx) => {
                 const realIdx = expedienteResults.length + idx;
                 return (
                   <li
                     key={item.id}
                     data-cmd-idx={realIdx}
-                    className={`cmdPaletteItem ${realIdx === activeIndex ? "active" : ""}`}
+                    className={`expCmd-item ${realIdx === activeIndex ? "active" : ""}`}
                     onMouseEnter={() => setActiveIndex(realIdx)}
                     onClick={item.onSelect}
                   >
                     {item.icon}
-                    <div className="cmdPaletteItemBody">
+                    <div className="expCmd-itemBody">
                       <strong>{item.label}</strong>
                       {item.description ? <span>{item.description}</span> : null}
                     </div>
-                    {item.shortcut ? <kbd>{item.shortcut}</kbd> : null}
+                    {item.shortcut ? (
+                      <span className="expCmd-shortcut">
+                        {item.shortcut.split("+").map((k, i) => (
+                          <kbd key={i}>{k.trim()}</kbd>
+                        ))}
+                      </span>
+                    ) : null}
                   </li>
                 );
               })}
             </>
           )}
         </ul>
-        <div className="cmdPaletteFooter">
+        <div className="expCmd-footer">
           <span>
             <kbd>↑</kbd>
             <kbd>↓</kbd> navegar
@@ -262,8 +270,8 @@ export function CommandPalette({
           <span>
             <kbd>Esc</kbd> cerrar
           </span>
-          <span className="cmdPaletteHint">
-            <X size={12} style={{ display: "inline", verticalAlign: "middle" }} /> Click fuera
+          <span className="expCmd-hint">
+            <X size={12} /> Click fuera
           </span>
         </div>
       </div>

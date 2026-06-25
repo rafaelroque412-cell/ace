@@ -3,20 +3,32 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bot,
-  Briefcase,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  ChevronLeft,
+  Download,
   Eye,
   FileText,
+  Filter,
   Grid3x3,
-  List,
+  HelpCircle,
+  Info,
+  List as ListIcon,
+  Loader2,
   Lock,
   MapPin,
+  MessageCircle,
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Table2,
   Trash2,
   UploadCloud,
   X,
+  AlertCircle,
+  FileUp,
 } from "lucide-react";
 import {
   ARCHIVO_AMBIENTES,
@@ -58,7 +70,12 @@ function formatBytes(bytes: number) {
 }
 
 function statusLabel(status: ExpedienteItem["status"]) {
-  return { error: "Error", indexed: "Indexado", processing: "Procesando", uploaded: "Subido" }[status];
+  return {
+    error: "Con error",
+    indexed: "Indexado",
+    processing: "Procesando",
+    uploaded: "Subido",
+  }[status];
 }
 
 const EMPTY_FORM: SubirForm = {
@@ -87,11 +104,30 @@ const EMPTY_FORM: SubirForm = {
   nroLocal: "",
 };
 
+const WIZARD_STEPS = [
+  { id: 0, label: "Documento", icon: FileText, hint: "Sube el PDF e identifica el documento" },
+  { id: 1, label: "Contenido", icon: FileText, hint: "Describe el contenido del expediente" },
+  { id: 2, label: "Persona", icon: FileText, hint: "Quién lo presenta o solicita" },
+  { id: 3, label: "Ubicación", icon: MapPin, hint: "Dónde se encuentra en papel" },
+] as const;
+
+const STATUS_PILLS: { id: StatusFilter; label: string }[] = [
+  { id: "todos", label: "Todos" },
+  { id: "pendientes", label: "Pendientes" },
+  { id: "indexados", label: "Indexados" },
+  { id: "error", label: "Con error" },
+];
+
+type Toast = {
+  id: number;
+  message: string;
+  kind: "success" | "error" | "warning" | "info";
+};
+
 export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean }) {
-  // ── Tabs principales ──────────────────────────────────────────────
   const [tab, setTab] = useState<"buscar" | "subir">("buscar");
 
-  // ── Estado de la pestaña "Buscar" ──────────────────────────────────
+  // Búsqueda
   const [mode, setMode] = useState<SearchMode>("buscar");
   const [query, setQuery] = useState("");
   const [filterAnio, setFilterAnio] = useState("");
@@ -104,7 +140,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     { role: "user" | "ai"; text: string; sources?: SearchResult[] }[]
   >([]);
 
-  // ── Estado de la lista de expedientes ─────────────────────────────
+  // Lista
   const [expedientes, setExpedientes] = useState<ExpedienteItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("lista");
@@ -119,7 +155,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
 
-  // ── Estado del wizard de subida ────────────────────────────────────
+  // Wizard de subida
   const [form, setForm] = useState<SubirForm>(EMPTY_FORM);
   const [file, setFile] = useState<File | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>(0);
@@ -128,13 +164,29 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [reindexingId, setReindexingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
-  // ── Modales y slide-overs ──────────────────────────────────────────
+  // Modales
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
   const [openExp, setOpenExp] = useState<ExpedienteItem | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Toasts
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  function showToast(message: string, kind: Toast["kind"] = "info") {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, kind }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  }
+
+  function dismissToast(id: number) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
 
   // ── Carga inicial y polling ────────────────────────────────────────
   const loadExpedientes = useCallback(async () => {
@@ -142,7 +194,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       const data = await loadExpedientesAction();
       setExpedientes((data as ExpedienteItem[]) ?? []);
     } catch {
-      // Silenciar: el estado vacío se muestra como "sin expedientes"
+      // Silenciar
     } finally {
       setLoadingList(false);
     }
@@ -171,56 +223,35 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return () => clearInterval(timer);
   }, [hasPending, loadExpedientes]);
 
-  // Auto-clear de mensajes de éxito
-  useEffect(() => {
-    if (!uploadMessage) return;
-    if (/subido|eliminad|reindex/i.test(uploadMessage)) {
-      const t = setTimeout(() => setUploadMessage(null), 5000);
-      return () => clearTimeout(t);
-    }
-  }, [uploadMessage]);
-
-  useEffect(() => {
-    if (!searchMessage) return;
-    const t = setTimeout(() => setSearchMessage(null), 5000);
-    return () => clearTimeout(t);
-  }, [searchMessage]);
-
   // ── Atajos de teclado ──────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
-      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable;
 
-      // ⌘K / Ctrl+K → command palette
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCmdOpen((v) => !v);
         return;
       }
-
-      // Ctrl+I → chat
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i" && !isTyping) {
         e.preventDefault();
         setChatOpen(true);
         return;
       }
-
-      // Ctrl+U → tab subir
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "u" && canManage && !isTyping) {
         e.preventDefault();
         setTab("subir");
         return;
       }
-
-      // Ctrl+B → tab buscar
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && !isTyping) {
         e.preventDefault();
         setTab("buscar");
         return;
       }
-
-      // Ctrl+→ / Ctrl+← → wizard steps
       if ((e.metaKey || e.ctrlKey) && tab === "subir" && canManage) {
         if (e.key === "ArrowRight") {
           e.preventDefault();
@@ -230,23 +261,17 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
           setWizardStep((s) => (Math.max(0, s - 1) as WizardStep));
         }
       }
-
-      // "/" → enfocar buscador
       if (e.key === "/" && !isTyping) {
         e.preventDefault();
-        const input = document.getElementById("expedientes-search") as HTMLInputElement | null;
+        const input = document.getElementById("exp-search-input") as HTMLInputElement | null;
         input?.focus();
         return;
       }
-
-      // "?" → ayuda
       if (e.key === "?" && !isTyping) {
         e.preventDefault();
         setHelpOpen((v) => !v);
         return;
       }
-
-      // Escape
       if (e.key === "Escape") {
         if (cmdOpen) setCmdOpen(false);
         else if (chatOpen) setChatOpen(false);
@@ -265,11 +290,18 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  function canProceedStep(): { ok: boolean; reason?: string } {
+    if (wizardStep === 0) {
+      if (!file) return { ok: false, reason: "Selecciona un PDF para continuar" };
+    }
+    return { ok: true };
+  }
+
   // ── Búsqueda ───────────────────────────────────────────────────────
   async function runSearch(event?: React.FormEvent) {
     event?.preventDefault();
     if (query.trim().length < 2) {
-      setSearchMessage("Escribe al menos 2 caracteres.");
+      setSearchMessage("Escribe al menos 2 caracteres para buscar.");
       return;
     }
     setSearching(true);
@@ -282,7 +314,9 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         const data = await searchExpedientes(query.trim(), anio);
         setResults(data.results);
         if (data.results.length === 0) {
-          setSearchMessage("Sin resultados en la biblioteca de expedientes.");
+          setSearchMessage(
+            "Sin resultados. Prueba con otros términos o sube el expediente si aún no está en el archivo.",
+          );
         }
       } else if (mode === "preguntar") {
         const data = await chatWithExpedientes(query.trim());
@@ -294,7 +328,9 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         ]);
       }
     } catch (err) {
-      setSearchMessage(err instanceof Error ? err.message : "No se pudo consultar.");
+      const msg = err instanceof Error ? err.message : "No se pudo consultar.";
+      setSearchMessage(msg);
+      showToast(msg, "error");
     } finally {
       setSearching(false);
     }
@@ -310,26 +346,29 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         { role: "ai", text: data.answer, sources: data.sources },
       ]);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al consultar.";
       setChatMessages((prev) => [
         ...prev,
-        { role: "ai", text: err instanceof Error ? err.message : "Error al consultar." },
+        { role: "ai", text: msg },
       ]);
+      showToast(msg, "error");
     } finally {
       setSearching(false);
     }
   }
 
-  // ── Subida ─────────────────────────────────────────────────────────
+  // ── Subida con progress ────────────────────────────────────────────
   async function uploadExpediente(event: React.FormEvent) {
     event.preventDefault();
     if (!file) {
-      setUploadMessage("Selecciona un archivo PDF antes de subir.");
+      showToast("Selecciona un archivo PDF antes de subir.", "warning");
       return;
     }
     if (file.size > maxPdfSizeBytes) {
-      setUploadMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
+      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}.`, "error");
       return;
     }
+
     const formData = new FormData();
     formData.append("file", file);
     for (const [key, value] of Object.entries(form)) {
@@ -337,25 +376,57 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         formData.append(key, String(value));
       }
     }
+
     setUploading(true);
     setUploadMessage("Subiendo PDF...");
+    setUploadProgress(0);
+
     try {
-      const res = await fetch("/api/expedientes-archivo", {
-        method: "POST",
-        body: formData,
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
       });
-      const payload = await res.json();
-      if (!res.ok) {
-        setUploadMessage(payload.error ?? "No se pudo subir el expediente");
+
+      const result = await new Promise<{ ok: boolean; status: number; body: unknown }>(
+        (resolve) => {
+          xhr.addEventListener("load", () => {
+            try {
+              const body = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+              resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+            } catch {
+              resolve({ ok: false, status: xhr.status, body: null });
+            }
+          });
+          xhr.addEventListener("error", () =>
+            resolve({ ok: false, status: 0, body: null }),
+          );
+          xhr.open("POST", "/api/expedientes-archivo");
+          xhr.send(formData);
+        },
+      );
+
+      if (!result.ok) {
+        const errorMsg =
+          (result.body as { error?: string })?.error ?? "No se pudo subir el expediente";
+        showToast(errorMsg, "error");
+        setUploadMessage(errorMsg);
         return;
       }
+
       setFile(null);
       setForm(EMPTY_FORM);
       setWizardStep(0);
-      setUploadMessage("PDF subido. Procesando OCR e indexando...");
+      setUploadMessage(null);
+      setUploadProgress(0);
+      showToast(
+        "Expediente subido. Se está procesando con OCR e indexando en segundo plano.",
+        "success",
+      );
       await loadExpedientes();
-    } catch {
-      setUploadMessage("No se pudo conectar con el servidor.");
+    } catch (err) {
+      showToast("No se pudo conectar con el servidor.", "error");
     } finally {
       setUploading(false);
     }
@@ -364,35 +435,38 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   // ── Acciones individuales ──────────────────────────────────────────
   async function reindexExpediente(id: string) {
     setReindexingId(id);
-    setUploadMessage("Reindexando expediente...");
     try {
       const res = await fetch(`/api/expedientes-archivo/${id}`, { method: "POST" });
       if (!res.ok) {
         const payload = await res.json();
-        setUploadMessage(payload.error ?? "No se pudo reindexar");
+        showToast(payload.error ?? "No se pudo reindexar", "error");
         return;
       }
-      setUploadMessage("Reindexado iniciado en segundo plano...");
+      showToast("Reindexado iniciado en segundo plano.", "info");
       await loadExpedientes();
     } catch {
-      setUploadMessage("No se pudo conectar con el servidor.");
+      showToast("No se pudo conectar con el servidor.", "error");
     } finally {
       setReindexingId(null);
     }
   }
 
   async function deleteExpediente(exp: ExpedienteItem) {
-    if (!confirm(`¿Eliminar "${exp.title}"? Esta acción no se puede deshacer.`)) return;
+    if (
+      !confirm(
+        `¿Eliminar el expediente "${exp.title}"?\n\nEsta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.`,
+      )
+    )
+      return;
     setDeletingId(exp.id);
-    setUploadMessage("Eliminando expediente...");
     try {
       const res = await fetch(`/api/expedientes-archivo/${exp.id}`, { method: "DELETE" });
       if (!res.ok) {
         const payload = await res.json();
-        setUploadMessage(payload.error ?? "No se pudo eliminar");
+        showToast(payload.error ?? "No se pudo eliminar", "error");
         return;
       }
-      setUploadMessage("Expediente eliminado.");
+      showToast(`Expediente "${exp.title}" eliminado.`, "success");
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(exp.id);
@@ -400,7 +474,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       });
       await loadExpedientes();
     } catch {
-      setUploadMessage("No se pudo conectar con el servidor.");
+      showToast("No se pudo conectar con el servidor.", "error");
     } finally {
       setDeletingId(null);
     }
@@ -410,7 +484,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     if (!replaceExp) return;
     const formData = new FormData();
     formData.append("file", file);
-    setUploadMessage("Reemplazando PDF y reindexando...");
     try {
       const res = await fetch(`/api/expedientes-archivo/${replaceExp.id}`, {
         method: "PUT",
@@ -418,14 +491,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       });
       if (!res.ok) {
         const payload = await res.json();
-        setUploadMessage(payload.error ?? "No se pudo reemplazar");
+        showToast(payload.error ?? "No se pudo reemplazar", "error");
         return;
       }
-      setUploadMessage("PDF reemplazado. Reprocesando...");
+      showToast("PDF reemplazado. Se está reprocesando.", "success");
       setReplaceExp(null);
       await loadExpedientes();
     } catch {
-      setUploadMessage("No se pudo conectar con el servidor.");
+      showToast("No se pudo conectar con el servidor.", "error");
     }
   }
 
@@ -440,15 +513,18 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       });
       if (!res.ok) {
         const payload = await res.json();
-        setUploadMessage(payload.error ?? "No se pudo aplicar la operación");
+        showToast(payload.error ?? "No se pudo aplicar la operación", "error");
         return;
       }
-      setUploadMessage(`Actualización masiva aplicada a ${selectedIds.size} expediente(s).`);
+      showToast(
+        `Operación aplicada a ${selectedIds.size} expediente${selectedIds.size === 1 ? "" : "s"}.`,
+        "success",
+      );
       setSelectedIds(new Set());
       setBulkOpen(false);
       await loadExpedientes();
     } catch {
-      setUploadMessage("No se pudo conectar con el servidor.");
+      showToast("No se pudo conectar con el servidor.", "error");
     }
   }
 
@@ -496,29 +572,26 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return list;
   }, [expedientes, statusFilter, advancedFilters, searchInput, sortBy, sortDir]);
 
+  const statusCounts = useMemo(() => {
+    return {
+      todos: expedientes.length,
+      pendientes: expedientes.filter(
+        (e) => e.status === "uploaded" || e.status === "processing",
+      ).length,
+      indexados: expedientes.filter((e) => e.status === "indexed").length,
+      error: expedientes.filter((e) => e.status === "error").length,
+    };
+  }, [expedientes]);
+
   const stats = useMemo(() => {
     const total = expedientes.length;
     const indexed = expedientes.filter((e) => e.status === "indexed").length;
-    const pending = expedientes.filter((e) => e.status === "uploaded" || e.status === "processing").length;
+    const pending = expedientes.filter(
+      (e) => e.status === "uploaded" || e.status === "processing",
+    ).length;
     const error = expedientes.filter((e) => e.status === "error").length;
     const totalBytes = expedientes.reduce((s, e) => s + (e.file_size ?? 0), 0);
-    const yearMap = new Map<number, number>();
-    expedientes.forEach((e) => {
-      if (e.anio) yearMap.set(e.anio, (yearMap.get(e.anio) ?? 0) + 1);
-    });
-    const topYears = [...yearMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([year, count]) => ({ year, count }));
-    const tipoMap = new Map<string, number>();
-    expedientes.forEach((e) => {
-      if (e.tipo_documento) tipoMap.set(e.tipo_documento, (tipoMap.get(e.tipo_documento) ?? 0) + 1);
-    });
-    const topTipos = [...tipoMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([tipo, count]) => ({ tipo, count }));
-    return { total, indexed, pending, error, totalBytes, topYears, topTipos };
+    return { total, indexed, pending, error, totalBytes };
   }, [expedientes]);
 
   function handleSort(col: string) {
@@ -560,35 +633,58 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     const f = e.dataTransfer.files?.[0];
     if (!f) return;
     if (f.type !== "application/pdf") {
-      setUploadMessage("Solo se permiten archivos PDF");
+      showToast("Solo se permiten archivos PDF", "warning");
       return;
     }
     if (f.size > maxPdfSizeBytes) {
-      setUploadMessage(`El PDF supera el limite de ${maxPdfSizeLabel}`);
+      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}`, "error");
       return;
     }
-    setUploadMessage(null);
+    setFile(f);
+    showToast("PDF cargado. Revisa los datos y haz clic en Siguiente.", "success");
+  }
+
+  function onFileSelect(f: File | null) {
+    if (!f) return;
+    if (f.type !== "application/pdf") {
+      showToast("Solo se permiten archivos PDF", "warning");
+      return;
+    }
+    if (f.size > maxPdfSizeBytes) {
+      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}`, "error");
+      return;
+    }
     setFile(f);
   }
 
   // ── Render ────────────────────────────────────────────────────────
   return (
-    <div className="uploadPanel" id="expedientes-archivo">
-      {/* Header con tabs */}
-      <div className="panelHeader">
-        <div>
-          <p className="eyebrow">Biblioteca de expedientes archivados</p>
-          <h2>Busca el contenido y localiza dónde está el expediente físico</h2>
+    <div className="expPanel" id="expedientes-archivo">
+      {/* Header con icono y contexto */}
+      <div className="expPanelHeader">
+        <div className="expPanelHeaderText">
+          <p className="expPanelHeaderEyebrow">
+            <Sparkles size={12} /> Biblioteca de expedientes
+          </p>
+          <h2 className="expPanelHeaderTitle">
+            Busca el contenido y localiza dónde está el expediente físico
+          </h2>
+          <p className="expPanelHeaderSubtitle">
+            Usa el buscador para encontrar expedientes por contenido, o sube nuevos PDF con OCR automático.
+          </p>
         </div>
-        <Briefcase size={22} />
+        <div className="expPanelHeaderIcon" aria-hidden="true">
+          <FileText size={20} />
+        </div>
       </div>
 
-      <div className="subirTabBar" role="tablist">
+      {/* Tabs */}
+      <div className="expTabBar" role="tablist">
         <button
           type="button"
           role="tab"
           aria-selected={tab === "buscar"}
-          className={tab === "buscar" ? "subirTab active" : "subirTab"}
+          className={tab === "buscar" ? "expTab active" : "expTab"}
           onClick={() => setTab("buscar")}
         >
           <Search size={15} /> Buscar
@@ -598,804 +694,1209 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             type="button"
             role="tab"
             aria-selected={tab === "subir"}
-            className={tab === "subir" ? "subirTab active" : "subirTab"}
+            className={tab === "subir" ? "expTab active" : "expTab"}
             onClick={() => setTab("subir")}
           >
             <UploadCloud size={15} /> Subir
+            {hasPending ? (
+              <span className="expTabBadge" aria-label="Procesando">
+                {statusCounts.pendientes}
+              </span>
+            ) : null}
           </button>
         ) : null}
         <button
           type="button"
-          className="subirTabHelp"
+          className="expTabHelp"
           onClick={() => setHelpOpen(true)}
-          title="Atajos de teclado (?)"
+          aria-label="Ver atajos de teclado"
         >
-          <kbd>?</kbd>
+          <HelpCircle size={14} /> <kbd>?</kbd> Atajos
         </button>
       </div>
 
       {/* ── Tab: Buscar ─────────────────────────────────────────── */}
       {tab === "buscar" ? (
-        <>
-          <form className="documentForm" onSubmit={runSearch}>
-            <div className="styleSelectors">
-              <div className="styleSelectorGroup">
-                <span className="styleSelectorsTitle">Modo</span>
-                <div className="pillGroup">
-                  <button
-                    type="button"
-                    className={mode === "buscar" ? "pill active" : "pill"}
-                    onClick={() => setMode("buscar")}
-                    aria-pressed={mode === "buscar"}
-                  >
-                    <Search size={15} /> Buscar
-                  </button>
-                  <button
-                    type="button"
-                    className={mode === "preguntar" ? "pill active" : "pill"}
-                    onClick={() => setMode("preguntar")}
-                    aria-pressed={mode === "preguntar"}
-                  >
-                    <Bot size={15} /> Preguntar a la IA
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div className="expTabContent">
+          {/* Modo toggle */}
+          <div className="expModeToggle" role="tablist" aria-label="Modo de búsqueda">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "buscar"}
+              className={mode === "buscar" ? "active" : ""}
+              onClick={() => setMode("buscar")}
+            >
+              <Search size={14} /> Buscar por contenido
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "preguntar"}
+              className={mode === "preguntar" ? "active" : ""}
+              onClick={() => setMode("preguntar")}
+            >
+              <Bot size={14} /> Preguntar a la IA
+            </button>
+          </div>
 
-            <div className="formGrid">
-              <label className="fullSpan">
-                <span>{mode === "buscar" ? "Buscar en el contenido" : "Pregunta en lenguaje natural"}</span>
-                <input
-                  id="expedientes-search"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={
-                    mode === "buscar"
-                      ? "Ej. número 2024-0345, licencia de funcionamiento, predio..."
-                      : "Ej. ¿Dónde está el expediente de la licencia 2024-0345?"
-                  }
-                  value={query}
-                />
-              </label>
-              <label>
-                <span>Año (opcional)</span>
-                <input
-                  onChange={(event) => setFilterAnio(event.target.value)}
-                  placeholder="Ej. 2024"
-                  type="number"
-                  value={filterAnio}
-                />
-              </label>
-            </div>
-
-            <div className="formActions">
-              <button className="primaryButton" disabled={searching} type="submit">
-                {mode === "buscar" ? <Search size={17} /> : <Bot size={17} />}
-                {searching ? "Consultando..." : mode === "buscar" ? "Buscar" : "Preguntar"}
-              </button>
-            </div>
-            {searchMessage ? <p className="formMessage">{searchMessage}</p> : null}
+          {/* Search bar */}
+          <form onSubmit={runSearch} className="expSearchBar">
+            <Search size={18} className="expSearchHint" />
+            <input
+              id="exp-search-input"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                mode === "buscar"
+                  ? "Ej. licencia de funcionamiento, predio 2024, oficio 0345…"
+                  : "Ej. ¿Dónde está el expediente de la licencia 2024-0345?"
+              }
+              className="expSearchInput"
+              aria-label={mode === "buscar" ? "Buscar en el contenido" : "Preguntar a la IA"}
+            />
+            {mode === "buscar" ? (
+              <input
+                type="number"
+                value={filterAnio}
+                onChange={(e) => setFilterAnio(e.target.value)}
+                placeholder="Año"
+                className="expField-input"
+                style={{ width: 90 }}
+                aria-label="Filtrar por año"
+              />
+            ) : null}
+            <button
+              type="submit"
+              disabled={searching}
+              className="expBtn expBtn-primary"
+            >
+              {searching ? (
+                <Loader2 size={16} className="expSpin" />
+              ) : mode === "buscar" ? (
+                <Search size={16} />
+              ) : (
+                <Bot size={16} />
+              )}
+              {searching ? "Buscando..." : "Buscar"}
+            </button>
           </form>
 
+          {searchMessage ? (
+            <div className="expMessage expMessage-info">
+              <Info size={16} />
+              <span>{searchMessage}</span>
+            </div>
+          ) : null}
+
+          {/* Answer AI */}
           {answer ? (
-            <section className="archivoAnswer">
-              <div className="documentSectionTitle">
+            <div className="expAnswerCard">
+              <div className="expAnswerHeader">
+                <div className="expAnswerAvatar">
+                  <Sparkles size={16} />
+                </div>
                 <div>
-                  <strong>Respuesta</strong>
-                  <span>Fundamentada en los expedientes archivados. Las citas [E#] corresponden a las fuentes.</span>
+                  <h3 className="expAnswerTitle">Respuesta de la IA</h3>
+                  <p className="expAnswerSubtitle">
+                    Basada en los expedientes del archivo. Las citas [E#] enlazan a las fuentes.
+                  </p>
                 </div>
               </div>
-              <p className="archivoAnswerText">{answer.answer}</p>
+              <p className="expAnswerText">{answer.answer}</p>
               {answer.sources.length > 0 ? (
-                <div className="archivoSources">
+                <div className="expAnswerSources">
+                  <p className="expAnswerSourcesLabel">Fuentes ({answer.sources.length})</p>
                   {answer.sources.map((source, index) => (
-                    <article className="documentItem" key={`${source.expedienteId}-${index}`}>
-                      <div className="documentIcon">
-                        <FileText size={18} />
-                      </div>
-                      <div>
-                        <strong>
-                          [E{index + 1}] {source.title}
-                        </strong>
-                        <span>{source.citation}</span>
-                        <span className="expedienteUbicacion">
-                          <MapPin size={13} /> {source.ubicacionResumen}
-                        </span>
-                        {source.excerpt ? <p>{source.excerpt}</p> : null}
-                      </div>
-                    </article>
+                    <button
+                      key={`${source.expedienteId}-${index}`}
+                      type="button"
+                      className="expCitation"
+                      onClick={() => {
+                        const exp = expedientes.find((e) => e.id === source.expedienteId);
+                        if (exp) setOpenExp(exp);
+                      }}
+                    >
+                      <span className="expCitationNumber">E{index + 1}</span>
+                      <span className="expCitationTitle">{source.title}</span>
+                      <span className="expCitationSource">{source.citation}</span>
+                    </button>
                   ))}
                 </div>
               ) : null}
-            </section>
+            </div>
           ) : null}
 
+          {/* Resultados keyword */}
           {results ? (
-            <section className="archivoResults">
-              <div className="documentSectionTitle">
-                <div>
-                  <strong>Resultados</strong>
-                  <span>{results.length} coincidencia(s) en la biblioteca de expedientes</span>
-                </div>
+            <div className="expResults">
+              <div className="expFormSectionHeader">
+                <h3 className="expFormSectionTitle">
+                  <FileText size={16} /> Resultados
+                  <span className="expFormSectionHint">
+                    {results.length} coincidencia{results.length === 1 ? "" : "s"}
+                  </span>
+                </h3>
               </div>
-              {results.length === 0 ? (
-                <div className="emptyState">Sin resultados.</div>
-              ) : (
-                results.map((source, index) => (
-                  <article className="documentItem" key={`${source.expedienteId}-${index}`}>
-                    <div className="documentIcon">
+              {results.length === 0 ? null : (
+                results.map((source) => (
+                  <article
+                    key={source.expedienteId}
+                    className="expResultCard"
+                    onClick={() => {
+                      const exp = expedientes.find((e) => e.id === source.expedienteId);
+                      if (exp) setOpenExp(exp);
+                    }}
+                  >
+                    <div className="expResultIcon">
                       <FileText size={18} />
                     </div>
-                    <div>
-                      <strong>{source.title}</strong>
-                      <span className="expedienteUbicacion">
-                        <MapPin size={13} /> {source.ubicacionResumen}
-                      </span>
-                      {source.asunto ? <span>Asunto: {source.asunto}</span> : null}
-                      {source.excerpt ? <p>{source.excerpt}</p> : null}
+                    <div className="expResultBody">
+                      <h4 className="expResultTitle">{source.title}</h4>
+                      <div className="expResultMeta">
+                        {source.materia ? (
+                          <span className="expResultMetaItem">{source.materia}</span>
+                        ) : null}
+                        {source.pageStart ? (
+                          <span className="expResultMetaItem">pág. {source.pageStart}</span>
+                        ) : null}
+                      </div>
+                      {source.ubicacionResumen ? (
+                        <div className="expResultMeta">
+                          <span className="expResultMetaItem">
+                            <MapPin size={12} /> {source.ubicacionResumen}
+                          </span>
+                        </div>
+                      ) : null}
+                      {source.excerpt ? (
+                        <p className="expResultExcerpt">{source.excerpt}</p>
+                      ) : null}
                     </div>
-                    <div className="documentActions">
+                    <div className="expResultActions">
                       <a
                         href={`/api/expedientes-archivo/${source.expedienteId}`}
                         target="_blank"
                         rel="noreferrer"
+                        className="expIconButton"
                         title="Abrir PDF"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <FileText size={16} />
+                        <FileText size={14} />
                       </a>
                     </div>
-                    {index === results.length - 1 ? null : null}
                   </article>
                 ))
               )}
-            </section>
-          ) : null}
-
-          {/* Dashboard de stats (visible si hay >= 5 expedientes) */}
-          {stats.total >= 5 ? (
-            <section className="expedientesStats">
-              <div className="statCard">
-                <span className="statLabel">Total</span>
-                <strong>{stats.total}</strong>
-              </div>
-              <div className="statCard">
-                <span className="statLabel">Indexados</span>
-                <strong>{stats.indexed}</strong>
-              </div>
-              <div className="statCard">
-                <span className="statLabel">Pendientes</span>
-                <strong>{stats.pending}</strong>
-              </div>
-              <div className="statCard">
-                <span className="statLabel">Con error</span>
-                <strong>{stats.error}</strong>
-              </div>
-              <div className="statCard">
-                <span className="statLabel">Tamaño total</span>
-                <strong>{formatBytes(stats.totalBytes)}</strong>
-              </div>
-            </section>
-          ) : null}
-
-          {/* Lista / Tabla / Tarjetas */}
-          <div className="expedientesListHeader">
-            <div className="subirViewToggle" role="tablist" aria-label="Modo de vista">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={viewMode === "lista"}
-                className={viewMode === "lista" ? "active" : ""}
-                onClick={() => setViewMode("lista")}
-                title="Vista lista"
-              >
-                <List size={14} />
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={viewMode === "tabla"}
-                className={viewMode === "tabla" ? "active" : ""}
-                onClick={() => setViewMode("tabla")}
-                title="Vista tabla"
-              >
-                <Table2 size={14} />
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={viewMode === "tarjetas"}
-                className={viewMode === "tarjetas" ? "active" : ""}
-                onClick={() => setViewMode("tarjetas")}
-                title="Vista tarjetas"
-              >
-                <Grid3x3 size={14} />
-              </button>
             </div>
+          ) : null}
 
-            <input
-              type="search"
-              placeholder="Filtro rápido de la lista…"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="expedientesListSearch"
-            />
+          {/* Dashboard de stats */}
+          {stats.total > 0 ? (
+            <div className="expStats" aria-label="Resumen del archivo">
+              <div className="expStatCard statBrand">
+                <div className="expStatHeader">
+                  <span className="expStatLabel">Total</span>
+                  <FileText className="expStatIcon" size={16} />
+                </div>
+                <span className="expStatValue">{stats.total}</span>
+                <span className="expStatHint">expedientes en el archivo</span>
+              </div>
+              <div className="expStatCard statSuccess">
+                <div className="expStatHeader">
+                  <span className="expStatLabel">Indexados</span>
+                  <CheckCircle2 className="expStatIcon" size={16} />
+                </div>
+                <span className="expStatValue">{stats.indexed}</span>
+                <span className="expStatHint">listos para buscar</span>
+              </div>
+              <div className="expStatCard statWarning">
+                <div className="expStatHeader">
+                  <span className="expStatLabel">Pendientes</span>
+                  <Loader2 className="expStatIcon" size={16} />
+                </div>
+                <span className="expStatValue">{stats.pending}</span>
+                <span className="expStatHint">procesándose ahora</span>
+              </div>
+              <div className="expStatCard statDanger">
+                <div className="expStatHeader">
+                  <span className="expStatLabel">Con error</span>
+                  <AlertCircle className="expStatIcon" size={16} />
+                </div>
+                <span className="expStatValue">{stats.error}</span>
+                <span className="expStatHint">requieren atención</span>
+              </div>
+              <div className="expStatCard statInfo">
+                <div className="expStatHeader">
+                  <span className="expStatLabel">Tamaño</span>
+                  <FileUp className="expStatIcon" size={16} />
+                </div>
+                <span className="expStatValue">{formatBytes(stats.totalBytes)}</span>
+                <span className="expStatHint">en Supabase Storage</span>
+              </div>
+            </div>
+          ) : null}
 
-            <div className="pillGroup">
-              {(["todos", "pendientes", "indexados", "error"] as StatusFilter[]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={statusFilter === s ? "pill active" : "pill"}
-                  onClick={() => setStatusFilter(s)}
+          {/* Header de lista */}
+          {expedientes.length > 0 ? (
+            <>
+              <div className="expListHeader">
+                <input
+                  type="search"
+                  placeholder="Filtra la lista por título, materia u oficina…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="expListSearch"
+                  aria-label="Filtro rápido de la lista"
+                />
+                <div
+                  className="expViewToggle"
+                  role="tablist"
+                  aria-label="Modo de vista"
                 >
-                  {s}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "lista"}
+                    className={viewMode === "lista" ? "active" : ""}
+                    onClick={() => setViewMode("lista")}
+                    title="Vista lista"
+                    aria-label="Vista lista"
+                  >
+                    <ListIcon size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "tabla"}
+                    className={viewMode === "tabla" ? "active" : ""}
+                    onClick={() => setViewMode("tabla")}
+                    title="Vista tabla"
+                    aria-label="Vista tabla"
+                  >
+                    <Table2 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "tarjetas"}
+                    className={viewMode === "tarjetas" ? "active" : ""}
+                    onClick={() => setViewMode("tarjetas")}
+                    title="Vista tarjetas"
+                    aria-label="Vista tarjetas"
+                  >
+                    <Grid3x3 size={14} />
+                  </button>
+                </div>
+                <div className="expPillGroup" role="tablist" aria-label="Filtrar por estado">
+                  {STATUS_PILLS.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={statusFilter === s.id}
+                      className={statusFilter === s.id ? "expPill active" : "expPill"}
+                      onClick={() => setStatusFilter(s.id)}
+                    >
+                      {s.label}
+                      <span className="expPillCount">{statusCounts[s.id]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtros avanzados */}
+              <div className="expAdvancedFilters">
+                <div className="expField">
+                  <label className="expField-label">
+                    <Filter size={11} /> Oficina
+                  </label>
+                  <input
+                    value={advancedFilters.oficina}
+                    onChange={(e) =>
+                      setAdvancedFilters((f) => ({ ...f, oficina: e.target.value }))
+                    }
+                    placeholder="Filtrar por oficina"
+                    className="expField-input"
+                  />
+                </div>
+                <div className="expField">
+                  <label className="expField-label">Estante</label>
+                  <input
+                    value={advancedFilters.estante}
+                    onChange={(e) =>
+                      setAdvancedFilters((f) => ({ ...f, estante: e.target.value }))
+                    }
+                    placeholder="Nº estante"
+                    className="expField-input"
+                  />
+                </div>
+                <div className="expField">
+                  <label className="expField-label">Tipo de documento</label>
+                  <input
+                    value={advancedFilters.tipoDocumento}
+                    onChange={(e) =>
+                      setAdvancedFilters((f) => ({ ...f, tipoDocumento: e.target.value }))
+                    }
+                    placeholder="Resolución, Oficio…"
+                    className="expField-input"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="expBtn expBtn-ghost"
+                  onClick={() =>
+                    setAdvancedFilters({ oficina: "", estante: "", tipoDocumento: "" })
+                  }
+                  disabled={
+                    !advancedFilters.oficina &&
+                    !advancedFilters.estante &&
+                    !advancedFilters.tipoDocumento
+                  }
+                >
+                  <X size={14} /> Limpiar
                 </button>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Filtros avanzados */}
-          <div className="expedientesAdvancedFilters">
-            <label>
-              <span>Oficina</span>
-              <input
-                value={advancedFilters.oficina}
-                onChange={(e) =>
-                  setAdvancedFilters((f) => ({ ...f, oficina: e.target.value }))
-                }
-                placeholder="Filtrar por oficina"
-              />
-            </label>
-            <label>
-              <span>Estante</span>
-              <input
-                value={advancedFilters.estante}
-                onChange={(e) =>
-                  setAdvancedFilters((f) => ({ ...f, estante: e.target.value }))
-                }
-                placeholder="Nº estante"
-              />
-            </label>
-            <label>
-              <span>Tipo doc.</span>
-              <input
-                value={advancedFilters.tipoDocumento}
-                onChange={(e) =>
-                  setAdvancedFilters((f) => ({ ...f, tipoDocumento: e.target.value }))
-                }
-                placeholder="Resolución, Oficio..."
-              />
-            </label>
-            <button
-              type="button"
-              className="subirGhostBtn"
-              onClick={() =>
-                setAdvancedFilters({ oficina: "", estante: "", tipoDocumento: "" })
-              }
-            >
-              <X size={14} /> Limpiar
-            </button>
-          </div>
+              {/* Bulk bar */}
+              {canManage && selectedIds.size > 0 ? (
+                <div className="expBulkBar" role="region" aria-label="Acciones masivas">
+                  <strong>{selectedIds.size}</strong>
+                  <span>seleccionado{selectedIds.size === 1 ? "" : "s"}</span>
+                  <button type="button" onClick={() => setSelectedIds(new Set())}>
+                    <X size={14} /> Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => setBulkOpen(true)}
+                  >
+                    <MapPin size={14} /> Mover / reasignar
+                  </button>
+                </div>
+              ) : null}
 
-          {/* Acciones bulk */}
-          {canManage && selectedIds.size > 0 ? (
-            <div className="expedientesBulkBar">
-              <span>
-                {selectedIds.size} seleccionado{selectedIds.size === 1 ? "" : "s"}
-              </span>
-              <button
-                type="button"
-                className="subirGhostBtn"
-                onClick={() => setSelectedIds(new Set())}
-              >
-                <X size={14} /> Limpiar
-              </button>
-              <button
-                type="button"
-                className="primaryButton"
-                onClick={() => setBulkOpen(true)}
-              >
-                Mover / reasignar
-              </button>
-            </div>
-          ) : null}
-
-          {loadingList ? (
-            <div className="emptyState">Cargando expedientes…</div>
-          ) : filteredExps.length === 0 ? (
-            <div className="emptyState">
-              {expedientes.length === 0
-                ? "Aún no hay expedientes en el archivo."
-                : "No hay expedientes que coincidan con los filtros aplicados."}
-            </div>
-          ) : viewMode === "tabla" ? (
-            <TablaExpedientes
-              exps={filteredExps}
-              canManage={canManage}
-              selectedIds={selectedIds}
-              onToggle={toggleSelect}
-              onSelectAll={toggleSelectAll}
-              onOpen={setOpenExp}
-              onDelete={deleteExpediente}
-              onDownload={(exp) => window.open(`/api/expedientes-archivo/${exp.id}`, "_blank")}
-              onReplace={setReplaceExp}
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSort={handleSort}
-              reindexingId={reindexingId}
-              deletingId={deletingId}
-              reindex={reindexExpediente}
-              formatBytes={formatBytes}
-              statusLabel={statusLabel}
-            />
-          ) : viewMode === "tarjetas" ? (
-            <TarjetasExpedientes
-              exps={filteredExps}
-              onOpen={setOpenExp}
-              formatBytes={formatBytes}
-              statusLabel={statusLabel}
-            />
-          ) : (
-            <div className="documentList">
-              {filteredExps.map((exp) => (
-                <article className="documentItem" key={exp.id}>
-                  <div className="documentIcon">
-                    <FileText size={18} />
+              {/* Contenido */}
+              {loadingList ? (
+                <div className="expEmpty">
+                  <Loader2 size={24} className="expSpin" />
+                  <p className="expEmpty-desc">Cargando expedientes…</p>
+                </div>
+              ) : filteredExps.length === 0 ? (
+                <div className="expEmpty">
+                  <div className="expEmpty-icon">
+                    <FileText size={24} />
                   </div>
-                  <div>
-                    <strong>{exp.title}</strong>
-                    <span>
-                      {exp.serie_documento ? `N° ${exp.serie_documento}` : "Sin número"}
-                      {exp.materia ? ` · ${exp.materia}` : ""}
-                      {exp.anio ? ` · ${exp.anio}` : ""} · {formatBytes(exp.file_size)}
-                    </span>
-                    <span className="expedienteUbicacion">
-                      <MapPin size={13} />
-                      {[
-                        exp.nro_estante && `E${exp.nro_estante}`,
-                        exp.nro_piso && `P${exp.nro_piso}`,
-                        exp.nro_local,
-                      ]
-                        .filter(Boolean)
-                        .join(" / ") || "Sin ubicación"}
-                    </span>
-                    {exp.asunto ? <span>Asunto: {exp.asunto}</span> : null}
-                    {exp.metadata?.chunkCount ? (
-                      <span>
-                        {exp.metadata.pageCount ?? 0} páginas · {exp.metadata.chunkCount} fragmentos
-                      </span>
-                    ) : null}
-                    {exp.error_message ? (
-                      <span className="documentError">{exp.error_message}</span>
-                    ) : null}
-                  </div>
-                  <div className="documentActions">
-                    <small data-status={exp.status}>{statusLabel(exp.status)}</small>
+                  <h3 className="expEmpty-title">
+                    {expedientes.length === 0
+                      ? "El archivo está vacío"
+                      : "Sin coincidencias"}
+                  </h3>
+                  <p className="expEmpty-desc">
+                    {expedientes.length === 0
+                      ? "Sube el primer expediente para empezar a indexar contenido."
+                      : "No hay expedientes que coincidan con los filtros aplicados. Prueba ajustando los criterios."}
+                  </p>
+                  {expedientes.length === 0 && canManage ? (
                     <button
                       type="button"
-                      onClick={() => setOpenExp(exp)}
-                      title="Ver detalle"
+                      className="expBtn expBtn-primary expEmpty-action"
+                      onClick={() => setTab("subir")}
                     >
-                      <Eye size={16} />
+                      <Plus size={16} /> Subir primer expediente
                     </button>
-                    <a
-                      href={`/api/expedientes-archivo/${exp.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Abrir PDF"
+                  ) : null}
+                </div>
+              ) : viewMode === "tabla" ? (
+                <TablaExpedientes
+                  exps={filteredExps}
+                  canManage={canManage}
+                  selectedIds={selectedIds}
+                  onToggle={toggleSelect}
+                  onSelectAll={toggleSelectAll}
+                  onOpen={setOpenExp}
+                  onDelete={deleteExpediente}
+                  onDownload={(exp) =>
+                    window.open(`/api/expedientes-archivo/${exp.id}`, "_blank")
+                  }
+                  onReplace={setReplaceExp}
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  reindexingId={reindexingId}
+                  deletingId={deletingId}
+                  reindex={reindexExpediente}
+                  formatBytes={formatBytes}
+                  statusLabel={statusLabel}
+                />
+              ) : viewMode === "tarjetas" ? (
+                <TarjetasExpedientes
+                  exps={filteredExps}
+                  onOpen={setOpenExp}
+                  formatBytes={formatBytes}
+                  statusLabel={statusLabel}
+                />
+              ) : (
+                <div className="expList">
+                  {filteredExps.map((exp) => (
+                    <article
+                      key={exp.id}
+                      className="expListItem"
+                      onClick={() => setOpenExp(exp)}
                     >
-                      <FileText size={16} />
-                    </a>
-                    {canManage ? (
-                      <>
-                        <button
-                          disabled={reindexingId === exp.id || deletingId === exp.id}
-                          onClick={() => void reindexExpediente(exp.id)}
-                          title="Reindexar"
-                          type="button"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
-                        <button
-                          disabled={deletingId === exp.id}
-                          onClick={() => void deleteExpediente(exp)}
-                          title="Eliminar"
-                          type="button"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </>
+                      <div className="expListItemIcon">
+                        <FileText size={18} />
+                      </div>
+                      <div className="expListItemBody">
+                        <h4 className="expListItemTitle">{exp.title}</h4>
+                        <div className="expListItemMeta">
+                          {exp.serie_documento ? (
+                            <span>N° {exp.serie_documento}</span>
+                          ) : (
+                            <span>Sin número</span>
+                          )}
+                          {exp.anio ? <span>· {exp.anio}</span> : null}
+                          {exp.oficina ? <span>· {exp.oficina}</span> : null}
+                          <span>· {formatBytes(exp.file_size)}</span>
+                          <span
+                            className={`expStatus expStatus-${exp.status}`}
+                            data-status={exp.status}
+                          >
+                            {statusLabel(exp.status)}
+                          </span>
+                        </div>
+                        {exp.nro_estante || exp.nro_piso || exp.nro_local ? (
+                          <div className="expListItemMeta">
+                            <span className="expResultMetaItem">
+                              <MapPin size={12} />
+                              {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
+                                .filter(Boolean)
+                                .join(" / ")}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div
+                        className="expListItemActions"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {canManage ? (
+                          <>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(exp.id)}
+                              onChange={() => toggleSelect(exp.id)}
+                              aria-label={`Seleccionar ${exp.title}`}
+                              className="expTooltip"
+                              data-tip="Seleccionar"
+                              style={{ marginRight: 4 }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setOpenExp(exp)}
+                              className="expIconButton"
+                              aria-label="Ver detalle"
+                              title="Ver detalle"
+                            >
+                              <Eye size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void reindexExpediente(exp.id)}
+                              disabled={reindexingId === exp.id}
+                              className="expIconButton"
+                              aria-label="Reindexar"
+                              title="Reindexar"
+                            >
+                              <RefreshCw
+                                size={14}
+                                className={reindexingId === exp.id ? "expSpin" : ""}
+                              />
+                            </button>
+                            <a
+                              href={`/api/expedientes-archivo/${exp.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="expIconButton"
+                              aria-label="Descargar PDF"
+                              title="Descargar PDF"
+                            >
+                              <Download size={14} />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void deleteExpediente(exp)}
+                              disabled={deletingId === exp.id}
+                              className="expIconButton danger"
+                              aria-label="Eliminar"
+                              title="Eliminar"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <a
+                            href={`/api/expedientes-archivo/${exp.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="expIconButton"
+                            aria-label="Abrir PDF"
+                            title="Abrir PDF"
+                          >
+                            <FileText size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
       ) : null}
 
       {/* ── Tab: Subir (wizard 4 pasos) ─────────────────────────── */}
       {tab === "subir" && canManage ? (
-        <form className="documentForm" onSubmit={uploadExpediente}>
-          <div className="subirWizardStepper" role="tablist" aria-label="Pasos del wizard">
-            {(["Documento", "Contenido", "Persona", "Ubicación"] as const).map((label, idx) => (
-              <button
-                key={label}
-                type="button"
-                role="tab"
-                aria-selected={wizardStep === idx}
-                className={wizardStep === idx ? "active" : wizardStep > idx ? "done" : ""}
-                onClick={() => setWizardStep(idx as WizardStep)}
-              >
-                {idx + 1}. {label}
-              </button>
-            ))}
-          </div>
+        <div className="expTabContent">
+          <form onSubmit={uploadExpediente}>
+            {/* Wizard progress */}
+            <div className="expWizard">
+              <div className="expWizardProgress">
+                {WIZARD_STEPS.map((step, idx) => {
+                  const Icon = step.icon;
+                  const isActive = wizardStep === idx;
+                  const isDone = wizardStep > idx;
+                  return (
+                    <>
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setWizardStep(idx as WizardStep)}
+                        className={
+                          "expWizardStep" +
+                          (isActive ? " active" : "") +
+                          (isDone ? " done" : "")
+                        }
+                      >
+                        <span className="expWizardStepNumber">
+                          {isDone ? <Check size={14} /> : idx + 1}
+                        </span>
+                        <span className="expWizardStepLabel">{step.label}</span>
+                      </button>
+                      {idx < WIZARD_STEPS.length - 1 ? (
+                        <div
+                          key={`conn-${idx}`}
+                          className="expWizardStepConnector"
+                        />
+                      ) : null}
+                    </>
+                  );
+                })}
+              </div>
+            </div>
 
-          {/* Paso 0: Documento */}
-          {wizardStep === 0 ? (
-            <>
-              <label
-                className={`filePicker ${isDragging ? "dragging" : ""}`}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-              >
-                <UploadCloud size={28} />
-                <strong>
-                  {file ? `${file.name} · ${formatBytes(file.size)}` : "Selecciona un PDF (puede ser escaneado)"}
-                </strong>
-                <span>Expedientes y documentos terminados. Máximo {maxPdfSizeLabel}.</span>
-                <input
-                  accept="application/pdf"
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] ?? null;
-                    if (selected && selected.size > maxPdfSizeBytes) {
-                      setFile(null);
-                      setUploadMessage(`El PDF supera el limite de ${maxPdfSizeLabel}.`);
-                      event.target.value = "";
-                      return;
+            {/* Paso 0: Documento */}
+            {wizardStep === 0 ? (
+              <>
+                <div className="expFormSection">
+                  <div className="expFormSectionHeader">
+                    <h3 className="expFormSectionTitle">
+                      <FileUp size={16} /> 1. Carga el PDF
+                      <span className="expFormSectionHint">
+                        Arrastra un archivo o haz clic para seleccionarlo
+                      </span>
+                    </h3>
+                    {file ? (
+                      <span className="expFormSectionCounter complete">
+                        <Check size={12} /> Cargado
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <label
+                    className={
+                      "expFilePicker" +
+                      (isDragging ? " dragging" : "") +
+                      (file ? " hasFile" : "")
                     }
-                    setUploadMessage(null);
-                    setFile(selected);
-                  }}
-                  type="file"
-                />
-              </label>
-
-              <div className="formGrid">
-                <label>
-                  <span>SGD de expediente</span>
-                  <input
-                    value={form.sgdExpediente}
-                    onChange={(e) => setField("sgdExpediente", e.target.value)}
-                    placeholder="Ej. 2024-001234"
-                  />
-                </label>
-                <label>
-                  <span>Serie documental</span>
-                  <input
-                    value={form.serieDocumento}
-                    onChange={(e) => setField("serieDocumento", e.target.value)}
-                    placeholder="Resolución, Oficio, Informe..."
-                  />
-                </label>
-                <label>
-                  <span>Tipo de documento</span>
-                  <select
-                    value={form.tipoDocumento}
-                    onChange={(e) => setField("tipoDocumento", e.target.value)}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
                   >
-                    <option value="">— Selecciona —</option>
-                    <option value="Resolución">Resolución</option>
-                    <option value="Oficio">Oficio</option>
-                    <option value="Decreto">Decreto</option>
-                    <option value="Ordenanza">Ordenanza</option>
-                    <option value="Informe">Informe</option>
-                    <option value="Memorando">Memorando</option>
-                    <option value="Carta">Carta</option>
-                    <option value="otro">Otro...</option>
-                  </select>
-                </label>
-                {form.tipoDocumento === "otro" ? (
-                  <label>
-                    <span>Especificar tipo</span>
+                    {file ? (
+                      <div className="expFilePickerFile">
+                        <FileText size={20} />
+                        <div>
+                          <strong>{file.name}</strong>
+                          <span>{formatBytes(file.size)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="expBtn expBtn-ghost"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setFile(null);
+                          }}
+                        >
+                          <X size={14} /> Quitar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="expFilePickerIcon">
+                          <UploadCloud size={24} />
+                        </div>
+                        <p className="expFilePickerTitle">
+                          {isDragging
+                            ? "Suelta el PDF aquí"
+                            : "Arrastra un PDF o haz clic"}
+                        </p>
+                        <p className="expFilePickerSub">
+                          Tamaño máximo: {maxPdfSizeLabel}
+                        </p>
+                      </>
+                    )}
                     <input
-                      value={form.tipoDocumentoCustom}
-                      onChange={(e) => setField("tipoDocumentoCustom", e.target.value)}
-                      placeholder="Escribe el tipo"
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => onFileSelect(e.target.files?.[0] ?? null)}
                     />
                   </label>
-                ) : null}
-                <label>
-                  <span>Año</span>
-                  <input
-                    type="number"
-                    value={form.anio}
-                    onChange={(e) => setField("anio", e.target.value)}
-                    placeholder="2024"
-                  />
-                </label>
-                <label>
-                  <span>Folio</span>
-                  <input
-                    value={form.folio}
-                    onChange={(e) => setField("folio", e.target.value)}
-                    placeholder="Nº de folio inicial"
-                  />
-                </label>
-                <label>
-                  <span>Oficina</span>
-                  <input
-                    value={form.oficina}
-                    onChange={(e) => setField("oficina", e.target.value)}
-                    placeholder="Subgerencia, área..."
-                  />
-                </label>
-                <label className="fullSpan">
-                  <span>Título</span>
-                  <input
-                    value={form.title}
-                    onChange={(e) => setField("title", e.target.value)}
-                    placeholder="Si lo dejas vacío se usa el nombre del archivo"
-                  />
-                </label>
-              </div>
-            </>
-          ) : null}
+                </div>
 
-          {/* Paso 1: Contenido */}
-          {wizardStep === 1 ? (
-            <div className="formGrid">
-              <label>
-                <span>Materia</span>
-                <input
-                  value={form.materia}
-                  onChange={(e) => setField("materia", e.target.value)}
-                  placeholder="Contratación, personal, presupuesto..."
-                />
-              </label>
-              <label>
-                <span>Asunto</span>
-                <input
-                  value={form.asunto}
-                  onChange={(e) => setField("asunto", e.target.value)}
-                  placeholder="Asunto o sumilla"
-                />
-              </label>
-              <label className="fullSpan">
-                <span>Resumen</span>
-                <textarea
-                  rows={3}
-                  value={form.resumen}
-                  onChange={(e) => setField("resumen", e.target.value)}
-                  placeholder="Resumen ejecutivo (3-5 líneas)"
-                />
-              </label>
-              <label className="fullSpan">
-                <span>Observaciones</span>
-                <textarea
-                  rows={2}
-                  value={form.observaciones}
-                  onChange={(e) => setField("observaciones", e.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
+                <div className="expFormSection">
+                  <div className="expFormSectionHeader">
+                    <h3 className="expFormSectionTitle">
+                      <Info size={16} /> 2. Identifica el documento
+                    </h3>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 12,
+                    }}
+                  >
+                    <div className="expField">
+                      <label className="expField-label">
+                        SGD de expediente <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        value={form.sgdExpediente}
+                        onChange={(e) => setField("sgdExpediente", e.target.value)}
+                        placeholder="Ej. 2024-001234"
+                        className="expField-input"
+                      />
+                    </div>
+                    <div className="expField">
+                      <label className="expField-label">
+                        Serie documental
+                      </label>
+                      <input
+                        value={form.serieDocumento}
+                        onChange={(e) => setField("serieDocumento", e.target.value)}
+                        placeholder="Resolución, Oficio, Informe…"
+                        className="expField-input"
+                      />
+                    </div>
+                    <div className="expField">
+                      <label className="expField-label">
+                        Tipo de documento
+                      </label>
+                      <select
+                        value={form.tipoDocumento}
+                        onChange={(e) => setField("tipoDocumento", e.target.value)}
+                        className="expField-select"
+                      >
+                        <option value="">— Selecciona —</option>
+                        <option value="Resolución">Resolución</option>
+                        <option value="Oficio">Oficio</option>
+                        <option value="Decreto">Decreto</option>
+                        <option value="Ordenanza">Ordenanza</option>
+                        <option value="Informe">Informe</option>
+                        <option value="Memorando">Memorando</option>
+                        <option value="Carta">Carta</option>
+                        <option value="otro">Otro…</option>
+                      </select>
+                    </div>
+                    {form.tipoDocumento === "otro" ? (
+                      <div className="expField">
+                        <label className="expField-label">
+                          Especificar tipo
+                        </label>
+                        <input
+                          value={form.tipoDocumentoCustom}
+                          onChange={(e) => setField("tipoDocumentoCustom", e.target.value)}
+                          placeholder="Escribe el tipo de documento"
+                          className="expField-input"
+                        />
+                      </div>
+                    ) : null}
+                    <div className="expField">
+                      <label className="expField-label">
+                        Año <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.anio}
+                        onChange={(e) => setField("anio", e.target.value)}
+                        placeholder="2024"
+                        className="expField-input"
+                      />
+                    </div>
+                    <div className="expField">
+                      <label className="expField-label">
+                        Folio <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        value={form.folio}
+                        onChange={(e) => setField("folio", e.target.value)}
+                        placeholder="Nº de folio inicial"
+                        className="expField-input"
+                      />
+                    </div>
+                    <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                      <label className="expField-label">
+                        Oficina <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        value={form.oficina}
+                        onChange={(e) => setField("oficina", e.target.value)}
+                        placeholder="Subgerencia, área, dirección…"
+                        className="expField-input"
+                      />
+                    </div>
+                    <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                      <label className="expField-label">
+                        Título <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        value={form.title}
+                        onChange={(e) => setField("title", e.target.value)}
+                        placeholder="Si lo dejas vacío se usa el nombre del archivo"
+                        className="expField-input"
+                      />
+                      <span className="expField-hint">
+                        El título se mostrará en los resultados de búsqueda.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : null}
 
-          {/* Paso 2: Persona */}
-          {wizardStep === 2 ? (
-            <div className="formGrid">
-              <label>
-                <span>Tipo de persona</span>
-                <select
-                  value={form.personaTipo}
-                  onChange={(e) => setField("personaTipo", e.target.value as SubirForm["personaTipo"])}
+            {/* Paso 1: Contenido */}
+            {wizardStep === 1 ? (
+              <div className="expFormSection">
+                <div className="expFormSectionHeader">
+                  <h3 className="expFormSectionTitle">
+                    <FileText size={16} /> Describe el contenido
+                    <span className="expFormSectionHint">
+                      Estos campos ayudan a la IA a encontrar el expediente
+                    </span>
+                  </h3>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                  }}
                 >
-                  <option value="">— Sin persona —</option>
-                  <option value="natural">Persona natural</option>
-                  <option value="juridica">Persona jurídica</option>
-                </select>
-              </label>
-              <label>
-                <span>Documento</span>
-                <input
-                  value={form.personaDocumento}
-                  onChange={(e) => setField("personaDocumento", e.target.value)}
-                  placeholder="DNI o RUC"
-                />
-              </label>
-              <label className="fullSpan">
-                <span>Nombre</span>
-                <input
-                  value={form.personaNombre}
-                  onChange={(e) => setField("personaNombre", e.target.value)}
-                  placeholder="Razón social o nombre completo"
-                />
-              </label>
-            </div>
-          ) : null}
-
-          {/* Paso 3: Ubicación */}
-          {wizardStep === 3 ? (
-            <>
-              <div className="documentSectionTitle">
-                <div>
-                  <strong>Ubicación física</strong>
-                  <span>Dónde se encuentra el expediente en papel (catálogo fijo).</span>
+                  <div className="expField">
+                    <label className="expField-label">Materia</label>
+                    <input
+                      value={form.materia}
+                      onChange={(e) => setField("materia", e.target.value)}
+                      placeholder="Contratación, personal, presupuesto…"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Asunto</label>
+                    <input
+                      value={form.asunto}
+                      onChange={(e) => setField("asunto", e.target.value)}
+                      placeholder="Asunto o sumilla del documento"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Resumen</label>
+                    <textarea
+                      rows={3}
+                      value={form.resumen}
+                      onChange={(e) => setField("resumen", e.target.value)}
+                      placeholder="Resumen ejecutivo (3-5 líneas)"
+                      className="expField-textarea"
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Observaciones</label>
+                    <textarea
+                      rows={2}
+                      value={form.observaciones}
+                      onChange={(e) => setField("observaciones", e.target.value)}
+                      placeholder="Notas adicionales sobre este expediente"
+                      className="expField-textarea"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="formGrid">
-                <label>
-                  <span>Tipo de contenedor</span>
-                  <select
-                    value={form.tipoAlmacenamiento}
-                    onChange={(e) => setField("tipoAlmacenamiento", e.target.value)}
-                  >
-                    <option value="">— Sin contenedor —</option>
-                    {CONTENEDOR_TIPOS.map((tipo) => (
-                      <option key={tipo} value={tipo}>
-                        {CONTENEDOR_TIPO_LABELS[tipo]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Nº de archivador</span>
-                  <input
-                    value={form.nroArchivador}
-                    onChange={(e) => setField("nroArchivador", e.target.value)}
-                    placeholder="Ej. 12"
-                  />
-                </label>
-                <label>
-                  <span>Nº de paquete</span>
-                  <input
-                    value={form.nroPaquete}
-                    onChange={(e) => setField("nroPaquete", e.target.value)}
-                    placeholder="Opcional"
-                  />
-                </label>
-                <label>
-                  <span>Empastado</span>
-                  <select
-                    value={form.empastado}
-                    onChange={(e) => setField("empastado", e.target.value)}
-                  >
-                    <option value="">— Sin definir —</option>
-                    <option value="si">Sí</option>
-                    <option value="no">No</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Color</span>
-                  <select
-                    value={form.colorArchivador}
-                    onChange={(e) => setField("colorArchivador", e.target.value)}
-                  >
-                    <option value="">— Sin color —</option>
-                    {ARCHIVO_COLORES.map((color) => (
-                      <option key={color} value={color}>
-                        {color}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Estante</span>
-                  <input
-                    value={form.nroEstante}
-                    onChange={(e) => setField("nroEstante", e.target.value)}
-                    placeholder="Ej. 3"
-                  />
-                </label>
-                <label>
-                  <span>Piso</span>
-                  <input
-                    value={form.nroPiso}
-                    onChange={(e) => setField("nroPiso", e.target.value)}
-                    placeholder="Ej. 2"
-                  />
-                </label>
-                <label>
-                  <span>Local / ambiente</span>
-                  <select
-                    value={form.nroLocal}
-                    onChange={(e) => setField("nroLocal", e.target.value)}
-                  >
-                    <option value="">— Sin ambiente —</option>
-                    {ARCHIVO_AMBIENTES.map((amb) => (
-                      <option key={amb} value={amb}>
-                        {amb}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </>
-          ) : null}
-
-          <div className="formActions">
-            {wizardStep > 0 ? (
-              <button
-                type="button"
-                className="subirGhostBtn"
-                onClick={() => setWizardStep((s) => (s - 1) as WizardStep)}
-              >
-                ← Anterior
-              </button>
             ) : null}
-            {wizardStep < 3 ? (
-              <button
-                type="button"
-                className="primaryButton"
-                onClick={() => setWizardStep((s) => (s + 1) as WizardStep)}
-              >
-                Siguiente →
-              </button>
-            ) : (
-              <button className="primaryButton" disabled={uploading} type="submit">
-                <UploadCloud size={18} /> {uploading ? "Subiendo..." : "Subir al archivo"}
-              </button>
-            )}
-          </div>
-          {uploadMessage ? <p className="formMessage">{uploadMessage}</p> : null}
-        </form>
+
+            {/* Paso 2: Persona */}
+            {wizardStep === 2 ? (
+              <div className="expFormSection">
+                <div className="expFormSectionHeader">
+                  <h3 className="expFormSectionTitle">
+                    <Info size={16} /> Persona
+                    <span className="expFormSectionHint">
+                      Quién presenta o solicita este documento
+                    </span>
+                  </h3>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                  }}
+                >
+                  <div className="expField">
+                    <label className="expField-label">Tipo de persona</label>
+                    <select
+                      value={form.personaTipo}
+                      onChange={(e) =>
+                        setField("personaTipo", e.target.value as SubirForm["personaTipo"])
+                      }
+                      className="expField-select"
+                    >
+                      <option value="">— Sin persona —</option>
+                      <option value="natural">Persona natural</option>
+                      <option value="juridica">Persona jurídica</option>
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Documento</label>
+                    <input
+                      value={form.personaDocumento}
+                      onChange={(e) => setField("personaDocumento", e.target.value)}
+                      placeholder="DNI o RUC"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Nombre</label>
+                    <input
+                      value={form.personaNombre}
+                      onChange={(e) => setField("personaNombre", e.target.value)}
+                      placeholder="Razón social o nombre completo"
+                      className="expField-input"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Paso 3: Ubicación */}
+            {wizardStep === 3 ? (
+              <div className="expFormSection">
+                <div className="expFormSectionHeader">
+                  <h3 className="expFormSectionTitle">
+                    <MapPin size={16} /> Ubicación física
+                    <span className="expFormSectionHint">
+                      Dónde se encuentra el expediente en papel
+                    </span>
+                  </h3>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                  }}
+                >
+                  <div className="expField">
+                    <label className="expField-label">Tipo de contenedor</label>
+                    <select
+                      value={form.tipoAlmacenamiento}
+                      onChange={(e) => setField("tipoAlmacenamiento", e.target.value)}
+                      className="expField-select"
+                    >
+                      <option value="">— Sin contenedor —</option>
+                      {CONTENEDOR_TIPOS.map((tipo) => (
+                        <option key={tipo} value={tipo}>
+                          {CONTENEDOR_TIPO_LABELS[tipo]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Nº de archivador</label>
+                    <input
+                      value={form.nroArchivador}
+                      onChange={(e) => setField("nroArchivador", e.target.value)}
+                      placeholder="Ej. 12"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Nº de paquete</label>
+                    <input
+                      value={form.nroPaquete}
+                      onChange={(e) => setField("nroPaquete", e.target.value)}
+                      placeholder="Opcional"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Empastado</label>
+                    <select
+                      value={form.empastado}
+                      onChange={(e) => setField("empastado", e.target.value)}
+                      className="expField-select"
+                    >
+                      <option value="">— Sin definir —</option>
+                      <option value="si">Sí</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Color</label>
+                    <select
+                      value={form.colorArchivador}
+                      onChange={(e) => setField("colorArchivador", e.target.value)}
+                      className="expField-select"
+                    >
+                      <option value="">— Sin color —</option>
+                      {ARCHIVO_COLORES.map((color) => (
+                        <option key={color} value={color}>
+                          {color}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Estante</label>
+                    <input
+                      value={form.nroEstante}
+                      onChange={(e) => setField("nroEstante", e.target.value)}
+                      placeholder="Ej. 3"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Piso</label>
+                    <input
+                      value={form.nroPiso}
+                      onChange={(e) => setField("nroPiso", e.target.value)}
+                      placeholder="Ej. 2"
+                      className="expField-input"
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Local / ambiente</label>
+                    <select
+                      value={form.nroLocal}
+                      onChange={(e) => setField("nroLocal", e.target.value)}
+                      className="expField-select"
+                    >
+                      <option value="">— Sin ambiente —</option>
+                      {ARCHIVO_AMBIENTES.map((amb) => (
+                        <option key={amb} value={amb}>
+                          {amb}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Acciones del wizard */}
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "space-between",
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: "1px solid var(--exp-line)",
+              }}
+            >
+              <div style={{ display: "flex", gap: 10 }}>
+                {wizardStep > 0 ? (
+                  <button
+                    type="button"
+                    className="expBtn expBtn-ghost"
+                    onClick={() => setWizardStep((s) => (s - 1) as WizardStep)}
+                  >
+                    <ChevronLeft size={16} /> Anterior
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="expBtn expBtn-ghost"
+                  onClick={() => {
+                    setForm(EMPTY_FORM);
+                    setFile(null);
+                    setWizardStep(0);
+                  }}
+                >
+                  <X size={14} /> Cancelar
+                </button>
+              </div>
+              {wizardStep < 3 ? (
+                <button
+                  type="button"
+                  className="expBtn expBtn-primary"
+                  onClick={() => {
+                    const check = canProceedStep();
+                    if (!check.ok) {
+                      showToast(check.reason ?? "Completa los datos requeridos", "warning");
+                      return;
+                    }
+                    setWizardStep((s) => (s + 1) as WizardStep);
+                  }}
+                >
+                  Siguiente <ChevronRight size={16} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="expBtn expBtn-primary"
+                >
+                  {uploading ? (
+                    <Loader2 size={16} className="expSpin" />
+                  ) : (
+                    <UploadCloud size={16} />
+                  )}
+                  {uploading ? `Subiendo… ${uploadProgress}%` : "Subir al archivo"}
+                </button>
+              )}
+            </div>
+
+            {uploading && uploadProgress > 0 && uploadProgress < 100 ? (
+              <div className="expProgress" style={{ marginTop: 12 }}>
+                <div
+                  className="expProgress-bar"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            ) : null}
+          </form>
+        </div>
       ) : tab === "subir" && !canManage ? (
-        <div className="emptyState">
-          <Lock size={20} />
-          <p>
-            La carga y gestión de expedientes requiere rol DEC/Editor o administrador. Puedes buscar
-            y consultar todos los expedientes indexados.
-          </p>
+        <div className="expTabContent">
+          <div className="expEmpty">
+            <div className="expEmpty-icon">
+              <Lock size={24} />
+            </div>
+            <h3 className="expEmpty-title">Acceso restringido</h3>
+            <p className="expEmpty-desc">
+              La carga y gestión de expedientes requiere rol DEC/Editor o administrador.
+              Puedes buscar y consultar todos los expedientes indexados.
+            </p>
+            <button
+              type="button"
+              className="expBtn expBtn-secondary expEmpty-action"
+              onClick={() => setTab("buscar")}
+            >
+              <Search size={16} /> Ir a buscar
+            </button>
+          </div>
         </div>
       ) : null}
 
       {/* ── Modales y slide-overs ─────────────────────────────────── */}
       {openExp ? (
-        <div className="subirSlideOverOverlay" onClick={() => setOpenExp(null)}>
+        <div className="expSlideOverOverlay" onClick={() => setOpenExp(null)}>
           <aside
-            className="subirSlideOver"
+            className="expSlideOver"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-label="Detalle del expediente"
           >
-            <header className="subirSlideOverHead">
+            <div className="expSlideOver-header">
               <div>
-                <strong>{openExp.title}</strong>
-                <span>
-                  {openExp.serie_documento ?? "Sin número"} · {openExp.anio ?? "s/f"}
-                </span>
+                <h3 className="expSlideOver-title">{openExp.title}</h3>
+                <p className="expSlideOver-subtitle">
+                  {openExp.serie_documento ?? "Sin número"} · {openExp.anio ?? "s/f"} ·{" "}
+                  {formatBytes(openExp.file_size)}
+                </p>
               </div>
               <button
                 type="button"
-                className="subirSlideOverClose"
                 onClick={() => setOpenExp(null)}
+                className="expSlideOver-close"
                 aria-label="Cerrar"
               >
                 <X size={18} />
               </button>
-            </header>
-            <div className="subirSlideOverBody">
+            </div>
+            <div className="expSlideOver-body">
               <iframe
                 title="Vista previa"
                 src={`/api/expedientes-archivo/${openExp.id}`}
                 style={{ width: "100%", height: "70vh", border: 0 }}
               />
-              {canManage ? (
-                <div className="subirSlideOverActions">
-                  <button
-                    type="button"
-                    className="subirGhostBtn"
-                    onClick={() => {
-                      setReplaceExp(openExp);
-                      setOpenExp(null);
-                    }}
-                  >
-                    Reemplazar PDF
-                  </button>
-                </div>
-              ) : null}
+              <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+                {openExp.materia ? (
+                  <div className="expField">
+                    <label className="expField-label">Materia</label>
+                    <div>{openExp.materia}</div>
+                  </div>
+                ) : null}
+                {openExp.asunto ? (
+                  <div className="expField">
+                    <label className="expField-label">Asunto</label>
+                    <div>{openExp.asunto}</div>
+                  </div>
+                ) : null}
+                {(openExp.nro_estante || openExp.nro_piso || openExp.nro_local) ? (
+                  <div className="expField">
+                    <label className="expField-label">Ubicación física</label>
+                    <div>
+                      {[openExp.nro_estante && `Estante ${openExp.nro_estante}`, openExp.nro_piso && `Piso ${openExp.nro_piso}`, openExp.nro_local]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
+            {canManage ? (
+              <div className="expSlideOver-footer">
+                <button
+                  type="button"
+                  className="expBtn expBtn-ghost"
+                  onClick={() => {
+                    setReplaceExp(openExp);
+                    setOpenExp(null);
+                  }}
+                >
+                  <RefreshCw size={14} /> Reemplazar PDF
+                </button>
+                <a
+                  href={`/api/expedientes-archivo/${openExp.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="expBtn expBtn-secondary"
+                >
+                  <Download size={14} /> Descargar
+                </a>
+                <button
+                  type="button"
+                  className="expBtn expBtn-primary"
+                  onClick={() => setOpenExp(null)}
+                >
+                  Cerrar
+                </button>
+              </div>
+            ) : null}
           </aside>
         </div>
       ) : null}
@@ -1452,45 +1953,130 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       ) : null}
 
       {helpOpen ? (
-        <div className="subirSlideOverOverlay" onClick={() => setHelpOpen(false)}>
+        <div className="expSlideOverOverlay" onClick={() => setHelpOpen(false)}>
           <aside
-            className="subirSlideOver subirSlideOverModal"
+            className="expSlideOver expSlideOver-modal"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-label="Atajos de teclado"
           >
-            <header className="subirSlideOverHead">
+            <div className="expSlideOver-header">
               <div>
-                <strong>Atajos de teclado</strong>
-                <span>Navega más rápido por la biblioteca</span>
+                <h3 className="expSlideOver-title">Atajos de teclado</h3>
+                <p className="expSlideOver-subtitle">
+                  Navega más rápido con el teclado
+                </p>
               </div>
               <button
                 type="button"
-                className="subirSlideOverClose"
                 onClick={() => setHelpOpen(false)}
+                className="expSlideOver-close"
                 aria-label="Cerrar"
               >
                 <X size={18} />
               </button>
-            </header>
-            <div className="subirSlideOverBody">
-              <table className="subirHelpTable">
+            </div>
+            <div className="expSlideOver-body">
+              <table className="expHelpTable">
                 <tbody>
-                  <tr><td><kbd>⌘</kbd>+<kbd>K</kbd></td><td>Abrir paleta de comandos</td></tr>
-                  <tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Abrir chat con IA</td></tr>
-                  <tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Ir a pestaña Subir</td></tr>
-                  <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Ir a pestaña Buscar</td></tr>
-                  <tr><td><kbd>Ctrl</kbd>+<kbd>→</kbd></td><td>Siguiente paso del wizard</td></tr>
-                  <tr><td><kbd>Ctrl</kbd>+<kbd>←</kbd></td><td>Paso anterior del wizard</td></tr>
-                  <tr><td><kbd>/</kbd></td><td>Enfocar buscador de la lista</td></tr>
-                  <tr><td><kbd>?</kbd></td><td>Mostrar/ocultar esta ayuda</td></tr>
-                  <tr><td><kbd>Esc</kbd></td><td>Cerrar paneles/modales</td></tr>
+                  <tr>
+                    <td>
+                      <kbd>⌘</kbd>
+                      <kbd>K</kbd>
+                    </td>
+                    <td>Abrir paleta de comandos</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Ctrl</kbd>
+                      <kbd>I</kbd>
+                    </td>
+                    <td>Abrir chat con IA</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Ctrl</kbd>
+                      <kbd>U</kbd>
+                    </td>
+                    <td>Ir a pestaña Subir</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Ctrl</kbd>
+                      <kbd>B</kbd>
+                    </td>
+                    <td>Ir a pestaña Buscar</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Ctrl</kbd>
+                      <kbd>→</kbd>
+                    </td>
+                    <td>Siguiente paso del wizard</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Ctrl</kbd>
+                      <kbd>←</kbd>
+                    </td>
+                    <td>Paso anterior del wizard</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>/</kbd>
+                    </td>
+                    <td>Enfocar buscador</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>?</kbd>
+                    </td>
+                    <td>Mostrar/ocultar esta ayuda</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <kbd>Esc</kbd>
+                    </td>
+                    <td>Cerrar paneles y modales</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </aside>
         </div>
       ) : null}
+
+      {/* ── Toasts ─────────────────────────────────────────────── */}
+      <div aria-live="polite" aria-atomic="true">
+        {toasts.map((toast) => {
+          const Icon =
+            toast.kind === "success"
+              ? CheckCircle2
+              : toast.kind === "error"
+                ? AlertCircle
+                : toast.kind === "warning"
+                  ? AlertCircle
+                  : Info;
+          return (
+            <div
+              key={toast.id}
+              className={`expToast expToast-${toast.kind}`}
+              role="status"
+            >
+              <Icon className="expToast-icon" size={18} />
+              <span className="expToast-message">{toast.message}</span>
+              <button
+                type="button"
+                className="expToast-close"
+                onClick={() => dismissToast(toast.id)}
+                aria-label="Cerrar notificación"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

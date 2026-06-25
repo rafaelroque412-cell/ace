@@ -1,7 +1,15 @@
 "use client";
 
-import { RefreshCw, Download, Replace, Trash2, FileText } from "lucide-react";
+import { RefreshCw, Download, Replace, Trash2, FileText, MapPin } from "lucide-react";
 import type { TablaExpedientesProps } from "./types";
+
+function StatusBadge({ status, label }: { status: string; label: string }) {
+  return (
+    <span className={`expStatus expStatus-${status}`} data-status={status}>
+      {label}
+    </span>
+  );
+}
 
 export function TablaExpedientes({
   exps,
@@ -22,11 +30,23 @@ export function TablaExpedientes({
   formatBytes,
   statusLabel,
 }: TablaExpedientesProps) {
-  const arrow = (col: string) => (sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : "");
+  const arrow = (col: string) =>
+    sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+
+  const SortBtn = ({ col, children }: { col: string; children: React.ReactNode }) => (
+    <button
+      type="button"
+      className={`expTableSortBtn ${sortBy === col ? "activeSort" : ""}`}
+      onClick={() => onSort(col)}
+    >
+      {children}
+      {arrow(col)}
+    </button>
+  );
 
   return (
-    <div className="subirTablaWrap">
-      <table className="subirTabla">
+    <div className="expTableWrap">
+      <table className="expTable">
         <thead>
           <tr>
             {canManage ? (
@@ -40,32 +60,27 @@ export function TablaExpedientes({
               </th>
             ) : null}
             <th>
-              <button type="button" className="subirSortBtn" onClick={() => onSort("title")}>
-                Título{arrow("title")}
-              </button>
+              <SortBtn col="title">Título</SortBtn>
             </th>
             <th>
-              <button type="button" className="subirSortBtn" onClick={() => onSort("anio")}>
-                Año{arrow("anio")}
-              </button>
+              <SortBtn col="anio">Año</SortBtn>
             </th>
             <th>Ubicación</th>
             <th>
-              <button type="button" className="subirSortBtn" onClick={() => onSort("file_size")}>
-                Tamaño{arrow("file_size")}
-              </button>
+              <SortBtn col="file_size">Tamaño</SortBtn>
             </th>
             <th>
-              <button type="button" className="subirSortBtn" onClick={() => onSort("status")}>
-                Status{arrow("status")}
-              </button>
+              <SortBtn col="status">Estado</SortBtn>
             </th>
             {canManage ? <th style={{ width: 140 }}>Acciones</th> : null}
           </tr>
         </thead>
         <tbody>
           {exps.map((exp) => (
-            <tr key={exp.id} className={selectedIds.has(exp.id) ? "selected" : ""}>
+            <tr
+              key={exp.id}
+              className={selectedIds.has(exp.id) ? "selected" : ""}
+            >
               {canManage ? (
                 <td>
                   <input
@@ -77,60 +92,72 @@ export function TablaExpedientes({
                 </td>
               ) : null}
               <td>
-                <button type="button" className="subirTablaTitle" onClick={() => onOpen(exp)}>
-                  <strong>{exp.title}</strong>
+                <button
+                  type="button"
+                  className="expTableTitle"
+                  onClick={() => onOpen(exp)}
+                >
+                  {exp.title}
                 </button>
-                <div className="subirTablaSub">
+                <div className="expTableSub">
                   {exp.anio ? `${exp.anio}` : ""}
                   {exp.oficina ? ` · ${exp.oficina}` : ""}
                 </div>
               </td>
               <td>{exp.anio ?? "—"}</td>
-              <td className="subirTablaUbicacion">
-                {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
-                  .filter(Boolean)
-                  .join(" / ") || "—"}
+              <td>
+                <span className="expTableUbicacion">
+                  <MapPin size={11} style={{ display: "inline", marginRight: 4 }} />
+                  {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
+                    .filter(Boolean)
+                    .join(" / ") || "—"}
+                </span>
               </td>
               <td>{formatBytes(exp.file_size)}</td>
               <td>
-                <span className={`subirStatusBadge subirStatus_${exp.status}`} data-status={exp.status}>
-                  {statusLabel(exp.status)}
-                </span>
+                <StatusBadge status={exp.status} label={statusLabel(exp.status)} />
               </td>
               {canManage ? (
                 <td>
-                  <div className="subirRowActions">
+                  <div className="expListItemActions" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
-                      className="subirRowActionBtn"
-                      title="Reindexar"
                       onClick={() => void reindex(exp.id)}
                       disabled={reindexingId === exp.id}
+                      className="expIconButton"
+                      title="Reindexar"
+                      aria-label="Reindexar"
                     >
-                      <RefreshCw size={14} className={reindexingId === exp.id ? "spin" : ""} />
+                      <RefreshCw
+                        size={14}
+                        className={reindexingId === exp.id ? "expSpin" : ""}
+                      />
                     </button>
                     <button
                       type="button"
-                      className="subirRowActionBtn"
-                      title="Descargar"
                       onClick={() => onDownload(exp)}
+                      className="expIconButton"
+                      title="Descargar"
+                      aria-label="Descargar"
                     >
                       <Download size={14} />
                     </button>
                     <button
                       type="button"
-                      className="subirRowActionBtn"
-                      title="Reemplazar PDF"
                       onClick={() => onReplace(exp)}
+                      className="expIconButton"
+                      title="Reemplazar PDF"
+                      aria-label="Reemplazar PDF"
                     >
                       <Replace size={14} />
                     </button>
                     <button
                       type="button"
-                      className="subirRowActionBtn subirRowActionDanger"
-                      title="Eliminar"
                       onClick={() => onDelete(exp)}
                       disabled={reindexingId === exp.id || deletingId === exp.id}
+                      className="expIconButton danger"
+                      title="Eliminar"
+                      aria-label="Eliminar"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -142,9 +169,14 @@ export function TablaExpedientes({
         </tbody>
       </table>
       {exps.length === 0 ? (
-        <div className="emptyState">
-          <FileText size={20} />
-          <p>No hay expedientes que coincidan con los filtros aplicados.</p>
+        <div className="expEmpty" style={{ borderRadius: 0, border: 0 }}>
+          <div className="expEmpty-icon">
+            <FileText size={24} />
+          </div>
+          <h3 className="expEmpty-title">Sin resultados</h3>
+          <p className="expEmpty-desc">
+            No hay expedientes que coincidan con los filtros aplicados.
+          </p>
         </div>
       ) : null}
     </div>

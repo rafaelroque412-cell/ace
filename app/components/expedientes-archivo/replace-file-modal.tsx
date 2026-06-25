@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, UploadCloud, FileText } from "lucide-react";
+import { X, UploadCloud, FileText, AlertTriangle } from "lucide-react";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import type { ReplaceFileModalProps } from "./types";
 
 export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function handleFileChange(f: File | null) {
@@ -35,89 +36,109 @@ export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProp
   }
 
   return (
-    <div className="subirSlideOverOverlay" onClick={onClose}>
+    <div className="expSlideOverOverlay" onClick={onClose}>
       <aside
-        className="subirSlideOver subirSlideOverModal"
+        className="expSlideOver expSlideOver-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Reemplazar PDF"
       >
-        <header className="subirSlideOverHead">
+        <div className="expSlideOver-header">
           <div>
-            <strong>Reemplazar PDF</strong>
-            <span>&ldquo;{exp.title}&rdquo; se reprocesará automáticamente</span>
+            <h3 className="expSlideOver-title">Reemplazar PDF</h3>
+            <p className="expSlideOver-subtitle">&ldquo;{exp.title}&rdquo; se reprocesará automáticamente</p>
           </div>
           <button
             type="button"
-            className="subirSlideOverClose"
+            className="expSlideOver-close"
             onClick={onClose}
             aria-label="Cerrar"
           >
             <X size={18} />
           </button>
-        </header>
-        <div className="subirSlideOverBody">
-          <p className="subirReplaceCurrent">
-            <strong>PDF actual:</strong> {exp.file_name} ({(exp.file_size / 1024).toFixed(0)} KB)
-          </p>
-          <div className="subirReplacePreview">
+        </div>
+        <div className="expSlideOver-body">
+          <div className="expReplaceCurrent">
+            <FileText size={16} />
+            <div>
+              <strong>PDF actual:</strong> {exp.file_name} (
+              {(exp.file_size / 1024).toFixed(0)} KB)
+            </div>
+          </div>
+          <div className="expReplacePreview">
             <iframe
               title="Vista previa del PDF actual"
               src={`/api/expedientes-archivo/${exp.id}`}
             />
           </div>
-          <div className="subirReplaceDropzone">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-              hidden
-            />
+          <label
+            className={`expReplaceDropzone ${isDragging ? "dragging" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              handleFileChange(e.dataTransfer.files?.[0] ?? null);
+            }}
+          >
             {!file ? (
-              <button
-                type="button"
-                className="subirReplaceDropzoneBtn"
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <div className="expReplaceDropzone-content">
                 <UploadCloud size={28} />
                 <strong>Selecciona el nuevo PDF</strong>
                 <span>Máx. {maxPdfSizeLabel}</span>
-              </button>
+              </div>
             ) : (
-              <div className="subirReplaceFileInfo">
-                <FileText size={24} />
+              <div className="expReplaceFile">
+                <FileText size={20} />
                 <div>
                   <strong>{file.name}</strong>
                   <span>{(file.size / 1024).toFixed(0)} KB</span>
                 </div>
                 <button
                   type="button"
-                  className="subirLinkBtn"
+                  className="expReplaceChange"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Cambiar
                 </button>
               </div>
             )}
-            {error ? <small className="fieldErrorMsg">{error}</small> : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {error ? (
+            <div className="expMessage expMessage-error" style={{ marginTop: 8 }}>
+              <AlertTriangle size={16} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+          <div className="expReplaceWarning">
+            <AlertTriangle size={16} />
+            <div>
+              El nuevo archivo se reprocesará con OCR y se re-indexará en Pinecone. Los
+              metadatos (título, ubicación, etc.) se conservan.
+            </div>
           </div>
-          <p className="subirReplaceWarning">
-            El nuevo archivo se reprocesará con OCR y se re-indexará en Pinecone. Los metadatos (título, ubicación, etc.) se conservan.
-          </p>
-          <div className="subirSlideOverActions">
-            <button type="button" className="subirGhostBtn" onClick={onClose}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="primaryButton"
-              onClick={confirm}
-              disabled={!file}
-            >
-              <UploadCloud size={16} /> Confirmar reemplazo
-            </button>
-          </div>
+        </div>
+        <div className="expSlideOver-footer">
+          <button type="button" className="expBtn expBtn-ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="expBtn expBtn-primary"
+            onClick={confirm}
+            disabled={!file}
+          >
+            <UploadCloud size={16} /> Confirmar reemplazo
+          </button>
         </div>
       </aside>
     </div>
