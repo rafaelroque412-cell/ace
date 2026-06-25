@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { type ExpedienteArchivo } from "@/lib/expedientes-archivo";
 import { getOpenAIClient, legalAnswerModel } from "@/lib/openai-server";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,16 +23,21 @@ type ExpedienteResumen = Pick<
   "id" | "title" | "anio" | "status" | "ubicacion" | "nro_archivador"
 > & { matches: string };
 
-// Interpreta una consulta en lenguaje natural del usuario y devuelve un
-// subconjunto filtrado de los expedientes del archivo. La IA decide cuáles
-// campos matchear (título, ubicación, materia, año) basándose en la
-// intención del usuario.
 export async function POST(request: Request) {
   try {
     const auth = await requireUser();
     if ("error" in auth) {
       return auth.error;
     }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "ai-search"),
+      RATE_LIMITS.aiSearch,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
+    }
+
     getSupabaseServerConfig();
 
     const payload = schema.safeParse(await request.json());

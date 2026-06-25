@@ -10,6 +10,7 @@ import {
   supabaseRest,
   writeAuditLog,
 } from "@/lib/supabase-server";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -66,6 +67,15 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     if ("error" in auth) {
       return auth.error;
     }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(_request, auth.user.id, "reindex"),
+      RATE_LIMITS.reindex,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
+    }
+
     getSupabaseServerConfig();
     const { id } = await context.params;
 

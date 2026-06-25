@@ -17,6 +17,12 @@ import {
   writeAuditLog,
 } from "@/lib/supabase-server";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import {
+  checkRateLimit,
+  getRateLimitKey,
+  RATE_LIMITS,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,13 +60,24 @@ export async function GET(request: Request) {
       return auth.error;
     }
 
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "list"),
+      RATE_LIMITS.search,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
+    }
+
     getSupabaseServerConfig();
 
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
     const anio = url.searchParams.get("anio");
+    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
+    const offset = (page - 1) * limit;
 
-    let query = `expedientes_archivo?select=${SELECT}&order=created_at.desc&limit=100`;
+    let query = `expedientes_archivo?select=${SELECT}&order=created_at.desc&limit=${limit}&offset=${offset}`;
     if (status) {
       query += `&status=eq.${encodeURIComponent(status)}`;
     }
@@ -69,7 +86,18 @@ export async function GET(request: Request) {
     }
 
     const expedientes = await supabaseRest<ExpedienteArchivo[]>(query);
-    return NextResponse.json({ expedientes });
+
+    // Contar total para paginación
+    let countQuery = `expedientes_archivo?select=id`;
+    if (status) countQuery += `&status=eq.${encodeURIComponent(status)}`;
+    if (anio) countQuery += `&anio=eq.${encodeURIComponent(anio)}`;
+    const allIds = await supabaseRest<Array<{ id: string }>>(countQuery);
+    const total = allIds.length;
+
+    return NextResponse.json({
+      expedientes,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     return NextResponse.json(
       {
@@ -87,6 +115,14 @@ export async function POST(request: Request) {
     const auth = await requireEditor();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "upload"),
+      RATE_LIMITS.upload,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     const formData = await request.formData();

@@ -206,10 +206,31 @@ export async function bulkMarkForDisposal(ids: string[]): Promise<{ updated: num
   return res.json();
 }
 
-/** Carga la lista de expedientes */
-export async function loadExpedientes(): Promise<unknown[]> {
-  const res = await fetch("/api/expedientes-archivo", { cache: "no-store" });
+/** Carga la lista de expedientes con paginación opcional */
+export async function loadExpedientes(
+  options: { page?: number; limit?: number; status?: string; anio?: number } = {},
+): Promise<{
+  expedientes: unknown[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}> {
+  const params = new URLSearchParams();
+  if (options.page) params.set("page", String(options.page));
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.status) params.set("status", options.status);
+  if (options.anio) params.set("anio", String(options.anio));
+  const qs = params.toString();
+  const url = `/api/expedientes-archivo${qs ? `?${qs}` : ""}`;
+
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw await parseError(res, "No se pudo listar los expedientes");
   const data = await res.json();
-  return data.expedientes ?? [];
+  return {
+    expedientes: data.expedientes ?? [],
+    pagination: data.pagination ?? {
+      page: 1,
+      limit: data.expedientes?.length ?? 0,
+      total: data.expedientes?.length ?? 0,
+      totalPages: 1,
+    },
+  };
 }

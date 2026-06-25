@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { expedienteSearchSchema } from "@/lib/expedientes-archivo";
 import { searchExpedientes } from "@/lib/expedientes-archivo-search";
 import { writeAuditLog } from "@/lib/supabase-server";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +13,14 @@ export async function POST(request: Request) {
     const auth = await requireUser();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "search"),
+      RATE_LIMITS.search,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     const payload = expedienteSearchSchema.safeParse(await request.json());

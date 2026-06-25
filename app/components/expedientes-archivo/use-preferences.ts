@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
+type SortBy = "created_at" | "title" | "anio" | "file_size" | "status";
+type SortDir = "asc" | "desc";
 
 export function useLocalStorage<T>(
   key: string,
@@ -24,13 +26,22 @@ export function useLocalStorage<T>(
     }
   });
 
+  // Ref para evitar writes redundantes
+  const lastWrittenRef = useRef<string | null>(null);
+
   const setStoredValue: Setter<T> = useCallback(
     (next) => {
       setValue((prev) => {
         const resolved =
           typeof next === "function" ? (next as (p: T) => T)(prev) : next;
         try {
-          window.localStorage.setItem(key, JSON.stringify(resolved));
+          const serialized = JSON.stringify(resolved);
+          // Solo escribir si realmente cambió
+          if (lastWrittenRef.current === serialized) {
+            return resolved;
+          }
+          lastWrittenRef.current = serialized;
+          window.localStorage.setItem(key, serialized);
         } catch {
           // Ignorar errores de localStorage
         }
@@ -43,6 +54,7 @@ export function useLocalStorage<T>(
   const remove = useCallback(() => {
     try {
       window.localStorage.removeItem(key);
+      lastWrittenRef.current = null;
       setValue(initialValue);
     } catch {
       // Ignorar
@@ -86,15 +98,15 @@ export function useExpedientesPreferences() {
       v === "todos" || v === "pendientes" || v === "indexados" || v === "error",
   );
 
-  const [sortBy, setSortBy, resetSortBy] = useLocalStorage<string>(
+  const [sortByRaw, setSortByRaw, resetSortBy] = useLocalStorage<SortBy>(
     "exp:sortBy",
     "created_at",
   );
 
-  const [sortDir, setSortDir, resetSortDir] = useLocalStorage<"asc" | "desc">(
+  const [sortDir, setSortDir, resetSortDir] = useLocalStorage<SortDir>(
     "exp:sortDir",
     "desc",
-    (v): v is "asc" | "desc" => v === "asc" || v === "desc",
+    (v): v is SortDir => v === "asc" || v === "desc",
   );
 
   const [filters, setFilters, resetFilters] = useLocalStorage<{
@@ -112,6 +124,18 @@ export function useExpedientesPreferences() {
     "exp:lastTab",
     "buscar",
     (v): v is "buscar" | "subir" => v === "buscar" || v === "subir",
+  );
+
+  // Setters tipados estables (no cambian entre renders)
+  const setSortBy = useCallback(
+    (value: SortBy | ((prev: SortBy) => SortBy)) => {
+      if (typeof value === "function") {
+        setSortByRaw((prev) => (value as (p: SortBy) => SortBy)(prev));
+      } else {
+        setSortByRaw(value);
+      }
+    },
+    [setSortByRaw],
   );
 
   const resetAll = useCallback(() => {
@@ -137,21 +161,8 @@ export function useExpedientesPreferences() {
     setViewMode,
     statusFilter,
     setStatusFilter,
-    sortBy: sortBy as
-      | "created_at"
-      | "title"
-      | "anio"
-      | "file_size"
-      | "status",
-    setSortBy: setSortBy as (
-      value:
-        | "created_at"
-        | "title"
-        | "anio"
-        | "file_size"
-        | "status"
-        | ((prev: string) => string),
-    ) => void,
+    sortBy: sortByRaw,
+    setSortBy,
     sortDir,
     setSortDir,
     filters,

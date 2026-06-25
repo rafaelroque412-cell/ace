@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { expedienteChatSchema } from "@/lib/expedientes-archivo";
 import { answerExpedienteQuestion } from "@/lib/expedientes-archivo-search";
 import { writeAuditLog } from "@/lib/supabase-server";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +14,14 @@ export async function POST(request: Request) {
     const auth = await requireUser();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "chat"),
+      RATE_LIMITS.chat,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     const payload = expedienteChatSchema.safeParse(await request.json());

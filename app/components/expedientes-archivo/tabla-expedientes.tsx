@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { RefreshCw, Download, Replace, Trash2, FileText, MapPin } from "lucide-react";
 import type { TablaExpedientesProps } from "./types";
 
@@ -11,7 +12,7 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
   );
 }
 
-export function TablaExpedientes({
+export const TablaExpedientes = memo(function TablaExpedientes({
   exps,
   canManage,
   selectedIds,
@@ -181,4 +182,4 @@ export function TablaExpedientes({
       ) : null}
     </div>
   );
-}
+});

@@ -3216,3 +3216,360 @@
 .expFilterChip button:hover {
   opacity: 1;
 }
+
+/* ==========================================================================
+   Mejoras finales — Paginación, Density, Dark mode, Hover refinado
+   ========================================================================== */
+
+/* --- Paginación --- */
+.expPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-top: 16px;
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+  flex-wrap: wrap;
+}
+
+.expPaginationInfo {
+  font-size: 12px;
+  color: var(--exp-muted);
+}
+
+.expPaginationInfo strong {
+  color: var(--exp-ink);
+  font-weight: 700;
+}
+
+.expPaginationControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.expPaginationBtn {
+  min-width: 32px;
+  height: 32px;
+  border: 1px solid var(--exp-line);
+  background: var(--exp-panel);
+  color: var(--exp-ink-soft);
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  transition: all 120ms ease;
+}
+
+.expPaginationBtn:hover:not(:disabled) {
+  background: var(--exp-line-soft);
+  border-color: var(--exp-brand);
+  color: var(--exp-brand);
+}
+
+.expPaginationBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.expPaginationBtnActive {
+  background: var(--exp-brand);
+  border-color: var(--exp-brand);
+  color: #fff;
+}
+
+.expPaginationBtnActive:hover:not(:disabled) {
+  background: var(--exp-brand-dark);
+  color: #fff;
+}
+
+.expPaginationDots {
+  min-width: 24px;
+  text-align: center;
+  color: var(--exp-muted);
+  font-weight: 600;
+}
+
+/* --- Density modes --- */
+[data-density="compact"] .expListItem {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+[data-density="compact"] .expListItemIcon {
+  width: 32px;
+  height: 32px;
+}
+
+[data-density="compact"] .expListItemTitle {
+  font-size: 13px;
+}
+
+[data-density="compact"] .expListItemMeta {
+  font-size: 11px;
+  gap: 6px;
+}
+
+[data-density="compact"] .expCard {
+  padding: 12px;
+  gap: 6px;
+}
+
+[data-density="compact"] .expStatCard {
+  padding: 10px 12px;
+  gap: 3px;
+}
+
+[data-density="compact"] .expStatValue {
+  font-size: 22px;
+}
+
+[data-density="compact"] .expField-input,
+[data-density="compact"] .expField-select {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+/* --- Dark mode --- */
+[data-theme="dark"] {
+  --exp-bg: #0a0e0d;
+  --exp-panel: #1a1f1e;
+  --exp-line: #2a3533;
+  --exp-line-soft: #1f2524;
+  --exp-soft: #1f2a28;
+  --exp-surface: #15191a;
+  --exp-ink: #e2e8e7;
+  --exp-ink-soft: #cbd5d3;
+  --exp-muted: #8a9a96;
+  --exp-brand: #14b8a6;
+  --exp-brand-dark: #0f9689;
+  --exp-brand-soft: #134e4a;
+  --exp-success: #22c55e;
+  --exp-success-soft: #14532d;
+  --exp-warning: #f59e0b;
+  --exp-warning-soft: #78350f;
+  --exp-danger: #ef4444;
+  --exp-danger-soft: #7f1d1d;
+  --exp-info: #3b82f6;
+  --exp-info-soft: #1e3a8a;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] body {
+  background: var(--exp-bg);
+  color: var(--exp-ink);
+}
+
+[data-theme="dark"] .expPanel {
+  background: var(--exp-panel);
+  border-color: var(--exp-line);
+}
+
+[data-theme="dark"] .expPanelHeader {
+  background: linear-gradient(180deg, var(--exp-brand-soft) 0%, transparent 100%);
+}
+
+[data-theme="dark"] .expFilePicker,
+[data-theme="dark"] .expReplaceDropzone,
+[data-theme="dark"] .expAdvancedFilters,
+[data-theme="dark"] .expListHeader,
+[data-theme="dark"] .expReplaceCurrent,
+[data-theme="dark"] .expEmpty,
+[data-theme="dark"] .expTabBar,
+[data-theme="dark"] .expTableWrap,
+[data-theme="dark"] .expCard,
+[data-theme="dark"] .expListItem,
+[data-theme="dark"] .expField-input,
+[data-theme="dark"] .expField-select,
+[data-theme="dark"] .expField-textarea {
+  background: var(--exp-panel);
+  border-color: var(--exp-line);
+}
+
+[data-theme="dark"] .expField-input:focus,
+[data-theme="dark"] .expField-select:focus,
+[data-theme="dark"] .expField-textarea:focus {
+  background: var(--exp-panel);
+}
+
+[data-theme="dark"] .expInput:hover:not(:focus):not(:disabled) {
+  border-color: var(--exp-muted);
+}
+
+[data-theme="dark"] .expTab.active {
+  color: var(--exp-brand);
+  background: var(--exp-brand-soft);
+}
+
+[data-theme="dark"] .expSearchBar {
+  background: var(--exp-line-soft);
+  border-color: var(--exp-line);
+}
+
+[data-theme="dark"] .expSearchBar:focus-within {
+  background: var(--exp-panel);
+}
+
+[data-theme="dark"] .expMessage-info {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .expMessage-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+[data-theme="dark"] .expMessage-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .expMessage-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .expAnswerCard {
+  background: linear-gradient(135deg, var(--exp-brand-soft) 0%, var(--exp-panel) 100%);
+  border-color: var(--exp-brand);
+}
+
+[data-theme="dark"] .expChat-body {
+  background: var(--exp-bg);
+}
+
+[data-theme="dark"] .expStatus-indexed {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+[data-theme="dark"] .expStatus-uploaded {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .expStatus-processing {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .expStatus-error {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+/* --- Hover refinado en lista con slide --- */
+.expListItem {
+  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.expListItem:hover {
+  background: var(--exp-line-soft);
+  border-color: var(--exp-brand);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+}
+
+.expListItem:focus-visible {
+  outline: 2px solid var(--exp-brand);
+  outline-offset: 2px;
+}
+
+/* --- Theme y density toggles en header --- */
+.expSettingsGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.expSettingsBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--exp-muted);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.expSettingsBtn:hover {
+  background: var(--exp-line-soft);
+  color: var(--exp-ink);
+}
+
+.expSettingsBtn[aria-pressed="true"] {
+  background: var(--exp-brand-soft);
+  color: var(--exp-brand);
+  border-color: var(--exp-brand);
+}
+
+/* --- Trend indicator en stats --- */
+.expStatTrend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.expStatTrend-up {
+  color: var(--exp-success);
+}
+
+.expStatTrend-down {
+  color: var(--exp-danger);
+}
+
+.expStatTrend-neutral {
+  color: var(--exp-muted);
+}
+
+/* --- Suggested questions en modo preguntar --- */
+.expSuggestedQuestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.expSuggestedQuestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--exp-line-soft);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+  font-size: 13px;
+  color: var(--exp-ink-soft);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all 120ms ease;
+}
+
+.expSuggestedQuestion:hover {
+  background: var(--exp-brand-soft);
+  border-color: var(--exp-brand);
+  color: var(--exp-brand);
+}
+
+.expSuggestedQuestion svg {
+  flex-shrink: 0;
+  color: var(--exp-brand);
+}

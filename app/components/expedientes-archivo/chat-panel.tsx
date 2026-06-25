@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect } from "react";
 import { Bot, X, Sparkles, Send } from "lucide-react";
 import type { ChatPanelProps } from "./types";
 
-export function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenExpediente }: ChatPanelProps) {
+export const ChatPanel = memo(function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenExpediente }: ChatPanelProps) {
   const [draft, setDraft] = useState(query);
   const lastSyncedQueryRef = useRef(query);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -174,4 +174,4 @@ export function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenEx
       </aside>
     </div>
   );
-}
+});

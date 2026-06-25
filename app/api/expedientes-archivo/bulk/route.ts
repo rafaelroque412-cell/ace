@@ -6,6 +6,7 @@ import {
   normalizeContenedorTipo,
 } from "@/lib/expedientes-archivo";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,17 +23,21 @@ function asString(body: Record<string, unknown>, key: string, max = 500): string
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
 }
 
-// Aplica una actualización masiva a N expedientes. Usado para:
-//   - Cambiar ubicación física (estante/piso/local/archivador) en lote
-//   - Asignar oficina en lote
-//   - Marcar para baja
-// Solo actualiza los campos provistos; el resto se preserva.
 export async function POST(request: Request) {
   try {
     const auth = await requireEditor();
     if ("error" in auth) {
       return auth.error;
     }
+
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "bulk"),
+      RATE_LIMITS.bulk,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
+    }
+
     getSupabaseServerConfig();
 
     const body = (await request.json()) as BulkBody;

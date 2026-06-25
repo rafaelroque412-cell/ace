@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
   Check,
@@ -19,21 +19,30 @@ import {
   Lock,
   MapPin,
   MessageCircle,
+  Moon,
   Plus,
   RefreshCw,
   Search,
   Sparkles,
+  Sun,
   Table2,
   Trash2,
   UploadCloud,
   X,
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   FileUp,
   Undo2,
   History,
   BookOpen,
   Compass,
   PlusCircle,
+  LayoutGrid,
+  Maximize2,
+  Minimize2,
+  ArrowRight,
+  Lightbulb,
 } from "lucide-react";
 import {
   ARCHIVO_AMBIENTES,
@@ -69,6 +78,10 @@ import {
 import { SkeletonList, SkeletonStats } from "./expedientes-archivo/skeleton";
 import { UndoToasts, useUndoStack } from "./expedientes-archivo/undo";
 import { useExpedientesPreferences } from "./expedientes-archivo/use-preferences";
+import { useDebouncedValue } from "@/app/hooks/use-debounced-value";
+import { useTheme } from "@/app/hooks/use-theme";
+import { useDensity } from "@/app/hooks/use-density";
+import { Pagination, type PaginationInfo } from "./expedientes-archivo/pagination";
 import {
   chatWithExpedientes,
   loadExpedientes as loadExpedientesAction,
@@ -208,8 +221,17 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const prefs = useExpedientesPreferences();
   const { stack: undoStack, push: pushUndo, execute: executeUndo, dismiss: dismissUndo } =
     useUndoStack();
+  const { resolved: resolvedTheme, setTheme, toggle: toggleTheme } = useTheme();
+  const { density, toggle: toggleDensity } = useDensity();
 
   const [tab, setTab] = useState<"buscar" | "subir">(prefs.tab);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+  });
 
   useEffect(() => {
     prefs.setTab(tab);
@@ -236,6 +258,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [sortDir, setSortDir] = useState<SortDir>(prefs.sortDir);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
+  const debouncedSearchInput = useDebouncedValue(searchInput, 250);
 
   useEffect(() => {
     prefs.setViewMode(viewMode);
@@ -311,10 +334,12 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     });
   }
 
-  const loadExpedientes = useCallback(async () => {
+  const loadExpedientes = useCallback(async (page = 1) => {
     try {
-      const data = await loadExpedientesAction();
-      setExpedientes((data as ExpedienteItem[]) ?? []);
+      const result = await loadExpedientesAction({ page, limit: 50 });
+      setExpedientes((result.expedientes as ExpedienteItem[]) ?? []);
+      setPagination(result.pagination);
+      setCurrentPage(page);
     } catch {
       // Silenciar
     } finally {
@@ -344,6 +369,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }, 4000);
     return () => clearInterval(timer);
   }, [hasPending, loadExpedientes]);
+
+  // Refs estables para evitar memory leak en el keyboard listener
+  const tourOpenRef = useRef(tour.open);
+  const tourDismissRef = useRef(tour.dismiss);
+  useEffect(() => {
+    tourOpenRef.current = tour.open;
+    tourDismissRef.current = tour.dismiss;
+  });
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -401,12 +434,12 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         else if (replaceExp) setReplaceExp(null);
         else if (helpOpen) setHelpOpen(false);
         else if (confirm) closeConfirm();
-        else if (tour.open) tour.dismiss();
+        else if (tourOpenRef.current) tourDismissRef.current();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tab, canManage, cmdOpen, chatOpen, openExp, bulkOpen, replaceExp, helpOpen, confirm, tour]);
+  }, [tab, canManage, cmdOpen, chatOpen, openExp, bulkOpen, replaceExp, helpOpen, confirm]);
 
   function setField<K extends keyof SubirForm>(key: K, value: SubirForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -567,11 +600,15 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   }
 
   async function deleteExpediente(exp: ExpedienteItem) {
-    const confirmed = window.confirm(
-      `¿Eliminar el expediente "${exp.title}"?\n\nEsta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.`,
-    );
-    if (!confirmed) return;
-    await performDelete(exp);
+    showConfirm({
+      title: `¿Eliminar "${exp.title}"?`,
+      message:
+        "Esta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.",
+      variant: "danger",
+      onConfirm: () => {
+        void performDelete(exp);
+      },
+    });
   }
 
   async function performDelete(exp: ExpedienteItem) {
@@ -673,8 +710,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     if (advancedFilters.tipoDocumento) {
       list = list.filter((e) => e.tipo_documento === advancedFilters.tipoDocumento);
     }
-    if (searchInput.trim()) {
-      const q = searchInput.toLowerCase();
+    if (debouncedSearchInput.trim()) {
+      const q = debouncedSearchInput.toLowerCase();
       list = list.filter(
         (e) =>
           e.title.toLowerCase().includes(q) ||
@@ -693,7 +730,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       return 0;
     });
     return list;
-  }, [expedientes, statusFilter, advancedFilters, searchInput, sortBy, sortDir]);
+  }, [expedientes, statusFilter, advancedFilters, debouncedSearchInput, sortBy, sortDir]);
 
   const statusCounts = useMemo(() => {
     return {
@@ -831,7 +868,29 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               <Compass size={12} />
               Atajo: Ctrl+K para buscar · Ctrl+I para chat · ? para ayuda
             </span>
-            <TourTrigger onClick={tour.restart} />
+            <div className="expSettingsGroup" role="group" aria-label="Preferencias de visualización">
+              <button
+                type="button"
+                className="expSettingsBtn"
+                onClick={toggleDensity}
+                aria-pressed={density === "compact"}
+                aria-label={density === "compact" ? "Modo compacto activado" : "Modo cómodo"}
+                title={density === "compact" ? "Cambiar a modo cómodo" : "Cambiar a modo compacto"}
+              >
+                {density === "compact" ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+              </button>
+              <button
+                type="button"
+                className="expSettingsBtn"
+                onClick={toggleTheme}
+                aria-pressed={resolvedTheme === "dark"}
+                aria-label={resolvedTheme === "dark" ? "Modo oscuro activado" : "Modo claro"}
+                title={resolvedTheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              >
+                {resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+              </button>
+              <TourTrigger onClick={tour.restart} />
+            </div>
           </div>
         </div>
         <div className="expPanelHeaderIcon" aria-hidden="true">
@@ -936,6 +995,40 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               {searching ? "Buscando..." : "Buscar"}
             </button>
           </form>
+
+          {mode === "preguntar" && !query && !answer ? (
+            <div className="expSuggestedQuestions" aria-label="Ejemplos de preguntas">
+              <span
+                className="expHelpText"
+                style={{ marginTop: 0, marginBottom: 4 }}
+              >
+                <Lightbulb size={12} /> Prueba con una de estas preguntas:
+              </span>
+              {[
+                "¿Cuántos expedientes de contratación hay en 2024?",
+                "¿Dónde está el expediente de la licencia 2024-0345?",
+                "Resúmeme los expedientes de la subgerencia de tránsito",
+              ].map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  className="expSuggestedQuestion"
+                  onClick={() => {
+                    setQuery(q);
+                    setTimeout(() => {
+                      const form = document.querySelector(
+                        "form.expSearchBar",
+                      ) as HTMLFormElement | null;
+                      form?.requestSubmit();
+                    }, 50);
+                  }}
+                >
+                  <ArrowRight size={12} />
+                  <span>{q}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {searchMessage ? (
             <div className="expMessage expMessage-info" role="status">
@@ -1501,6 +1594,13 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       </button>
                     ) : null}
                   </div>
+
+                  {pagination.totalPages > 1 ? (
+                    <Pagination
+                      pagination={pagination}
+                      onPageChange={(page) => void loadExpedientes(page)}
+                    />
+                  ) : null}
                 </>
               )}
             </>

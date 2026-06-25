@@ -1,9 +1,15 @@
 "use client";
 
+import { memo } from "react";
 import { FileText, MapPin } from "lucide-react";
 import type { TarjetasExpedientesProps } from "./types";
 
-export function TarjetasExpedientes({ exps, onOpen, formatBytes, statusLabel }: TarjetasExpedientesProps) {
+export const TarjetasExpedientes = memo(function TarjetasExpedientes({
+  exps,
+  onOpen,
+  formatBytes,
+  statusLabel,
+}: TarjetasExpedientesProps) {
   return (
     <div className="expCardsGrid">
       {exps.map((exp) => (
@@ -44,4 +50,4 @@ export function TarjetasExpedientes({ exps, onOpen, formatBytes, statusLabel }: 
       ))}
     </div>
   );
-}
+});

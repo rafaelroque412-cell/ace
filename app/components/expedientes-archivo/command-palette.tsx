@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { memo, useState, useEffect, useRef, useMemo } from "react";
 import {
   Search,
   X,
@@ -32,7 +32,7 @@ type Props = {
   onOpenChat: () => void;
 };
 
-export function CommandPalette({
+export const CommandPalette = memo(function CommandPalette({
   open,
   onClose,
   expedientes,
@@ -277,4 +277,4 @@ export function CommandPalette({
       </div>
     </div>
   );
-}
+});
