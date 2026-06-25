@@ -358,6 +358,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [extracting, setExtracting] = useState(false);
   const [extractedData, setExtractedData] = useState<PdfInventory | null>(null);
+  const [recentUploads, setRecentUploads] = useState<ExpedienteItem[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
@@ -419,6 +421,28 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       setLoadingList(false);
     }
   }, []);
+
+  // Carga los expedientes subidos recientemente (los ultimos 10) para mostrarlos
+  // en la pestana Subir. Permite al usuario ver y gestionar lo que acaba de subir
+  // sin tener que ir a la pestana Buscar.
+  const refreshRecentUploads = useCallback(async () => {
+    setLoadingRecent(true);
+    try {
+      const result = await loadExpedientesAction({ page: 1, limit: 10 });
+      setRecentUploads((result.expedientes as ExpedienteItem[]) ?? []);
+    } catch {
+      // Silenciar
+    } finally {
+      setLoadingRecent(false);
+    }
+  }, []);
+
+  // Carga inicial de recientes cuando el usuario abre la pestana Subir
+  useEffect(() => {
+    if (tab === "subir" && canManage) {
+      void refreshRecentUploads();
+    }
+  }, [tab, canManage, refreshRecentUploads]);
 
   const hasPending = useMemo(
     () => expedientes.some((exp) => exp.status === "uploaded" || exp.status === "processing"),
@@ -738,7 +762,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         `Expediente "${uploadedTitle}" subido. Se está procesando con OCR e indexando.`,
         "success",
       );
-      await loadExpedientes();
+      await Promise.all([loadExpedientes(), refreshRecentUploads()]);
     } catch (err) {
       showToast("No se pudo conectar con el servidor.", "error");
     } finally {
@@ -756,7 +780,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         return;
       }
       showToast("Reindexado iniciado en segundo plano.", "info");
-      await loadExpedientes();
+      await Promise.all([loadExpedientes(), refreshRecentUploads()]);
     } catch {
       showToast("No se pudo conectar con el servidor.", "error");
     } finally {
@@ -799,7 +823,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         next.delete(exp.id);
         return next;
       });
-      await loadExpedientes();
+      await Promise.all([loadExpedientes(), refreshRecentUploads()]);
     } catch {
       showToast("No se pudo conectar con el servidor.", "error");
     } finally {
@@ -2611,6 +2635,158 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
             ) : null}
           </form>
+
+          {/* Lista de expedientes subidos (recientes) */}
+          {canManage ? (
+            <div className="expRecentUploads" aria-label="Expedientes subidos recientemente">
+              <div className="expFormSectionHeader" style={{ marginTop: 32 }}>
+                <h3 className="expFormSectionTitle">
+                  <FileUp size={16} /> Expedientes subidos recientemente
+                  <span className="expFormSectionHint">
+                    {recentUploads.length} de los últimos subidos
+                  </span>
+                </h3>
+                {recentUploads.length > 0 ? (
+                  <button
+                    type="button"
+                    className="expBtn expBtn-ghost expBtn-small"
+                    onClick={refreshRecentUploads}
+                    disabled={loadingRecent}
+                    aria-label="Actualizar lista de recientes"
+                  >
+                    {loadingRecent ? (
+                      <Loader2 size={12} className="expSpin" />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    Actualizar
+                  </button>
+                ) : null}
+              </div>
+
+              {loadingRecent && recentUploads.length === 0 ? (
+                <SkeletonList count={3} />
+              ) : recentUploads.length === 0 ? (
+                <div className="expRecentEmpty">
+                  <FileText size={20} />
+                  <p>
+                    Aún no has subido expedientes. Completa el wizard de arriba
+                    para empezar.
+                  </p>
+                </div>
+              ) : (
+                <div className="expRecentList">
+                  {recentUploads.map((exp) => (
+                    <article
+                      key={exp.id}
+                      className={
+                        "expRecentItem" +
+                        (exp.status === "processing" || exp.status === "uploaded"
+                          ? " expRecentItemPending"
+                          : "") +
+                        (exp.status === "error" ? " expRecentItemError" : "")
+                      }
+                    >
+                      <div className="expRecentItemIcon">
+                        <FileText size={16} />
+                      </div>
+                      <div className="expRecentItemBody">
+                        <div className="expRecentItemHeader">
+                          <strong>{exp.title}</strong>
+                          <span
+                            className={`expStatus expStatus-${exp.status}`}
+                            data-status={exp.status}
+                          >
+                            {statusLabel(exp.status)}
+                          </span>
+                        </div>
+                        <div className="expRecentItemMeta">
+                          {exp.serie_documento ? (
+                            <span>N° {exp.serie_documento}</span>
+                          ) : (
+                            <span>Sin número</span>
+                          )}
+                          {exp.anio ? <span>· {exp.anio}</span> : null}
+                          {exp.oficina ? <span>· {exp.oficina}</span> : null}
+                          <span>· {formatBytes(exp.file_size)}</span>
+                          <span>· {new Date(exp.created_at).toLocaleDateString("es-PE")}</span>
+                        </div>
+                        {exp.metadata?.chunkCount ? (
+                          <div className="expRecentItemMeta">
+                            <span>
+                              {exp.metadata.pageCount ?? 0} páginas · {exp.metadata.chunkCount} fragmentos
+                            </span>
+                          </div>
+                        ) : null}
+                        {exp.error_message ? (
+                          <div className="expRecentItemError">
+                            {exp.error_message}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div
+                        className="expRecentItemActions"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setOpenExp(exp)}
+                          className="expIconButton"
+                          aria-label="Ver detalle"
+                          title="Ver detalle"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void reindexExpediente(exp.id)}
+                          disabled={reindexingId === exp.id}
+                          className="expIconButton"
+                          aria-label="Reindexar"
+                          title="Reindexar"
+                        >
+                          <RefreshCw
+                            size={14}
+                            className={reindexingId === exp.id ? "expSpin" : ""}
+                          />
+                        </button>
+                        <a
+                          href={`/api/expedientes-archivo/${exp.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="expIconButton"
+                          aria-label="Descargar PDF"
+                          title="Descargar PDF"
+                        >
+                          <Download size={14} />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void deleteExpediente(exp)}
+                          disabled={deletingId === exp.id}
+                          className="expIconButton danger"
+                          aria-label="Eliminar"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                  {recentUploads.length >= 10 ? (
+                    <button
+                      type="button"
+                      className="expBtn expBtn-secondary expRecentViewAll"
+                      onClick={() => setTab("buscar")}
+                    >
+                      Ver todos los expedientes
+                      <ArrowRight size={14} />
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : tab === "subir" && !canManage ? (
         <div className="expTabContent">

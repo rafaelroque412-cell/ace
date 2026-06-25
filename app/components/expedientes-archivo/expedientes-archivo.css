@@ -592,6 +592,168 @@
   border-top: 1px solid rgba(15, 118, 110, 0.15);
 }
 
+/* --- Recent uploads list (tab Subir) --- */
+.expRecentUploads {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 2px solid var(--exp-line);
+}
+
+.expRecentEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  background: var(--exp-line-soft);
+  border: 1px dashed var(--exp-line);
+  border-radius: var(--exp-radius);
+  color: var(--exp-muted);
+  font-size: 13px;
+}
+
+.expRecentEmpty p {
+  margin: 0;
+  max-width: 320px;
+}
+
+.expRecentEmpty svg {
+  color: var(--exp-brand);
+  opacity: 0.6;
+}
+
+.expRecentList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expRecentItem {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.expRecentItem:hover {
+  border-color: var(--exp-brand);
+  background: var(--exp-line-soft);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+}
+
+.expRecentItemPending {
+  border-left: 3px solid var(--exp-warning);
+  background: linear-gradient(90deg, var(--exp-warning-soft) 0%, var(--exp-panel) 30%);
+}
+
+.expRecentItemError {
+  border-left: 3px solid var(--exp-danger);
+  background: linear-gradient(90deg, var(--exp-danger-soft) 0%, var(--exp-panel) 30%);
+}
+
+.expRecentItemIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--exp-radius);
+  background: var(--exp-brand-soft);
+  color: var(--exp-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.expRecentItemBody {
+  min-width: 0;
+}
+
+.expRecentItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.expRecentItemHeader strong {
+  font-size: 14px;
+  color: var(--exp-ink);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
+.expRecentItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--exp-muted);
+  margin: 0;
+}
+
+.expRecentItemMeta span {
+  white-space: nowrap;
+}
+
+.expRecentItemError {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--exp-danger);
+  background: var(--exp-danger-soft);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.expRecentItemActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.expRecentViewAll {
+  margin-top: 12px;
+  align-self: center;
+}
+
+[data-theme="dark"] .expRecentItem {
+  background: var(--exp-panel);
+  border-color: var(--exp-line);
+}
+
+[data-theme="dark"] .expRecentItem:hover {
+  background: var(--exp-line-soft);
+}
+
+[data-theme="dark"] .expRecentItemPending {
+  background: linear-gradient(90deg, var(--exp-warning-soft) 0%, var(--exp-panel) 30%);
+}
+
+[data-theme="dark"] .expRecentItemError {
+  background: linear-gradient(90deg, var(--exp-danger-soft) 0%, var(--exp-panel) 30%);
+}
+
+@media (max-width: 768px) {
+  .expRecentItem {
+    grid-template-columns: 32px 1fr;
+  }
+  .expRecentItemActions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+
 /* --- Editable extracted field --- */
 .expExtractedBadge {
   display: inline-block;
