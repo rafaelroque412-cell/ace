@@ -106,8 +106,8 @@
   align-items: center;
   gap: 4px;
   padding: 0 18px;
-  border-bottom: 1px solid var(--exp-line);
-  background: var(--exp-panel);
+  border: 0;
+  background: transparent;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -130,8 +130,7 @@
   font-size: 14px;
   padding: 14px 18px;
   cursor: pointer;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
+  border-radius: 0;
   transition: all var(--exp-transition);
   white-space: nowrap;
   position: relative;
@@ -139,24 +138,22 @@
 
 .expTab:hover {
   color: var(--exp-ink);
-  background: var(--exp-line-soft);
+  background: transparent;
 }
 
 .expTab.active {
   color: var(--exp-brand);
-  border-bottom-color: var(--exp-brand);
 }
 
 .expTab.active::after {
   content: "";
   position: absolute;
   bottom: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 24px;
-  height: 3px;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: var(--exp-brand);
-  border-radius: 3px 3px 0 0;
+  border-radius: 0;
 }
 
 .expTabBadge {
