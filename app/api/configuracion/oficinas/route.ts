@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+import { formatDocumentNumber } from "@/lib/document-number";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,16 +35,8 @@ function int(value: unknown, min: number, max: number, fallback: number): number
 }
 
 function fmt(tipo: string, siguiente: number, ancho: number, sufijo: string | null): string {
-  const year = new Date().getFullYear();
-  const num = String(siguiente).padStart(ancho, "0");
-  const parts = [num, String(year)];
-  if (sufijo) {
-    // El sufijo puede traer varios segmentos separados por "/" o "-"
-    // ej: "MDCH/GM" -> se concatenan con guion en el preview
-    const segs = sufijo.split(/[\/\-]/).map((s) => s.trim()).filter(Boolean);
-    parts.push(...segs);
-  }
-  return `${tipo} N° ${parts.join("-")}`;
+  // Formato oficial peruano compartido: lib/document-number.ts
+  return formatDocumentNumber({ tipo, siguiente, ancho, sufijo });
 }
 
 async function listOficinas() {

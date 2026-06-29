@@ -2,6 +2,7 @@
 
 import { Building2, Check, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { formatDocumentNumber } from "@/lib/document-number";
 
 export type Counter = { tipo: string; siguiente: number; preview: string };
 export type Oficina = {
@@ -20,27 +21,23 @@ export type Oficina = {
 
 const API = "/api/configuracion/oficinas";
 
-// Construye el preview de un correlativo. Formato:
-//   {TIPO} N° {nro}-{año}-{sufijo-segmentos}
-// Ej: OFICIO N° 001-2026-MDCH-GM
-// El sufijo puede traer varios segmentos separados por "/" o "-".
+// Construye el preview oficial peruano de un correlativo.
+// Formato: {TIPO} N° {NNN}-{AAAA}-{ENTIDAD}/{AREA}
+// Ver lib/document-number.ts para detalles.
 export function formatCounterPreview(
   tipo: string,
   siguiente: number,
   ancho: number,
   sufijo: string | null | undefined,
-  year: number = new Date().getFullYear(),
+  year?: number,
 ): string {
-  const num = String(siguiente).padStart(ancho, "0");
-  const parts = [num, String(year)];
-  if (sufijo) {
-    const segs = sufijo
-      .split(/[\/\-]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    parts.push(...segs);
-  }
-  return `${tipo} N° ${parts.join("-")}`;
+  return formatDocumentNumber({
+    siguiente,
+    ancho,
+    sufijo: sufijo ?? null,
+    tipo,
+    ...(year !== undefined ? { year } : {}),
+  });
 }
 
 export type LoadState = "idle" | "loading" | "ready" | "error";

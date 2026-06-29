@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getSupabaseServerConfig, supabaseRest } from "@/lib/supabase-server";
+import { formatDocumentNumber, TIPOS_DOCUMENTO, type TipoDocumento } from "@/lib/document-number";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const TIPOS = ["OFICIO", "INFORME", "CARTA", "MEMORANDUM"] as const;
-type Tipo = (typeof TIPOS)[number];
 
 type OficinaRow = {
   id: string;
@@ -20,22 +18,6 @@ type OficinaRow = {
   membrete_path: string | null;
 };
 type CounterRow = { oficina_id: string; tipo: string; siguiente: number };
-
-// Construye el preview de un correlativo con el formato nuevo:
-//   {TIPO} N° {nro}-{año}-{sufijo-segmentos}
-function buildPreview(tipo: string, siguiente: number, ancho: number, sufijo: string | null): string {
-  const year = new Date().getFullYear();
-  const num = String(siguiente).padStart(ancho, "0");
-  const parts: string[] = [num, String(year)];
-  if (sufijo) {
-    const segs = sufijo
-      .split(/[\/\-]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    parts.push(...segs);
-  }
-  return `${tipo} N° ${parts.join("-")}`;
-}
 
 // Normaliza texto para comparacion robusta de nombres de entidad.
 // Quita tildes, pasa a minusculas y colapsa espacios.
@@ -61,6 +43,10 @@ function officesMatch(oficina: OficinaRow, userEntity: string): boolean {
 //   - otros (dec/consulta/legal): solo las oficinas de SU entidad
 // Devuelve ademas `defaultOficinaId` para que el cliente pre-seleccione
 // la oficina del usuario sin que tenga que elegir manualmente.
+//
+// Formato del numero (lib/document-number.ts):
+//   {TIPO} N° {NNN}-{AAAA}-{ENTIDAD}/{AREA}
+//   OFICIO N° 001-2026-MDCH/GM
 export async function GET() {
   try {
     const auth = await requireUser();
@@ -100,12 +86,20 @@ export async function GET() {
         responsableCargo: o.responsable_cargo,
         tieneMembrete: Boolean(o.membrete_path),
         previews: Object.fromEntries(
-          TIPOS.map((tipo) => {
+          TIPOS_DOCUMENTO.map((tipo) => {
             const c = counters.find((x) => x.oficina_id === o.id && x.tipo === tipo);
             const siguiente = c?.siguiente ?? 1;
-            return [tipo, buildPreview(tipo, siguiente, o.ancho, o.sufijo)];
+            return [
+              tipo,
+              formatDocumentNumber({
+                tipo: tipo as TipoDocumento,
+                siguiente,
+                ancho: o.ancho,
+                sufijo: o.sufijo,
+              }),
+            ];
           }),
-        ) as Record<Tipo, string>,
+        ) as Record<TipoDocumento, string>,
       })),
       totalActivas: oficinas.length,
       userEntity,
