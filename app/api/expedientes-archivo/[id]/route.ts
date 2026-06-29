@@ -90,6 +90,14 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 
+    // ?meta=1 devuelve la metadata del expediente en JSON (sin el PDF). Lo usa la
+    // UI para abrir el detalle de un resultado de búsqueda que no esté en la
+    // página cargada de la lista (la búsqueda es global, la lista es paginada).
+    const wantsMeta = new URL(_request.url).searchParams.get("meta") === "1";
+    if (wantsMeta) {
+      return NextResponse.json({ expediente });
+    }
+
     const blob = await downloadStorageObject(expediente.storage_bucket, expediente.storage_path);
     return new Response(blob, {
       headers: {

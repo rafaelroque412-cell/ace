@@ -1,12 +1,14 @@
+import { createHash } from "node:crypto";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
-import { supabaseRest } from "./supabase-server";
+import { estimateCostUsd, roundCostUsd } from "./openai-cost";
+import { supabaseRest, writeAuditLog } from "./supabase-server";
 import {
   type PineconeRecord,
   deleteRecords,
   upsertTextRecords,
   verifyDocumentIndexedInPinecone,
 } from "./pinecone";
-import { chunkPages, extractPdfText } from "./pdf-processing";
+import { type ExtractedPdfText, chunkPages, extractPdfText } from "./pdf-processing";
 import {
   type ExpedienteArchivo,
   extractExpedienteNumber,
@@ -17,6 +19,66 @@ import {
 const chunkInsertBatchSize = 100;
 const minExtractedTextLength = 120;
 const analysisTextLimit = 14000;
+
+// Uso de tokens agregado de un expediente (OCR + análisis semántico). Los
+// embeddings (text-embedding-3-small) se omiten: su coste es despreciable.
+type ExpedienteTokenUsage = {
+  ocr: { model: string; inputTokens: number; outputTokens: number; fromCache: boolean } | null;
+  analysis: { model: string; inputTokens: number; outputTokens: number } | null;
+  totalTokens: number;
+  estimatedCostUsd: number;
+};
+
+// Extrae el texto del PDF con CACHE por hash del contenido. Evita re-OCR (el paso
+// caro: gpt-4o visión) cuando el mismo PDF ya se procesó (autocompletar /extract,
+// indexado, reindex, drainer). Solo cachea resultados de OCR (el texto nativo es
+// barato de re-extraer). Si la cache falla, degrada a extracción directa.
+async function extractPdfTextCached(
+  file: File,
+  options: { forceOcr?: boolean } = {},
+): Promise<ExtractedPdfText> {
+  const bytes = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+  const hash = createHash("sha256").update(bytes).digest("hex");
+
+  const cached = await supabaseRest<
+    Array<{ extracted: ExtractedPdfText; input_tokens: number; output_tokens: number; model: string | null }>
+  >(
+    `expedientes_ocr_cache?file_hash=eq.${hash}&select=extracted,input_tokens,output_tokens,model&limit=1`,
+  ).catch(() => []);
+
+  const hit = cached[0];
+  if (hit?.extracted && (hit.extracted.text?.length ?? 0) >= minExtractedTextLength) {
+    return {
+      ...hit.extracted,
+      usage: {
+        fromCache: true,
+        inputTokens: hit.input_tokens,
+        model: hit.model ?? hit.extracted.usage?.model ?? "",
+        outputTokens: hit.output_tokens,
+      },
+    };
+  }
+
+  const extracted = await extractPdfText(file, options);
+
+  if (extracted.extractionMethod === "openai-ocr" && extracted.text.length >= minExtractedTextLength) {
+    await supabaseRest("expedientes_ocr_cache", {
+      body: JSON.stringify({
+        extracted,
+        extraction_method: extracted.extractionMethod,
+        file_hash: hash,
+        input_tokens: extracted.usage?.inputTokens ?? 0,
+        model: extracted.usage?.model ?? null,
+        output_tokens: extracted.usage?.outputTokens ?? 0,
+        page_count: extracted.pageCount,
+      }),
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      method: "POST",
+    }).catch(() => undefined);
+  }
+
+  return extracted;
+}
 
 type ExpedienteChunkInsert = {
   expediente_id: string;
@@ -32,8 +94,11 @@ type ExpedienteInsights = {
   asunto: string | null;
   materia: string | null;
   resumen: string | null;
-  remitente: string | null;
-  destinatario: string | null;
+  tipoDocumento: string | null;
+  serieDocumental: string | null;
+  oficina: string | null;
+  personaNombre: string | null;
+  personaTipo: "natural" | "juridica" | null;
 };
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -58,9 +123,26 @@ function asText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// Extrae asunto, materia, resumen, remitente y destinatario con la IA. Devuelve
-// nulls si falla (los datos del usuario y los extractores deterministas mandan).
-async function analyzeExpedienteWithAi(text: string): Promise<ExpedienteInsights> {
+// Extrae con la IA los campos semánticos del expediente y los asigna a los campos
+// del formulario (asunto, materia, resumen, tipo de documento, oficina y persona
+// interesada). Devuelve nulls si falla (los datos del usuario y los extractores
+// deterministas mandan).
+type AnalysisUsage = { model: string; inputTokens: number; outputTokens: number };
+type AnalysisResult = { insights: ExpedienteInsights; usage: AnalysisUsage };
+
+const emptyInsights: ExpedienteInsights = {
+  asunto: null,
+  materia: null,
+  resumen: null,
+  tipoDocumento: null,
+  serieDocumental: null,
+  oficina: null,
+  personaNombre: null,
+  personaTipo: null,
+};
+
+async function analyzeExpedienteWithAi(text: string): Promise<AnalysisResult> {
+  const usage: AnalysisUsage = { inputTokens: 0, model: legalAnswerModel, outputTokens: 0 };
   try {
     const openai = getOpenAIClient();
     const response = await openai.responses.create({
@@ -68,13 +150,16 @@ async function analyzeExpedienteWithAi(text: string): Promise<ExpedienteInsights
         {
           content: `Analiza este EXPEDIENTE / DOCUMENTO administrativo terminado de una entidad pública.
 
-Devuelve SOLO JSON válido, sin markdown, con estas claves:
+Devuelve SOLO JSON válido, sin markdown, con estas claves (usa null si no aparece en el texto, NO inventes):
 {
   "asunto": "asunto o sumilla en una línea (lo que trata/resuelve)",
   "materia": "materia o tema general (ej: contratación, personal, presupuesto, tránsito)",
   "resumen": "resumen ejecutivo de 3 a 5 líneas de lo que contiene el expediente",
-  "remitente": "quién emite/remite el documento o null",
-  "destinatario": "a quién se dirige o null"
+  "tipoDocumento": "EXACTAMENTE uno de: Resolución, Oficio, Decreto, Ordenanza, Informe, Memorando, Carta, Otro",
+  "serieDocumental": "denominación oficial COMPLETA del documento tal como aparece LITERAL en su encabezado, con el tipo y el número juntos (ej: 'RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A', 'OFICIO MÚLTIPLE N° 012-2024-MDCH-A', 'ORDENANZA MUNICIPAL N° 005-2024-MDCH'). Cópiala EXACTA del texto respetando el tipo completo, 'N°' y el número íntegro; NO la inventes ni abrevies. null si no aparece.",
+  "oficina": "oficina, gerencia o área de la entidad que emite el documento, o null",
+  "personaNombre": "nombre completo de la persona natural o razón social de la empresa ADMINISTRADA/INTERESADA (el ciudadano o empresa del trámite, NUNCA la entidad pública ni un funcionario que firma), o null",
+  "personaTipo": "natural si personaNombre es una persona; juridica si es empresa/organización; null si no hay persona interesada"
 }
 
 Texto:
@@ -86,23 +171,38 @@ ${text.slice(0, analysisTextLimit)}`,
       model: legalAnswerModel,
       temperature: 0,
     });
+    usage.inputTokens = response.usage?.input_tokens ?? 0;
+    usage.outputTokens = response.usage?.output_tokens ?? 0;
     const parsed = parseJsonObject(response.output_text);
     if (Object.keys(parsed).length === 0) {
       console.warn(
         `[expedientes] analyzeExpedienteWithAi: respuesta vacia o sin JSON. output_text len=${response.output_text?.length ?? 0}`,
       );
     }
+    const personaTipo =
+      parsed.personaTipo === "natural" || parsed.personaTipo === "juridica"
+        ? parsed.personaTipo
+        : null;
     return {
-      asunto: asText(parsed.asunto),
-      materia: asText(parsed.materia),
-      resumen: asText(parsed.resumen),
-      remitente: asText(parsed.remitente),
-      destinatario: asText(parsed.destinatario),
+      insights: {
+        asunto: asText(parsed.asunto),
+        materia: asText(parsed.materia),
+        resumen: asText(parsed.resumen),
+        tipoDocumento: asText(parsed.tipoDocumento),
+        serieDocumental: asText(parsed.serieDocumental),
+        oficina: asText(parsed.oficina),
+        personaNombre: asText(parsed.personaNombre),
+        personaTipo,
+      },
+      usage,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[expedientes] analyzeExpedienteWithAi fallo: ${message}`);
-    return { asunto: null, materia: null, resumen: null, remitente: null, destinatario: null };
+    return {
+      insights: { ...emptyInsights },
+      usage,
+    };
   }
 }
 
@@ -165,12 +265,16 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
   });
 
   try {
-    const extracted = await extractPdfText(file);
+    // forceOcr: los expedientes archivados suelen ser escaneados sin capa de texto;
+    // el OCR es el camino normal aquí (no depende del flag global del corpus legal).
+    // extractPdfTextCached reusa el OCR si este PDF ya se procesó (autocompletar,
+    // indexado previo, reindex) en vez de volver a gastar gpt-4o.
+    const extracted = await extractPdfTextCached(file, { forceOcr: true });
     const text = extracted.text;
 
     if (text.length < minExtractedTextLength) {
       throw new Error(
-        "No se pudo extraer texto suficiente del PDF. El expediente parece escaneado o no legible.",
+        "No se pudo extraer texto suficiente del PDF ni con OCR. El expediente parece ilegible, está en blanco o es de muy baja calidad de escaneo.",
       );
     }
 
@@ -179,14 +283,47 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       throw new Error("El PDF no contiene suficiente texto para indexar");
     }
 
-    const insights = await analyzeExpedienteWithAi(text);
+    const { insights, usage: analysisUsage } = await analyzeExpedienteWithAi(text);
+
+    // Consumo de IA del expediente: OCR (reutilizado de cache o recién gastado) +
+    // análisis semántico. Sirve para estimar el coste por subida.
+    const tokenUsage: ExpedienteTokenUsage = (() => {
+      const ocr = extracted.usage
+        ? {
+            fromCache: extracted.usage.fromCache ?? false,
+            inputTokens: extracted.usage.inputTokens,
+            model: extracted.usage.model,
+            outputTokens: extracted.usage.outputTokens,
+          }
+        : null;
+      const analysis = {
+        inputTokens: analysisUsage.inputTokens,
+        model: analysisUsage.model,
+        outputTokens: analysisUsage.outputTokens,
+      };
+      const totalTokens =
+        (ocr ? ocr.inputTokens + ocr.outputTokens : 0) + analysis.inputTokens + analysis.outputTokens;
+      const estimatedCostUsd =
+        (ocr ? estimateCostUsd(ocr.model, ocr.inputTokens, ocr.outputTokens) : 0) +
+        estimateCostUsd(analysis.model, analysis.inputTokens, analysis.outputTokens);
+      return { analysis, estimatedCostUsd: roundCostUsd(estimatedCostUsd), ocr, totalTokens };
+    })();
 
     // El dato del usuario manda; si no lo dio, se usa lo detectado/IA.
-    const serieDocumento =
-      asText(expediente.serie_documento) ?? extractExpedienteNumber(expediente.title, text);
+    // sgd_expediente es MANUAL (N° del sistema documental externo): nunca se
+    // autocompleta, solo se persiste lo que el usuario haya escrito.
     const sgdExpediente = asText(expediente.sgd_expediente);
-    const tipoDocumento = asText(expediente.tipo_documento);
-    const oficina = asText(expediente.oficina);
+    const tipoDocumento = asText(expediente.tipo_documento) ?? insights.tipoDocumento;
+    // Serie documental = denominación oficial literal del documento (ej.
+    // "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A"). Prioridad: lo que puso el
+    // usuario > lo que la IA leyó LITERAL del encabezado > fallback compuesto
+    // tipo + número detectado por regex.
+    const numeroDetectado = extractExpedienteNumber(expediente.title, text);
+    const serieDocumento =
+      asText(expediente.serie_documento) ??
+      insights.serieDocumental ??
+      (numeroDetectado ? [tipoDocumento, numeroDetectado].filter(Boolean).join(" ") : null);
+    const oficina = asText(expediente.oficina) ?? insights.oficina;
     const fecha = extractFecha(text);
     const asunto = asText(expediente.asunto) ?? insights.asunto;
     const materia = asText(expediente.materia) ?? insights.materia;
@@ -257,7 +394,14 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
         anio: Number.isFinite(anio) ? anio : null,
         asunto,
         body_text: text.slice(0, 200000),
+        // Folios = nº de páginas del PDF. Backfill si el usuario no lo puso a mano
+        // (cubre subidas sin auto-análisis); no pisa un valor existente.
+        folio:
+          asText(expediente.folio) ??
+          (extracted.pageCount > 0 ? String(extracted.pageCount) : null),
         materia,
+        tipo_documento: tipoDocumento,
+        oficina,
         metadata: {
           ...expediente.metadata,
           chunkCount: chunks.length,
@@ -271,6 +415,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
             verification,
           },
           textLength: text.length,
+          tokenUsage,
         },
         serie_documento: serieDocumento,
         resumen,
@@ -279,7 +424,22 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       method: "PATCH",
     });
 
-    return { chunkCount: chunks.length, pageCount: extracted.pageCount, textLength: text.length };
+    // Registro de consumo de IA (para agregar gasto por periodo si se necesita).
+    await writeAuditLog({
+      action: "expedientes.tokens",
+      actorReference: expediente.uploaded_by ?? "system",
+      details: { ...tokenUsage, expedienteId: expediente.id, pageCount: extracted.pageCount },
+      entityId: expediente.id,
+      entityType: "expediente_archivo",
+      module: "expedientes-archivo",
+    }).catch(() => undefined);
+
+    return {
+      chunkCount: chunks.length,
+      pageCount: extracted.pageCount,
+      textLength: text.length,
+      tokenUsage,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Error procesando expediente";
     await deleteRecords(insertedVectorIds, namespace).catch(() => undefined);
@@ -300,12 +460,15 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
 export type ExpedienteInventory = {
   numeroExpediente: string | null;
   numeroDocumento: string | null;
+  serieDocumental: string | null;
   fecha: string | null;
   anio: number | null;
   asunto: string | null;
   materia: string | null;
-  remitente: string | null;
-  destinatario: string | null;
+  tipoDocumento: string | null;
+  oficina: string | null;
+  personaNombre: string | null;
+  personaTipo: "natural" | "juridica" | null;
   resumen: string | null;
   nroFolios: number | null;
   extractionMethod: "ai" | "deterministic" | "hybrid" | "none";
@@ -318,12 +481,15 @@ export async function extractExpedienteInventory(
   const inventory: ExpedienteInventory = {
     numeroExpediente: null,
     numeroDocumento: null,
+    serieDocumental: null,
     fecha: null,
     anio: null,
     asunto: null,
     materia: null,
-    remitente: null,
-    destinatario: null,
+    tipoDocumento: null,
+    oficina: null,
+    personaNombre: null,
+    personaTipo: null,
     resumen: null,
     nroFolios: null,
     extractionMethod: "none",
@@ -331,7 +497,9 @@ export async function extractExpedienteInventory(
 
   let extracted;
   try {
-    extracted = await extractPdfText(file);
+    // forceOcr: ver nota en processExpedienteDocument (expedientes escaneados).
+    // Con cache: el OCR de aquí se reutiliza luego al indexar (no se paga 2 veces).
+    extracted = await extractPdfTextCached(file, { forceOcr: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[expedientes] extractPdfText fallo: ${message}`);
@@ -341,6 +509,12 @@ export async function extractExpedienteInventory(
   }
 
   const text = extracted.text ?? "";
+
+  // Folios = nº de páginas del PDF subido (no el "nº de folios" que pudiera
+  // mencionar el texto). Se conoce del parseo del PDF aunque el OCR falle.
+  if (extracted.pageCount > 0) {
+    inventory.nroFolios = extracted.pageCount;
+  }
 
   if (text.length < 50) {
     console.warn(
@@ -366,11 +540,14 @@ export async function extractExpedienteInventory(
   }
 
   // IA para campos semanticos
-  const insights = await analyzeExpedienteWithAi(text);
+  const { insights } = await analyzeExpedienteWithAi(text);
   if (insights.asunto) inventory.asunto = insights.asunto;
   if (insights.materia) inventory.materia = insights.materia;
-  if (insights.remitente) inventory.remitente = insights.remitente;
-  if (insights.destinatario) inventory.destinatario = insights.destinatario;
+  if (insights.tipoDocumento) inventory.tipoDocumento = insights.tipoDocumento;
+  if (insights.serieDocumental) inventory.serieDocumental = insights.serieDocumental;
+  if (insights.oficina) inventory.oficina = insights.oficina;
+  if (insights.personaNombre) inventory.personaNombre = insights.personaNombre;
+  if (insights.personaTipo) inventory.personaTipo = insights.personaTipo;
   if (insights.resumen) inventory.resumen = insights.resumen;
 
   if (insights.asunto || insights.materia || insights.resumen) {

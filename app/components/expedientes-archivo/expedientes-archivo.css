@@ -1103,6 +1103,172 @@
   box-shadow: 0 2px 6px rgba(15, 118, 110, 0.25);
 }
 
+/* --- Fila de checkbox (p. ej. incluir antecedentes en Responder) --- */
+.expCheckRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--exp-muted);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.expCheckRow input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--exp-brand);
+  cursor: pointer;
+}
+
+.expCheckRow strong {
+  color: var(--exp-ink);
+}
+
+/* --- Search modes: 2 opciones tipo tarjeta (Buscar / Preguntar a la IA) --- */
+.expSearchModes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.expSearchModeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--exp-panel);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+  cursor: pointer;
+  transition: all var(--exp-transition);
+}
+
+.expSearchModeCard:hover {
+  border-color: var(--exp-brand);
+}
+
+.expSearchModeCard.active {
+  border-color: var(--exp-brand);
+  background: rgba(15, 118, 110, 0.06);
+  box-shadow: inset 0 0 0 1px var(--exp-brand);
+}
+
+.expSearchModeIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 10px;
+  background: var(--exp-line-soft);
+  color: var(--exp-muted);
+  transition: all var(--exp-transition);
+}
+
+.expSearchModeCard.active .expSearchModeIcon {
+  background: var(--exp-brand);
+  color: #fff;
+}
+
+.expSearchModeText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.expSearchModeTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--exp-ink);
+}
+
+.expSearchModeDesc {
+  font-size: 12px;
+  color: var(--exp-muted);
+  line-height: 1.3;
+}
+
+/* --- Botón "Filtros" dentro de la barra de búsqueda --- */
+.expFilterToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--exp-line);
+  background: var(--exp-panel);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--exp-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--exp-transition);
+}
+
+.expFilterToggle:hover {
+  color: var(--exp-ink);
+  border-color: var(--exp-brand);
+}
+
+.expFilterToggle.active {
+  color: var(--exp-brand);
+  border-color: var(--exp-brand);
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.expFilterBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--exp-brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- Fila de filtros (año / oficina / materia) --- */
+.expFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 0 0 16px;
+  background: var(--exp-line-soft);
+  border: 1px solid var(--exp-line);
+  border-radius: var(--exp-radius);
+}
+
+.expFilterField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.expFilterLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--exp-muted);
+}
+
+.expFilterClear {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .expSearchModes {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --- Results / answers --- */
 .expResults {
   display: flex;

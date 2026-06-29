@@ -87,15 +87,28 @@ export async function GET(request: Request) {
 
     const expedientes = await supabaseRest<ExpedienteArchivo[]>(query);
 
-    // Contar total para paginación
-    let countQuery = `expedientes_archivo?select=id`;
+    // Conteos globales (todo el archivo, no solo la página) para el dashboard.
+    // Se traen status + file_size de todas las filas que matchean los filtros;
+    // así el total, el desglose por estado y el tamaño no quedan limitados a los
+    // 50 de la página actual.
+    let countQuery = `expedientes_archivo?select=id,status,file_size`;
     if (status) countQuery += `&status=eq.${encodeURIComponent(status)}`;
     if (anio) countQuery += `&anio=eq.${encodeURIComponent(anio)}`;
-    const allIds = await supabaseRest<Array<{ id: string }>>(countQuery);
-    const total = allIds.length;
+    const allRows = await supabaseRest<Array<{ id: string; status: string; file_size: number }>>(
+      countQuery,
+    );
+    const total = allRows.length;
+    const counts = {
+      total,
+      indexed: allRows.filter((r) => r.status === "indexed").length,
+      pending: allRows.filter((r) => r.status === "uploaded" || r.status === "processing").length,
+      error: allRows.filter((r) => r.status === "error").length,
+      totalBytes: allRows.reduce((sum, r) => sum + (r.file_size ?? 0), 0),
+    };
 
     return NextResponse.json({
       expedientes,
+      counts,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {

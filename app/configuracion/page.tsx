@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Lock, Settings } from "lucide-react";
 import { AppShell } from "../components/app-shell";
 import { AdminSettings } from "../components/admin-settings";
+import { OficinasSettings } from "../components/oficinas-settings";
 import { getSessionUser } from "@/lib/auth";
 
 export default async function ConfiguracionPage() {
@@ -22,7 +23,10 @@ export default async function ConfiguracionPage() {
     >
       <section className="singleWorkspace">
         {isAdmin ? (
-          <AdminSettings />
+          <>
+            <AdminSettings />
+            <OficinasSettings />
+          </>
         ) : (
           <div className="emptyState">
             <Lock size={20} />

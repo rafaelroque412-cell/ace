@@ -120,7 +120,12 @@ export async function searchExpedientes(
 ): Promise<ExpedienteSearchResult[]> {
   const namespace = getExpedientesNamespace();
   const filters: SearchFilters | undefined = input.anio ? { year: input.anio } : undefined;
-  const topK = input.topK ?? 8;
+  // Con filtros de metadata (oficina/materia) se traen más candidatos porque el
+  // filtrado se hace después de recuperar (no es nativo de Pinecone).
+  const hasMetaFilter = Boolean(input.oficina || input.materia);
+  const topK = input.topK ?? (hasMetaFilter ? 24 : 8);
+  const oficinaFilter = input.oficina?.toLowerCase().trim() || null;
+  const materiaFilter = input.materia?.toLowerCase().trim() || null;
 
   const hits = await searchTextRecords(input.query, topK, filters, namespace);
   if (hits.length === 0) {
@@ -164,6 +169,15 @@ export async function searchExpedientes(
     }
 
     const exp = expById.get(expedienteId);
+
+    // Post-filtro por oficina / materia (coincidencia parcial, sin acentos-sensible).
+    if (oficinaFilter && !(exp?.oficina ?? "").toLowerCase().includes(oficinaFilter)) {
+      continue;
+    }
+    if (materiaFilter && !(exp?.materia ?? "").toLowerCase().includes(materiaFilter)) {
+      continue;
+    }
+
     const chunkId = asString(record.chunk_id);
     const content = chunkId ? contentById.get(chunkId) ?? "" : "";
     const pageStart = asNumber(record.page_start);
@@ -174,7 +188,7 @@ export async function searchExpedientes(
     results.push({
       anio: exp?.anio ?? null,
       asunto: exp?.asunto ?? asString(record.topic),
-      citation: `Expediente${serie ? ` N° ${serie}` : ""}${pageStart ? `, pág. ${pageStart}` : ""}`,
+      citation: `${serie ? serie : "Expediente"}${pageStart ? `, pág. ${pageStart}` : ""}`,
       excerpt: content.slice(0, 700),
       expedienteId,
       materia: exp?.materia ?? null,
@@ -196,10 +210,13 @@ export async function searchExpedientes(
   return results;
 }
 
+export type LlmUsage = { model: string; inputTokens: number; outputTokens: number };
+
 export type ExpedienteAnswer = {
   answer: string;
   sufficient: boolean;
   sources: ExpedienteSearchResult[];
+  usage?: LlmUsage;
 };
 
 function buildContext(sources: ExpedienteSearchResult[]) {
@@ -234,6 +251,7 @@ export async function answerExpedienteQuestion(
       answer: "No encontré expedientes relacionados en la biblioteca de expedientes archivados.",
       sources: [],
       sufficient: false,
+      usage: { inputTokens: 0, model: legalAnswerModel, outputTokens: 0 },
     };
   }
 
@@ -270,5 +288,10 @@ ${input.query}`,
       response.output_text.trim() || "No pude generar una respuesta a partir de los expedientes.",
     sources,
     sufficient: true,
+    usage: {
+      inputTokens: response.usage?.input_tokens ?? 0,
+      model: legalAnswerModel,
+      outputTokens: response.usage?.output_tokens ?? 0,
+    },
   };
 }

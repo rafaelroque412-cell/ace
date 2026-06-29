@@ -34,13 +34,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Falta al menos un criterio (title, sgd, serie)" }, { status: 400 });
     }
 
+    // Dentro de un arbol logico `or=(...)` la sintaxis de PostgREST es
+    // `columna.operador.valor` (con puntos), NO `columna=operador.valor` (esa es
+    // para filtros de primer nivel). Ademas, los valores con espacios/puntos/° hay
+    // que entrecomillarlos para que el parser no los confunda con delimitadores.
+    const quote = (value: string) =>
+      `"${encodeURIComponent(value.replace(/"/g, '\\"'))}"`;
     const filters: string[] = [];
     if (title) {
       const safe = title.replace(/[%_]/g, (m) => `\\${m}`);
-      filters.push(`title=ilike.${encodeURIComponent(safe)}`);
+      filters.push(`title.ilike.${quote(safe)}`);
     }
-    if (sgd) filters.push(`sgd_expediente=eq.${encodeURIComponent(sgd)}`);
-    if (serie) filters.push(`serie_documento=eq.${encodeURIComponent(serie)}`);
+    if (sgd) filters.push(`sgd_expediente.eq.${quote(sgd)}`);
+    if (serie) filters.push(`serie_documento.eq.${quote(serie)}`);
 
     let query = `expedientes_archivo?select=${SELECT}&status=eq.indexed&order=created_at.desc&limit=10`;
     if (filters.length > 0) query += `&or=(${filters.join(",")})`;

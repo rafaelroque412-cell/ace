@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
   Check,
@@ -10,6 +10,7 @@ import {
   Download,
   Eye,
   FileText,
+  FileSignature,
   Filter,
   Grid3x3,
   HelpCircle,
@@ -38,6 +39,8 @@ import {
   Minimize2,
   ArrowRight,
   Lightbulb,
+  Pencil,
+  Save,
 } from "lucide-react";
 import {
   ARCHIVO_AMBIENTES,
@@ -48,6 +51,7 @@ import {
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import type {
   ChatAnswer,
+  DuplicateMatch,
   ExpedienteItem,
   PdfInventory,
   SearchMode,
@@ -58,6 +62,7 @@ import type {
   SubirForm,
   ViewMode,
   WizardStep,
+  WorkspaceTab,
 } from "./expedientes-archivo/types";
 import { ChatPanel } from "./expedientes-archivo/chat-panel";
 import { CommandPalette } from "./expedientes-archivo/command-palette";
@@ -65,6 +70,8 @@ import { TablaExpedientes } from "./expedientes-archivo/tabla-expedientes";
 import { TarjetasExpedientes } from "./expedientes-archivo/tarjetas-expedientes";
 import { BulkMoveModal } from "./expedientes-archivo/bulk-move-modal";
 import { ReplaceFileModal } from "./expedientes-archivo/replace-file-modal";
+import { BatchUpload } from "./expedientes-archivo/batch-upload";
+import { RespuestaPanel } from "./expedientes-archivo/respuesta-panel";
 import {
   OnboardingTour,
   TourTrigger,
@@ -81,8 +88,14 @@ import { Pagination, type PaginationInfo } from "./expedientes-archivo/paginatio
 import {
   chatWithExpedientes,
   loadExpedientes as loadExpedientesAction,
+  fetchExpedienteById,
   searchExpedientes,
+  updateExpediente as updateExpedienteAction,
   autoFillFromPdf as autoFillFromPdfAction,
+  detectDuplicates as detectDuplicatesAction,
+  fetchUbicacionSugerida,
+  type ExpedienteCounts,
+  type UbicacionSugerida,
 } from "@/lib/expedientes-archivo-actions";
 
 function formatBytes(bytes: number) {
@@ -99,6 +112,20 @@ function statusLabel(status: ExpedienteItem["status"]) {
     processing: "Procesando",
     uploaded: "Subido",
   }[status];
+}
+
+// Ajusta los conteos globales del dashboard al añadir (+1) o quitar (-1) un
+// expediente, sin tener que refetchear. Mantiene el total, el tamaño y el
+// desglose por estado coherentes durante el borrado diferido.
+function adjustCounts(c: ExpedienteCounts, exp: ExpedienteItem, delta: number): ExpedienteCounts {
+  const next = { ...c };
+  next.total = Math.max(0, next.total + delta);
+  next.totalBytes = Math.max(0, next.totalBytes + delta * (exp.file_size ?? 0));
+  if (exp.status === "indexed") next.indexed = Math.max(0, next.indexed + delta);
+  else if (exp.status === "uploaded" || exp.status === "processing")
+    next.pending = Math.max(0, next.pending + delta);
+  else if (exp.status === "error") next.error = Math.max(0, next.error + delta);
+  return next;
 }
 
 const EMPTY_FORM: SubirForm = {
@@ -126,6 +153,19 @@ const EMPTY_FORM: SubirForm = {
   nroPiso: "",
   nroLocal: "",
 };
+
+// La SERIE DOCUMENTAL se arma con el tipo de documento + el numero detectado
+// (ej. "Resolución 004-2024-MDCH-A"). El SGD NO se autocompleta: es el N° de
+// expediente del sistema de gestion documental EXTERNO y lo asigna el usuario a mano.
+function buildSerieDocumental(
+  tipoDocumento: string | null | undefined,
+  numero: string | number | null | undefined,
+): string {
+  const tipo = tipoDocumento == null ? "" : String(tipoDocumento).trim();
+  const num = numero == null ? "" : String(numero).trim();
+  if (!num) return "";
+  return [tipo, num].filter(Boolean).join(" ");
+}
 
 const WIZARD_STEPS = [
   { id: 0, label: "Documento", hint: "Sube el PDF e identifica el documento" },
@@ -290,7 +330,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const { resolved: resolvedTheme, setTheme, toggle: toggleTheme } = useTheme();
   const { density, toggle: toggleDensity } = useDensity();
 
-  const [tab, setTab] = useState<"buscar" | "subir">(prefs.tab);
+  const [tab, setTab] = useState<WorkspaceTab>(prefs.tab);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 50,
@@ -305,16 +345,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [mode, setMode] = useState<SearchMode>("buscar");
   const [query, setQuery] = useState("");
   const [filterAnio, setFilterAnio] = useState("");
+  const [filterOficina, setFilterOficina] = useState("");
+  const [filterMateria, setFilterMateria] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [answer, setAnswer] = useState<ChatAnswer | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  const activeFilterCount = [filterAnio, filterOficina, filterMateria].filter((v) => v.trim()).length;
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     { role: "user" | "ai"; text: string; sources?: SearchResult[] }[]
   >([]);
 
   const [expedientes, setExpedientes] = useState<ExpedienteItem[]>([]);
+  // Conteos globales del archivo (todo, no solo la página) para el dashboard.
+  const [counts, setCounts] = useState<ExpedienteCounts | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>(prefs.viewMode);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(prefs.statusFilter);
@@ -346,17 +392,42 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   const [wizardStep, setWizardStep] = useState<WizardStep>(0);
   const [uploading, setUploading] = useState(false);
   const [reindexingId, setReindexingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Con borrado diferido la fila desaparece al instante (no hay llamada en vuelo
+  // durante la ventana de deshacer), así que no se necesita indicador por fila.
+  const deletingId: string | null = null;
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [extracting, setExtracting] = useState(false);
   const [extractedData, setExtractedData] = useState<PdfInventory | null>(null);
   const [recentUploads, setRecentUploads] = useState<ExpedienteItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  // Campos rellenados automáticamente (IA/OCR) y aún no editados a mano. Se usa
+  // para marcarlos visualmente ("IA") y distinguirlos de lo que escribió el usuario.
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<keyof SubirForm>>(new Set());
+  // Posibles duplicados detectados al cargar/identificar el PDF o al teclear el SGD.
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [dupsDismissed, setDupsDismissed] = useState(false);
+  // Firma de la última comprobación de duplicados, para no repetirla (clave por
+  // SGD/serie; si no hay, por título). Evita que la detección al teclear y la de
+  // la extracción se pisen.
+  const lastDupSignatureRef = useRef<string>("");
+  // SGD/serie con debounce: disparan la detección de duplicados al teclear a mano.
+  const debouncedSgd = useDebouncedValue(form.sgdExpediente, 600);
+  const debouncedSerie = useDebouncedValue(form.serieDocumento, 600);
+  // Sugerencia de ubicación física basada en lo ya archivado.
+  const [ubicacionSugerida, setUbicacionSugerida] = useState<UbicacionSugerida | null>(null);
+  const [siguientePaquete, setSiguientePaquete] = useState<string | null>(null);
+  // Modo de subida: uno por uno (wizard) o por lotes (varios PDF a la vez).
+  const [uploadMode, setUploadMode] = useState<"single" | "batch">("single");
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
   const [openExp, setOpenExp] = useState<ExpedienteItem | null>(null);
+  // Edición de metadata del expediente abierto (slide-over).
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, unknown>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmDialog | null>(null);
@@ -365,8 +436,10 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
 
   const tour = useTour(TOUR_STEPS, "exp-tour-completed-v1");
 
+  // Contador estable para IDs de toast (evita Date.now()/Math.random() impuros).
+  const toastIdRef = useRef(0);
   function showToast(message: string, kind: Toast["kind"] = "info") {
-    const id = Date.now() + Math.random();
+    const id = (toastIdRef.current += 1);
     setToasts((prev) => [...prev, { id, message, kind }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -385,10 +458,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setConfirm(null);
   }
 
+  // Expedientes ocultados de la UI mientras corre su ventana de "deshacer"
+  // (borrado diferido). Se filtran de cualquier lista que venga del servidor,
+  // porque la fila aún existe en BD hasta que se confirma el borrado.
+  const pendingDeleteRef = useRef<Map<string, ExpedienteItem>>(new Map());
+
   const loadExpedientes = useCallback(async (page = 1) => {
     try {
       const result = await loadExpedientesAction({ page, limit: 50 });
-      setExpedientes((result.expedientes as ExpedienteItem[]) ?? []);
+      const pending = pendingDeleteRef.current;
+      const fetched = (result.expedientes as ExpedienteItem[]) ?? [];
+      setExpedientes(pending.size ? fetched.filter((e) => !pending.has(e.id)) : fetched);
+      let serverCounts = result.counts;
+      if (serverCounts && pending.size) {
+        for (const ex of pending.values()) serverCounts = adjustCounts(serverCounts, ex, -1);
+      }
+      setCounts(serverCounts);
       setPagination(result.pagination);
     } catch {
       // Silenciar
@@ -404,7 +489,9 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setLoadingRecent(true);
     try {
       const result = await loadExpedientesAction({ page: 1, limit: 10 });
-      setRecentUploads((result.expedientes as ExpedienteItem[]) ?? []);
+      const pending = pendingDeleteRef.current;
+      const fetched = (result.expedientes as ExpedienteItem[]) ?? [];
+      setRecentUploads(pending.size ? fetched.filter((e) => !pending.has(e.id)) : fetched);
     } catch {
       // Silenciar
     } finally {
@@ -428,7 +515,6 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
 
   useEffect(() => {
     // Carga inicial de la lista; el setState ocurre tras await.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadExpedientes();
   }, [loadExpedientes]);
 
@@ -524,7 +610,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       if (e.key === "Escape") {
         if (cmdOpen) setCmdOpen(false);
         else if (chatOpen) setChatOpen(false);
-        else if (openExp) setOpenExp(null);
+        else if (openExp) closeSlideOver();
         else if (bulkOpen) setBulkOpen(false);
         else if (replaceExp) setReplaceExp(null);
         else if (helpOpen) setHelpOpen(false);
@@ -536,8 +622,76 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return () => window.removeEventListener("keydown", onKey);
   }, [tab, canManage, cmdOpen, chatOpen, openExp, bulkOpen, replaceExp, helpOpen, confirm]);
 
+  // Cierra el slide-over y sale de modo edición, limpiando el borrador.
+  function closeSlideOver() {
+    setOpenExp(null);
+    setEditMode(false);
+    setEditForm({});
+  }
+
   function setField<K extends keyof SubirForm>(key: K, value: SubirForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+    // Una edición manual deja de considerarse "rellenado por IA".
+    setAutoFilledFields((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  // Chip "IA" para campos rellenados automáticamente y aún no editados a mano.
+  const autoBadge = (key: keyof SubirForm) =>
+    autoFilledFields.has(key) ? (
+      <span
+        title="Autocompletado por IA — revisa el valor"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 3,
+          marginLeft: 6,
+          padding: "1px 6px",
+          borderRadius: 999,
+          fontSize: 10,
+          fontWeight: 600,
+          background: "var(--exp-accent-soft, rgba(99,102,241,0.12))",
+          color: "var(--exp-accent, #6366f1)",
+        }}
+      >
+        <Sparkles size={9} /> IA
+      </span>
+    ) : null;
+
+  // Rellena la ubicación física desde una sugerencia del backend.
+  function applyUbicacionSugerida(u: UbicacionSugerida) {
+    const map: Array<[keyof SubirForm, string | boolean | null]> = [
+      ["tipoAlmacenamiento", u.tipo_almacenamiento],
+      ["nroArchivador", u.nro_archivador],
+      ["nroPaquete", u.nro_paquete],
+      ["empastado", u.empastado === null ? "" : u.empastado ? "si" : "no"],
+      ["colorArchivador", u.color_archivador],
+      ["nroEstante", u.nro_estante],
+      ["nroPiso", u.nro_piso],
+      ["nroLocal", u.nro_local],
+    ];
+    const filled = new Set<keyof SubirForm>();
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const [k, v] of map) {
+        const str = v === null || v === undefined ? "" : String(v);
+        if (str) {
+          next[k] = str as never;
+          filled.add(k);
+        }
+      }
+      return next;
+    });
+    setAutoFilledFields((prev) => {
+      const merged = new Set(prev);
+      for (const k of filled) merged.add(k);
+      return merged;
+    });
+    showToast("Ubicación física aplicada. Ajusta lo que cambie.", "success");
   }
 
   function canProceedStep(): { ok: boolean; reason?: string } {
@@ -547,10 +701,32 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return { ok: true };
   }
 
+  // Abre el slide-over de un expediente desde un resultado de búsqueda. La lista
+  // está paginada (50) pero la búsqueda es global, así que el expediente puede no
+  // estar cargado: en ese caso se trae su metadata por id.
+  async function openExpedienteById(id: string) {
+    const loaded = expedientes.find((e) => e.id === id);
+    if (loaded) {
+      setOpenExp(loaded);
+      return;
+    }
+    try {
+      const exp = (await fetchExpedienteById(id)) as ExpedienteItem | null;
+      if (exp) {
+        setOpenExp(exp);
+      } else {
+        window.open(`/api/expedientes-archivo/${id}`, "_blank");
+      }
+    } catch {
+      window.open(`/api/expedientes-archivo/${id}`, "_blank");
+    }
+  }
+
   async function runSearch(event?: React.FormEvent) {
     event?.preventDefault();
-    if (query.trim().length < 2) {
-      setSearchMessage("Escribe al menos 2 caracteres para buscar.");
+    const minLen = mode === "buscar" ? 2 : 3;
+    if (query.trim().length < minLen) {
+      setSearchMessage(`Escribe al menos ${minLen} caracteres para ${mode === "buscar" ? "buscar" : "consultar"}.`);
       return;
     }
     setSearching(true);
@@ -559,15 +735,18 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     setAnswer(null);
     try {
       if (mode === "buscar") {
-        const anio = filterAnio ? Number.parseInt(filterAnio, 10) : undefined;
-        const data = await searchExpedientes(query.trim(), anio);
+        const data = await searchExpedientes(query.trim(), {
+          anio: filterAnio ? Number.parseInt(filterAnio, 10) : undefined,
+          oficina: filterOficina.trim() || undefined,
+          materia: filterMateria.trim() || undefined,
+        });
         setResults(data.results);
         if (data.results.length === 0) {
           setSearchMessage(
-            "Sin resultados. Prueba con otros términos o sube el expediente si aún no está en el archivo.",
+            "Sin resultados. Prueba con otros términos, ajusta los filtros o sube el expediente si aún no está en el archivo.",
           );
         }
-      } else if (mode === "preguntar") {
+      } else {
         const data = await chatWithExpedientes(query.trim());
         setAnswer(data);
         setChatMessages((prev) => [
@@ -583,6 +762,15 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     } finally {
       setSearching(false);
     }
+  }
+
+  // Cambia el sub-modo de búsqueda y limpia los resultados del modo anterior
+  // para no mezclar salidas (resultados vectoriales vs. respuesta de chat).
+  function changeMode(next: SearchMode) {
+    setMode(next);
+    setResults(null);
+    setAnswer(null);
+    setSearchMessage(null);
   }
 
   async function askInChat(text: string) {
@@ -603,57 +791,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     }
   }
 
-  // Extrae datos del PDF cargado y rellena automaticamente los campos del
-  // formulario. Usa IA + extractores deterministas del backend.
-  async function extractFromPdf() {
-    if (!file) {
-      showToast("Selecciona un PDF primero", "warning");
-      return;
-    }
-    if (extracting) return;
-
-    setExtracting(true);
-    setExtractedData(null);
-    try {
-      const data = await autoFillFromPdfAction(file, form.title);
-      setExtractedData(data);
-      const fieldsFound = Object.entries(data).filter(
-        ([key, value]) =>
-          key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,
-      ).length;
-      if (fieldsFound === 0) {
-        const method = data.extractionMethod ?? "none";
-        const reason =
-          method === "none"
-            ? "El PDF no tiene texto legible (posible escaneado sin OCR)."
-            : method === "deterministic"
-            ? "Solo se detectaron datos básicos. La IA no devolvió campos semánticos."
-            : "La IA no devolvió campos. Verifica tu API key de OpenAI o intenta con otro PDF.";
-        showToast(reason, "warning");
-      } else {
-        showToast(
-          `Se detectaron ${fieldsFound} campos. Revisa y aplica los datos.`,
-          "success",
-        );
-      }
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "No se pudo extraer datos del PDF";
-      showToast(`Error: ${msg}`, "error");
-      console.error("[expedientes] extractFromPdf fallo:", err);
-    } finally {
-      setExtracting(false);
-    }
-  }
-
-  // Aplica los datos extraídos al formulario. Solo sobreescribe campos
-  // vacíos para no pisar lo que el usuario ya escribió.
-  function applyExtractedData() {
-    if (!extractedData) return;
+  // Aplica un inventario extraído al formulario. Solo rellena campos vacíos (no
+  // pisa lo que el usuario ya escribió) y marca los rellenados como "IA" para que
+  // se distingan visualmente. Devuelve cuántos campos aplicó.
+  function applyInventory(data: PdfInventory): number {
     let appliedCount = 0;
+    const filled = new Set<keyof SubirForm>();
     setForm((prev) => {
       const next = { ...prev };
-      // Solo aplica campos no vacios y solo si el form no tiene valor
       const tryApply = (
         extractedValue: string | number | null | undefined,
         formKey: keyof SubirForm,
@@ -664,31 +809,182 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         const current = next[formKey];
         if (current && String(current).trim() !== "") return;
         next[formKey] = transform(extractedValue as string | number) as never;
+        filled.add(formKey);
         appliedCount += 1;
       };
-      tryApply(extractedData.numeroExpediente, "sgdExpediente");
-      tryApply(extractedData.numeroDocumento, "serieDocumento");
-      tryApply(extractedData.anio, "anio");
-      tryApply(extractedData.materia, "materia");
-      tryApply(extractedData.asunto, "asunto");
-      tryApply(extractedData.resumen, "resumen");
-      // Si el titulo esta vacio, usar el SGD como fallback
-      if (!next.title?.trim() && extractedData.numeroExpediente?.trim()) {
-        next.title = extractedData.numeroExpediente.trim();
+      // SGD NO se autocompleta (manual: N° del sistema documental externo). La
+      // SERIE DOCUMENTAL es la denominación oficial LITERAL que la IA lee del
+      // encabezado (ej. "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A"); si no la
+      // detectó, se compone como fallback con tipo + número.
+      const serieDetectada =
+        data.serieDocumental?.trim() || buildSerieDocumental(data.tipoDocumento, data.numeroExpediente);
+      tryApply(serieDetectada, "serieDocumento");
+      tryApply(data.tipoDocumento, "tipoDocumento");
+      tryApply(data.anio, "anio");
+      tryApply(data.oficina, "oficina");
+      tryApply(data.materia, "materia");
+      tryApply(data.asunto, "asunto");
+      tryApply(data.personaNombre, "personaNombre");
+      tryApply(data.personaTipo, "personaTipo");
+      tryApply(data.resumen, "resumen");
+      tryApply(data.nroFolios, "folio");
+      // Si el titulo esta vacio, usar la serie documental como fallback.
+      if (!next.title?.trim() && serieDetectada) {
+        next.title = serieDetectada;
+        filled.add("title");
         appliedCount += 1;
       }
       return next;
     });
-    if (appliedCount === 0) {
+    if (appliedCount > 0) {
+      setAutoFilledFields((prev) => {
+        const merged = new Set(prev);
+        for (const k of filled) merged.add(k);
+        return merged;
+      });
+    }
+    return appliedCount;
+  }
+
+  // Comprueba si ya existe un expediente igual (por SGD/serie/título) para avisar
+  // antes de reprocesar OCR/embeddings en vano.
+  const checkDuplicatesFor = useCallback(
+    async (params: { title?: string; sgd?: string; serie?: string }) => {
+      if (!params.title && !params.sgd && !params.serie) return;
+      // Clave por SGD/serie cuando los hay (así la comprobación al teclear y la de
+      // la extracción comparten firma y no se duplican); si no, por título.
+      const sgd = (params.sgd ?? "").trim();
+      const serie = (params.serie ?? "").trim();
+      const signature = sgd || serie ? `k:${sgd}|${serie}` : `t:${(params.title ?? "").trim()}`;
+      if (signature === lastDupSignatureRef.current) return;
+      lastDupSignatureRef.current = signature;
+      setCheckingDuplicates(true);
+      try {
+        const { duplicates: found } = await detectDuplicatesAction(params);
+        setDuplicates(found);
+        setDupsDismissed(false);
+      } catch {
+        // La detección es una ayuda; nunca debe romper la subida.
+      } finally {
+        setCheckingDuplicates(false);
+      }
+    },
+    [],
+  );
+
+  // Pide al backend la ubicación física probable (misma caja del lote, siguiente
+  // paquete) según lo ya archivado para esta serie/año.
+  const loadUbicacionSugeridaFor = useCallback(
+    async (params: { serie?: string; anio?: string | number }) => {
+      try {
+        const res = await fetchUbicacionSugerida(params);
+        setUbicacionSugerida(res.ultima);
+        setSiguientePaquete(res.siguientePaquete);
+      } catch {
+        // Silenciar: es solo una sugerencia.
+      }
+    },
+    [],
+  );
+
+  // Detección de duplicados al teclear el SGD o la serie a mano (con debounce).
+  // La firma en checkDuplicatesFor evita repetir lo ya comprobado por la extracción.
+  useEffect(() => {
+    if (!canManage || tab !== "subir") return;
+    const sgd = debouncedSgd.trim();
+    const serie = debouncedSerie.trim();
+    if (sgd.length < 3 && serie.length < 3) return;
+    // El setState ocurre dentro de checkDuplicatesFor (indicador de carga).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void checkDuplicatesFor({ sgd: sgd || undefined, serie: serie || undefined });
+  }, [debouncedSgd, debouncedSerie, canManage, tab, checkDuplicatesFor]);
+
+  // Extrae datos del PDF (OCR + IA). En modo automático aplica los datos al
+  // formulario directamente (el usuario solo revisa); en modo manual muestra el
+  // preview editable. También dispara la detección de duplicados.
+  async function extractFromPdf(opts?: { auto?: boolean; fileArg?: File }) {
+    const target = opts?.fileArg ?? file;
+    if (!target) {
+      showToast("Selecciona un PDF primero", "warning");
+      return;
+    }
+    if (extracting) return;
+
+    setExtracting(true);
+    setExtractedData(null);
+    try {
+      const data = await autoFillFromPdfAction(target, form.title);
+      const fieldsFound = Object.entries(data).filter(
+        ([key, value]) =>
+          key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,
+      ).length;
+
+      if (fieldsFound === 0) {
+        const method = data.extractionMethod ?? "none";
+        const reason =
+          method === "none"
+            ? "El PDF no tiene texto legible (posible escaneado sin OCR)."
+            : method === "deterministic"
+              ? "Solo se detectaron datos básicos. La IA no devolvió campos semánticos."
+              : "La IA no devolvió campos. Verifica tu API key de OpenAI o intenta con otro PDF.";
+        showToast(reason, "warning");
+        if (!opts?.auto) setExtractedData(data);
+        return;
+      }
+
+      if (opts?.auto) {
+        // Auto: aplicar directamente para que el usuario solo confirme.
+        const applied = applyInventory(data);
+        showToast(
+          `Analizado con IA: ${applied} campo${applied === 1 ? "" : "s"} autocompletado${applied === 1 ? "" : "s"}. Revisa y ajusta.`,
+          "success",
+        );
+        void checkDuplicatesFor({
+          title: data.numeroExpediente ?? target.name,
+          serie:
+            data.serieDocumental?.trim() ||
+            buildSerieDocumental(data.tipoDocumento, data.numeroExpediente) ||
+            undefined,
+        });
+        void loadUbicacionSugeridaFor({ anio: data.anio ?? undefined });
+      } else {
+        // Manual: mostrar preview editable (comportamiento previo).
+        setExtractedData(data);
+        showToast(`Se detectaron ${fieldsFound} campos. Revisa y aplica los datos.`, "success");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo extraer datos del PDF";
+      // En modo automático no interrumpimos con un error rojo: el usuario puede
+      // llenar a mano. En modo manual sí avisamos del fallo.
+      showToast(opts?.auto ? `No se pudo autocompletar: ${msg}` : `Error: ${msg}`, opts?.auto ? "info" : "error");
+      console.error("[expedientes] extractFromPdf fallo:", err);
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  // Aplica los datos del preview manual al formulario.
+  function applyExtractedData() {
+    if (!extractedData) return;
+    const applied = applyInventory(extractedData);
+    if (applied === 0) {
       showToast(
         "No se aplicaron datos (el formulario ya tiene esos campos llenos o los datos estaban vacíos)",
         "info",
       );
     } else {
       showToast(
-        `Se aplicaron ${appliedCount} campo${appliedCount === 1 ? "" : "s"} al formulario`,
+        `Se aplicaron ${applied} campo${applied === 1 ? "" : "s"} al formulario`,
         "success",
       );
+      void checkDuplicatesFor({
+        title: extractedData.numeroExpediente ?? file?.name,
+        serie:
+          extractedData.serieDocumental?.trim() ||
+          buildSerieDocumental(extractedData.tipoDocumento, extractedData.numeroExpediente) ||
+          undefined,
+      });
+      void loadUbicacionSugeridaFor({ anio: extractedData.anio ?? undefined });
     }
     setExtractedData(null);
     if (wizardStep === 0) {
@@ -754,8 +1050,23 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       }
 
       const uploadedTitle = file.name;
+      // Recordar la ubicación física para precargarla en la siguiente subida del lote.
+      prefs.setLastUbicacion({
+        tipoAlmacenamiento: form.tipoAlmacenamiento,
+        nroArchivador: form.nroArchivador,
+        nroPaquete: form.nroPaquete,
+        empastado: form.empastado,
+        colorArchivador: form.colorArchivador,
+        nroEstante: form.nroEstante,
+        nroPiso: form.nroPiso,
+        nroLocal: form.nroLocal,
+      });
       setFile(null);
       setForm(EMPTY_FORM);
+      setAutoFilledFields(new Set());
+      setDuplicates([]);
+      setDupsDismissed(false);
+      lastDupSignatureRef.current = "";
       setWizardStep(0);
       setUploadProgress(0);
       showToast(
@@ -792,7 +1103,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     showConfirm({
       title: `¿Eliminar "${exp.title}"?`,
       message:
-        "Esta acción no se puede deshacer. El PDF y sus chunks también se eliminarán.",
+        "Tendrás unos segundos para deshacer. Pasada la ventana, el PDF y sus fragmentos indexados se eliminarán de forma definitiva.",
       variant: "danger",
       onConfirm: () => {
         void performDelete(exp);
@@ -800,35 +1111,55 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     });
   }
 
-  async function performDelete(exp: ExpedienteItem) {
-    setDeletingId(exp.id);
-    try {
-      const res = await fetch(`/api/expedientes-archivo/${exp.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const payload = await res.json();
-        showToast(payload.error ?? "No se pudo eliminar", "error");
-        return;
-      }
+  // Reintroduce un expediente en la UI (al deshacer o si el borrado falla).
+  function restoreExpedienteInUi(exp: ExpedienteItem) {
+    pendingDeleteRef.current.delete(exp.id);
+    setExpedientes((prev) => [exp, ...prev.filter((e) => e.id !== exp.id)]);
+    setCounts((prev) => (prev ? adjustCounts(prev, exp, +1) : prev));
+  }
 
-      // Ofrecer undo durante 8 segundos
-      pushUndo(
-        `Expediente "${exp.title}" eliminado`,
-        async () => {
-          showToast("Función de deshacer no disponible aún", "warning");
+  // Borrado diferido con "deshacer" real: ocultamos el expediente de inmediato y
+  // solo ejecutamos el DELETE en el servidor cuando vence la ventana (o el usuario
+  // cierra el aviso). Si pulsa "Deshacer", nada se llegó a borrar.
+  function performDelete(exp: ExpedienteItem) {
+    pendingDeleteRef.current.set(exp.id, exp);
+    setExpedientes((prev) => prev.filter((e) => e.id !== exp.id));
+    setRecentUploads((prev) => prev.filter((e) => e.id !== exp.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(exp.id);
+      return next;
+    });
+    if (openExp?.id === exp.id) closeSlideOver();
+    setCounts((prev) => (prev ? adjustCounts(prev, exp, -1) : prev));
+
+    pushUndo(
+      `Expediente "${exp.title}" eliminado`,
+      // Deshacer: restaurar en la UI (no se borró nada en el servidor).
+      () => {
+        restoreExpedienteInUi(exp);
+        showToast(`Se restauró "${exp.title}".`, "success");
+      },
+      {
+        // Confirmar: ejecutar el DELETE real al vencer la ventana o al cerrar el aviso.
+        onCommit: async () => {
+          try {
+            const res = await fetch(`/api/expedientes-archivo/${exp.id}`, { method: "DELETE" });
+            if (!res.ok) {
+              const payload = await res.json().catch(() => ({}));
+              showToast(payload.error ?? `No se pudo eliminar "${exp.title}"`, "error");
+              restoreExpedienteInUi(exp);
+              return;
+            }
+            pendingDeleteRef.current.delete(exp.id);
+            await Promise.all([loadExpedientes(pagination.page), refreshRecentUploads()]);
+          } catch {
+            showToast(`No se pudo eliminar "${exp.title}".`, "error");
+            restoreExpedienteInUi(exp);
+          }
         },
-      );
-
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(exp.id);
-        return next;
-      });
-      await Promise.all([loadExpedientes(), refreshRecentUploads()]);
-    } catch {
-      showToast("No se pudo conectar con el servidor.", "error");
-    } finally {
-      setDeletingId(null);
-    }
+      },
+    );
   }
 
   async function replaceExpedienteFile(file: File) {
@@ -875,6 +1206,108 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
       await loadExpedientes();
     } catch {
       showToast("No se pudo conectar con el servidor.", "error");
+    }
+  }
+
+  // ── Edición de metadata del expediente abierto (PATCH) ────────────────────
+  function strOrNull(value: unknown): string | null {
+    const s = value == null ? "" : String(value).trim();
+    return s ? s : null;
+  }
+
+  function setEditField(key: string, value: unknown) {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Inicializa el formulario con los valores actuales del expediente y entra en
+  // modo edición. empastado se mapea a "si"/"no"/"" para el <select>.
+  function startEdit() {
+    if (!openExp) return;
+    setEditForm({
+      title: openExp.title ?? "",
+      sgd_expediente: openExp.sgd_expediente ?? "",
+      serie_documento: openExp.serie_documento ?? "",
+      anio: openExp.anio ?? "",
+      tipo_documento: openExp.tipo_documento ?? "",
+      oficina: openExp.oficina ?? "",
+      materia: openExp.materia ?? "",
+      asunto: openExp.asunto ?? "",
+      resumen: openExp.resumen ?? "",
+      observaciones: openExp.observaciones ?? "",
+      persona_tipo: openExp.persona_tipo ?? "",
+      persona_documento: openExp.persona_documento ?? "",
+      persona_nombre: openExp.persona_nombre ?? "",
+      tipo_almacenamiento: openExp.tipo_almacenamiento ?? "",
+      nro_archivador: openExp.nro_archivador ?? "",
+      nro_paquete: openExp.nro_paquete ?? "",
+      empastado: openExp.empastado === true ? "si" : openExp.empastado === false ? "no" : "",
+      color_archivador: openExp.color_archivador ?? "",
+      nro_estante: openExp.nro_estante ?? "",
+      nro_piso: openExp.nro_piso ?? "",
+      nro_local: openExp.nro_local ?? "",
+      folio: openExp.folio ?? "",
+    });
+    setEditMode(true);
+  }
+
+  // Construye el ExpedienteItem actualizado a partir del formulario, para reflejar
+  // los cambios al instante en el slide-over y la lista (antes del refetch).
+  function mergeEditIntoItem(item: ExpedienteItem, form: Record<string, unknown>): ExpedienteItem {
+    const anio =
+      form.anio === "" || form.anio == null ? null : Number.parseInt(String(form.anio), 10);
+    const empastado = form.empastado === "si" ? true : form.empastado === "no" ? false : null;
+    const personaTipo = form.persona_tipo === "natural" || form.persona_tipo === "juridica"
+      ? form.persona_tipo
+      : null;
+    return {
+      ...item,
+      title: strOrNull(form.title) ?? item.title,
+      sgd_expediente: strOrNull(form.sgd_expediente),
+      serie_documento: strOrNull(form.serie_documento),
+      anio: Number.isFinite(anio as number) ? (anio as number) : null,
+      tipo_documento: strOrNull(form.tipo_documento),
+      oficina: strOrNull(form.oficina),
+      materia: strOrNull(form.materia),
+      asunto: strOrNull(form.asunto),
+      resumen: strOrNull(form.resumen),
+      observaciones: strOrNull(form.observaciones),
+      persona_tipo: personaTipo,
+      persona_documento: strOrNull(form.persona_documento),
+      persona_nombre: strOrNull(form.persona_nombre),
+      tipo_almacenamiento: strOrNull(form.tipo_almacenamiento) ?? item.tipo_almacenamiento,
+      nro_archivador: strOrNull(form.nro_archivador),
+      nro_paquete: strOrNull(form.nro_paquete),
+      empastado,
+      color_archivador: strOrNull(form.color_archivador),
+      nro_estante: strOrNull(form.nro_estante),
+      nro_piso: strOrNull(form.nro_piso),
+      nro_local: strOrNull(form.nro_local),
+      folio: strOrNull(form.folio),
+    };
+  }
+
+  async function saveExpedienteEdits() {
+    if (!openExp) return;
+    if (!strOrNull(editForm.title)) {
+      showToast("El título no puede quedar vacío.", "warning");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updates: Record<string, unknown> = { ...editForm };
+      updates.anio = editForm.anio === "" || editForm.anio == null ? null : editForm.anio;
+      await updateExpedienteAction(openExp.id, updates);
+      const merged = mergeEditIntoItem(openExp, editForm);
+      setOpenExp(merged);
+      setExpedientes((prev) => prev.map((e) => (e.id === merged.id ? merged : e)));
+      setEditMode(false);
+      showToast("Cambios guardados.", "success");
+      // Resincroniza desde el servidor (por si normalizó algún valor).
+      void loadExpedientes(pagination.page);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "No se pudo guardar", "error");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -943,6 +1376,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     return { total, indexed, pending, error, totalBytes };
   }, [expedientes]);
 
+  // Conteos a mostrar: los globales del backend (todo el archivo) si están
+  // disponibles; si no, los derivados de la página cargada (fallback).
+  const displayStats = counts ?? stats;
+  const displayStatusCounts = useMemo(
+    () =>
+      counts
+        ? {
+            todos: counts.total,
+            pendientes: counts.pending,
+            indexados: counts.indexed,
+            error: counts.error,
+          }
+        : statusCounts,
+    [counts, statusCounts],
+  );
+
   function handleSort(col: string) {
     if (sortBy === col) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -984,6 +1433,68 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
     );
   }
 
+  // Precarga la ubicación física con la última usada (mismo lote) si los campos
+  // están vacíos. No pisa lo que el usuario ya escribió.
+  function prefillLastUbicacion() {
+    const last = prefs.lastUbicacion;
+    const hasAny = Object.values(last).some((v) => v && String(v).trim());
+    if (!hasAny) return;
+    const locKeys: (keyof SubirForm)[] = [
+      "tipoAlmacenamiento",
+      "nroArchivador",
+      "nroPaquete",
+      "empastado",
+      "colorArchivador",
+      "nroEstante",
+      "nroPiso",
+      "nroLocal",
+    ];
+    const filled = new Set<keyof SubirForm>();
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const k of locKeys) {
+        const v = (last as Record<string, string>)[k] ?? "";
+        if (v && !(next[k] && String(next[k]).trim())) {
+          next[k] = v as never;
+          filled.add(k);
+        }
+      }
+      return next;
+    });
+    if (filled.size > 0) {
+      setAutoFilledFields((prev) => {
+        const merged = new Set(prev);
+        for (const k of filled) merged.add(k);
+        return merged;
+      });
+    }
+  }
+
+  // Punto único de entrada al cargar un PDF (selección o drag&drop): valida,
+  // precarga la última ubicación y, si está activo, lo analiza con IA al instante.
+  function handleNewFile(f: File | null) {
+    if (!f) return;
+    if (f.type !== "application/pdf") {
+      showToast("Solo se permiten archivos PDF", "warning");
+      return;
+    }
+    if (f.size > maxPdfSizeBytes) {
+      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}`, "error");
+      return;
+    }
+    setFile(f);
+    setExtractedData(null);
+    setDuplicates([]);
+    setDupsDismissed(false);
+    lastDupSignatureRef.current = "";
+    prefillLastUbicacion();
+    if (prefs.autoExtract) {
+      void extractFromPdf({ auto: true, fileArg: f });
+    } else {
+      showToast("PDF cargado. Pulsa “Obtener datos del PDF” o llena los campos.", "info");
+    }
+  }
+
   function onDragOver(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(true);
@@ -994,31 +1505,11 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    if (f.type !== "application/pdf") {
-      showToast("Solo se permiten archivos PDF", "warning");
-      return;
-    }
-    if (f.size > maxPdfSizeBytes) {
-      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}`, "error");
-      return;
-    }
-    setFile(f);
-    showToast("PDF cargado. Revisa los datos y haz clic en Siguiente.", "success");
+    handleNewFile(e.dataTransfer.files?.[0] ?? null);
   }
 
   function onFileSelect(f: File | null) {
-    if (!f) return;
-    if (f.type !== "application/pdf") {
-      showToast("Solo se permiten archivos PDF", "warning");
-      return;
-    }
-    if (f.size > maxPdfSizeBytes) {
-      showToast(`El PDF supera el límite de ${maxPdfSizeLabel}`, "error");
-      return;
-    }
-    setFile(f);
+    handleNewFile(f);
   }
 
   function resetPreferences() {
@@ -1109,9 +1600,20 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             {hasPending ? (
               <span className="expTabBadge" aria-label="Procesando">
                 <span className="expPingDot" style={{ width: 6, height: 6 }} />
-                {statusCounts.pendientes}
+                {displayStatusCounts.pendientes}
               </span>
             ) : null}
+          </button>
+        ) : null}
+        {canManage ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "responder"}
+            className={tab === "responder" ? "expTab active" : "expTab"}
+            onClick={() => setTab("responder")}
+          >
+            <FileSignature size={15} /> Responder
           </button>
         ) : null}
         <button
@@ -1126,24 +1628,36 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
 
       {tab === "buscar" ? (
         <div className="expTabContent" id="exp-main" tabIndex={-1}>
-          <div className="expModeToggle" role="tablist" aria-label="Modo de búsqueda">
+          <div className="expSearchModes" role="tablist" aria-label="Modo de búsqueda">
             <button
               type="button"
               role="tab"
               aria-selected={mode === "buscar"}
-              className={mode === "buscar" ? "active" : ""}
-              onClick={() => setMode("buscar")}
+              className={"expSearchModeCard" + (mode === "buscar" ? " active" : "")}
+              onClick={() => changeMode("buscar")}
             >
-              <Search size={14} /> Buscar por contenido
+              <span className="expSearchModeIcon">
+                <Search size={18} />
+              </span>
+              <span className="expSearchModeText">
+                <span className="expSearchModeTitle">Buscar</span>
+                <span className="expSearchModeDesc">Por el contenido del documento</span>
+              </span>
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={mode === "preguntar"}
-              className={mode === "preguntar" ? "active" : ""}
-              onClick={() => setMode("preguntar")}
+              className={"expSearchModeCard" + (mode === "preguntar" ? " active" : "")}
+              onClick={() => changeMode("preguntar")}
             >
-              <Bot size={14} /> Preguntar a la IA
+              <span className="expSearchModeIcon">
+                <Bot size={18} />
+              </span>
+              <span className="expSearchModeText">
+                <span className="expSearchModeTitle">Preguntar a la IA</span>
+                <span className="expSearchModeDesc">Respuesta y ubicación, en lenguaje natural</span>
+              </span>
             </button>
           </div>
 
@@ -1163,15 +1677,18 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               aria-label={mode === "buscar" ? "Buscar en el contenido" : "Preguntar a la IA"}
             />
             {mode === "buscar" ? (
-              <input
-                type="number"
-                value={filterAnio}
-                onChange={(e) => setFilterAnio(e.target.value)}
-                placeholder="Año"
-                className="expField-input"
-                style={{ width: 90 }}
-                aria-label="Filtrar por año"
-              />
+              <button
+                type="button"
+                className={"expFilterToggle" + (showFilters ? " active" : "")}
+                onClick={() => setShowFilters((v) => !v)}
+                aria-expanded={showFilters}
+                title="Filtros"
+              >
+                <Filter size={15} /> Filtros
+                {activeFilterCount > 0 ? (
+                  <span className="expFilterBadge">{activeFilterCount}</span>
+                ) : null}
+              </button>
             ) : null}
             <button type="submit" disabled={searching} className="expBtn expBtn-primary">
               {searching ? (
@@ -1181,9 +1698,73 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               ) : (
                 <Bot size={16} />
               )}
-              {searching ? "Buscando..." : "Buscar"}
+              {searching
+                ? mode === "buscar"
+                  ? "Buscando..."
+                  : "Consultando..."
+                : mode === "buscar"
+                  ? "Buscar"
+                  : "Preguntar"}
             </button>
           </form>
+
+          {mode === "buscar" && showFilters ? (
+            <div className="expFilters" aria-label="Filtros de búsqueda">
+              <div className="expFilterField">
+                <label className="expFilterLabel" htmlFor="filter-anio">Año</label>
+                <input
+                  id="filter-anio"
+                  type="number"
+                  value={filterAnio}
+                  onChange={(e) => setFilterAnio(e.target.value)}
+                  placeholder="Ej. 2024"
+                  className="expField-input"
+                />
+              </div>
+              <div className="expFilterField">
+                <label className="expFilterLabel" htmlFor="filter-oficina">Oficina</label>
+                <input
+                  id="filter-oficina"
+                  value={filterOficina}
+                  onChange={(e) => setFilterOficina(e.target.value)}
+                  placeholder="Ej. Subgerencia de Tránsito"
+                  className="expField-input"
+                />
+              </div>
+              <div className="expFilterField">
+                <label className="expFilterLabel" htmlFor="filter-materia">Materia</label>
+                <input
+                  id="filter-materia"
+                  value={filterMateria}
+                  onChange={(e) => setFilterMateria(e.target.value)}
+                  placeholder="Ej. contratación"
+                  className="expField-input"
+                />
+              </div>
+              {activeFilterCount > 0 ? (
+                <button
+                  type="button"
+                  className="expBtn expBtn-ghost expFilterClear"
+                  onClick={() => {
+                    setFilterAnio("");
+                    setFilterOficina("");
+                    setFilterMateria("");
+                  }}
+                >
+                  <X size={14} /> Limpiar
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {displayStats.pending > 0 ? (
+            <span className="expHelpText" style={{ marginTop: 8 }}>
+              <Loader2 size={12} className="expSpin" /> {displayStats.pending} expediente
+              {displayStats.pending === 1 ? "" : "s"} en proceso aún no aparece
+              {displayStats.pending === 1 ? "" : "n"} en la búsqueda (se indexa
+              {displayStats.pending === 1 ? "" : "n"} en segundo plano).
+            </span>
+          ) : null}
 
           {mode === "preguntar" && !query && !answer ? (
             <div className="expSuggestedQuestions" aria-label="Ejemplos de preguntas">
@@ -1248,10 +1829,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       key={`${source.expedienteId}-${index}`}
                       type="button"
                       className="expCitation"
-                      onClick={() => {
-                        const exp = expedientes.find((e) => e.id === source.expedienteId);
-                        if (exp) setOpenExp(exp);
-                      }}
+                      onClick={() => void openExpedienteById(source.expedienteId)}
                     >
                       <span className="expCitationNumber">E{index + 1}</span>
                       <span className="expCitationTitle">{source.title}</span>
@@ -1279,10 +1857,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     <article
                       key={source.expedienteId}
                       className="expResultCard"
-                      onClick={() => {
-                        const exp = expedientes.find((e) => e.id === source.expedienteId);
-                        if (exp) setOpenExp(exp);
-                      }}
+                      onClick={() => void openExpedienteById(source.expedienteId)}
                     >
                       <div className="expResultIcon">
                         <FileText size={18} />
@@ -1290,6 +1865,12 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       <div className="expResultBody">
                         <h4 className="expResultTitle">{source.title}</h4>
                         <div className="expResultMeta">
+                          {source.serieDocumento ? (
+                            <span className="expResultMetaItem">{source.serieDocumento}</span>
+                          ) : null}
+                          {source.anio ? (
+                            <span className="expResultMetaItem">{source.anio}</span>
+                          ) : null}
                           {source.materia ? (
                             <span className="expResultMetaItem">{source.materia}</span>
                           ) : null}
@@ -1325,14 +1906,14 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
             </div>
           ) : null}
 
-          {stats.total > 0 ? (
+          {displayStats.total > 0 ? (
             <div className="expStats" aria-label="Resumen del archivo">
               <div className="expStatCard statBrand">
                 <div className="expStatHeader">
                   <span className="expStatLabel">Total</span>
                   <FileText className="expStatIcon" size={16} />
                 </div>
-                <span className="expStatValue">{stats.total}</span>
+                <span className="expStatValue">{displayStats.total}</span>
                 <span className="expStatHint">expedientes en el archivo</span>
               </div>
               <div className="expStatCard statSuccess">
@@ -1340,7 +1921,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   <span className="expStatLabel">Indexados</span>
                   <CheckCircle2 className="expStatIcon" size={16} />
                 </div>
-                <span className="expStatValue">{stats.indexed}</span>
+                <span className="expStatValue">{displayStats.indexed}</span>
                 <span className="expStatHint">listos para buscar</span>
               </div>
               <div className="expStatCard statWarning">
@@ -1348,7 +1929,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   <span className="expStatLabel">Pendientes</span>
                   <Loader2 className="expStatIcon" size={16} />
                 </div>
-                <span className="expStatValue">{stats.pending}</span>
+                <span className="expStatValue">{displayStats.pending}</span>
                 <span className="expStatHint">procesándose ahora</span>
               </div>
               <div className="expStatCard statDanger">
@@ -1356,7 +1937,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   <span className="expStatLabel">Con error</span>
                   <AlertCircle className="expStatIcon" size={16} />
                 </div>
-                <span className="expStatValue">{stats.error}</span>
+                <span className="expStatValue">{displayStats.error}</span>
                 <span className="expStatHint">requieren atención</span>
               </div>
               <div className="expStatCard statInfo">
@@ -1364,7 +1945,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   <span className="expStatLabel">Tamaño</span>
                   <FileUp className="expStatIcon" size={16} />
                 </div>
-                <span className="expStatValue">{formatBytes(stats.totalBytes)}</span>
+                <span className="expStatValue">{formatBytes(displayStats.totalBytes)}</span>
                 <span className="expStatHint">en Supabase Storage</span>
               </div>
             </div>
@@ -1431,7 +2012,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       onClick={() => setStatusFilter(s.id)}
                     >
                       {s.label}
-                      <span className="expPillCount">{statusCounts[s.id]}</span>
+                      <span className="expPillCount">{displayStatusCounts[s.id]}</span>
                     </button>
                   ))}
                 </div>
@@ -1628,7 +2209,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                             <h4 className="expListItemTitle">{exp.title}</h4>
                             <div className="expListItemMeta">
                               {exp.serie_documento ? (
-                                <span>N° {exp.serie_documento}</span>
+                                <span>{exp.serie_documento}</span>
                               ) : (
                                 <span>Sin número</span>
                               )}
@@ -1799,6 +2380,43 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
 
       {tab === "subir" && canManage ? (
         <div className="expTabContent">
+          {/* Selector de modo: uno por uno vs por lotes */}
+          <div
+            role="tablist"
+            aria-label="Modo de subida"
+            style={{ display: "flex", gap: 8, marginBottom: 16 }}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={uploadMode === "single"}
+              className={uploadMode === "single" ? "expBtn expBtn-primary" : "expBtn expBtn-ghost"}
+              onClick={() => setUploadMode("single")}
+            >
+              <FileText size={15} /> Uno por uno
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={uploadMode === "batch"}
+              className={uploadMode === "batch" ? "expBtn expBtn-primary" : "expBtn expBtn-ghost"}
+              onClick={() => setUploadMode("batch")}
+            >
+              <UploadCloud size={15} /> Por lotes
+            </button>
+          </div>
+
+          {uploadMode === "batch" ? (
+            <BatchUpload
+              autoExtract={prefs.autoExtract}
+              lastUbicacion={prefs.lastUbicacion}
+              setLastUbicacion={prefs.setLastUbicacion}
+              onUploaded={() => {
+                void Promise.all([loadExpedientes(), refreshRecentUploads()]);
+              }}
+              showToast={showToast}
+            />
+          ) : (
           <form onSubmit={uploadExpediente}>
             <div className="expWizard">
               <div className="expWizardProgress" role="tablist" aria-label="Pasos del wizard">
@@ -1806,9 +2424,8 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   const isActive = wizardStep === idx;
                   const isDone = wizardStep > idx;
                   return (
-                    <>
+                    <Fragment key={step.id}>
                       <button
-                        key={step.id}
                         type="button"
                         role="tab"
                         aria-selected={isActive}
@@ -1825,9 +2442,9 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         <span className="expWizardStepLabel">{step.label}</span>
                       </button>
                       {idx < WIZARD_STEPS.length - 1 ? (
-                        <div key={`conn-${idx}`} className="expWizardStepConnector" />
+                        <div className="expWizardStepConnector" />
                       ) : null}
-                    </>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -1913,13 +2530,36 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </label>
 
-                  {/* Botón para extraer datos automáticamente del PDF */}
+                  {/* Toggle: analizar con IA automáticamente al cargar */}
+                  {canManage ? (
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                        color: "var(--exp-muted)",
+                        cursor: "pointer",
+                        marginTop: 10,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={prefs.autoExtract}
+                        onChange={(e) => prefs.setAutoExtract(e.target.checked)}
+                      />
+                      <Sparkles size={13} />
+                      Analizar el PDF con IA automáticamente al cargarlo
+                    </label>
+                  ) : null}
+
+                  {/* Botón para extraer datos manualmente (si el auto está apagado o quieres re-analizar) */}
                   {file && canManage ? (
                     <div className="expExtractSection">
                       <button
                         type="button"
                         className="expBtn expBtn-secondary expExtractBtn"
-                        onClick={extractFromPdf}
+                        onClick={() => extractFromPdf()}
                         disabled={extracting}
                         aria-label="Obtener datos del PDF automaticamente"
                       >
@@ -1931,7 +2571,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         ) : (
                           <>
                             <Sparkles size={16} />
-                            Obtener datos del PDF
+                            {prefs.autoExtract ? "Volver a analizar el PDF" : "Obtener datos del PDF"}
                           </>
                         )}
                       </button>
@@ -1941,6 +2581,52 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         No modifica el archivo ni indexa nada.
                       </span>
                     </div>
+                  ) : null}
+
+                  {/* Aviso proactivo de posibles duplicados */}
+                  {duplicates.length > 0 && !dupsDismissed ? (
+                    <div
+                      role="alert"
+                      style={{
+                        marginTop: 12,
+                        padding: 12,
+                        borderRadius: 10,
+                        border: "1px solid var(--exp-warn-line, rgba(234,179,8,0.4))",
+                        background: "var(--exp-warn-soft, rgba(234,179,8,0.08))",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+                        <AlertCircle size={15} />
+                        Posible{duplicates.length === 1 ? "" : "s"} duplicado{duplicates.length === 1 ? "" : "s"} ({duplicates.length})
+                      </div>
+                      <span className="expHelpText" style={{ marginTop: 0 }}>
+                        Ya hay expedientes parecidos archivados. Revisa antes de subir para no duplicar.
+                      </span>
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {duplicates.slice(0, 4).map((d) => (
+                          <li key={d.id}>
+                            {d.title}
+                            {d.anio ? ` · ${d.anio}` : ""} · {d.status}
+                          </li>
+                        ))}
+                      </ul>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          type="button"
+                          className="expBtn expBtn-ghost expBtn-small"
+                          onClick={() => setDupsDismissed(true)}
+                        >
+                          Continuar de todos modos
+                        </button>
+                      </div>
+                    </div>
+                  ) : checkingDuplicates ? (
+                    <span className="expHelpText" style={{ marginTop: 10 }}>
+                      <Loader2 size={12} className="expSpin" /> Buscando posibles duplicados…
+                    </span>
                   ) : null}
 
                   {/* Preview de datos extraídos (editables) */}
@@ -2006,15 +2692,15 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           placeholder="Número SGD"
                         />
                         <EditableExtractedField
-                          label="Serie"
+                          label="Tipo"
                           icon={<FileText size={11} />}
-                          value={extractedData.numeroDocumento ?? ""}
+                          value={extractedData.tipoDocumento ?? ""}
                           onChange={(v) =>
                             setExtractedData((prev) =>
                               prev
                                 ? {
                                     ...prev,
-                                    numeroDocumento: v.trim() || null,
+                                    tipoDocumento: v.trim() || null,
                                   }
                                 : prev,
                             )
@@ -2022,11 +2708,11 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           onRemove={() =>
                             setExtractedData((prev) =>
                               prev
-                                ? { ...prev, numeroDocumento: null }
+                                ? { ...prev, tipoDocumento: null }
                                 : prev,
                             )
                           }
-                          placeholder="Serie documental"
+                          placeholder="Resolución, Oficio…"
                         />
                         <EditableExtractedField
                           label="Año"
@@ -2053,23 +2739,20 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           type="number"
                         />
                         <EditableExtractedField
-                          label="Fecha"
-                          icon={<History size={11} />}
-                          value={extractedData.fecha ?? ""}
+                          label="Oficina"
+                          icon={<Info size={11} />}
+                          value={extractedData.oficina ?? ""}
                           onChange={(v) =>
                             setExtractedData((prev) =>
-                              prev
-                                ? { ...prev, fecha: v.trim() || null }
-                                : prev,
+                              prev ? { ...prev, oficina: v.trim() || null } : prev,
                             )
                           }
                           onRemove={() =>
                             setExtractedData((prev) =>
-                              prev ? { ...prev, fecha: null } : prev,
+                              prev ? { ...prev, oficina: null } : prev,
                             )
                           }
-                          placeholder="YYYY-MM-DD"
-                          type="date"
+                          placeholder="Oficina emisora"
                         />
                         <EditableExtractedField
                           label="Materia"
@@ -2108,45 +2791,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                           placeholder="Asunto o sumilla"
                         />
                         <EditableExtractedField
-                          label="Remitente"
+                          label="Persona"
                           icon={<Info size={11} />}
-                          value={extractedData.remitente ?? ""}
+                          value={extractedData.personaNombre ?? ""}
                           onChange={(v) =>
                             setExtractedData((prev) =>
-                              prev
-                                ? { ...prev, remitente: v.trim() || null }
-                                : prev,
-                            )
-                          }
-                          onRemove={() =>
-                            setExtractedData((prev) =>
-                              prev ? { ...prev, remitente: null } : prev,
-                            )
-                          }
-                          placeholder="Quién emite"
-                        />
-                        <EditableExtractedField
-                          label="Destinatario"
-                          icon={<Info size={11} />}
-                          value={extractedData.destinatario ?? ""}
-                          onChange={(v) =>
-                            setExtractedData((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    destinatario: v.trim() || null,
-                                  }
-                                : prev,
+                              prev ? { ...prev, personaNombre: v.trim() || null } : prev,
                             )
                           }
                           onRemove={() =>
                             setExtractedData((prev) =>
                               prev
-                                ? { ...prev, destinatario: null }
+                                ? { ...prev, personaNombre: null, personaTipo: null }
                                 : prev,
                             )
                           }
-                          placeholder="A quién se dirige"
+                          placeholder="Persona/empresa interesada"
                         />
                         <EditableExtractedField
                           label="Folios"
@@ -2233,21 +2893,24 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       <input
                         value={form.sgdExpediente}
                         onChange={(e) => setField("sgdExpediente", e.target.value)}
-                        placeholder="Ej. 2024-001234"
+                        placeholder="N° del sistema de gestión documental"
                         className="expField-input"
                       />
+                      <span className="expHelpText">
+                        N° de expediente del sistema documental externo. Lo asignas tú (no se autocompleta).
+                      </span>
                     </div>
                     <div className="expField">
-                      <label className="expField-label">Serie documental</label>
+                      <label className="expField-label">Serie documental{autoBadge("serieDocumento")}</label>
                       <input
                         value={form.serieDocumento}
                         onChange={(e) => setField("serieDocumento", e.target.value)}
-                        placeholder="Resolución, Oficio, Informe…"
+                        placeholder="Ej. Resolución 004-2024-MDCH-A"
                         className="expField-input"
                       />
                     </div>
                     <div className="expField">
-                      <label className="expField-label">Tipo de documento</label>
+                      <label className="expField-label">Tipo de documento{autoBadge("tipoDocumento")}</label>
                       <select
                         value={form.tipoDocumento}
                         onChange={(e) => setField("tipoDocumento", e.target.value)}
@@ -2278,6 +2941,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     <div className="expField">
                       <label className="expField-label">
                         Año <span className="optional">(opcional)</span>
+                        {autoBadge("anio")}
                       </label>
                       <input
                         type="number"
@@ -2289,18 +2953,20 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </div>
                     <div className="expField">
                       <label className="expField-label">
-                        Folio <span className="optional">(opcional)</span>
+                        Folios <span className="optional">(opcional)</span>
+                        {autoBadge("folio")}
                       </label>
                       <input
                         value={form.folio}
                         onChange={(e) => setField("folio", e.target.value)}
-                        placeholder="Nº de folio inicial"
+                        placeholder="Nº de páginas del PDF"
                         className="expField-input"
                       />
                     </div>
                     <div className="expField" style={{ gridColumn: "1 / -1" }}>
                       <label className="expField-label">
                         Oficina <span className="optional">(opcional)</span>
+                        {autoBadge("oficina")}
                       </label>
                       <input
                         value={form.oficina}
@@ -2312,6 +2978,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     <div className="expField" style={{ gridColumn: "1 / -1" }}>
                       <label className="expField-label">
                         Título <span className="optional">(opcional)</span>
+                        {autoBadge("title")}
                       </label>
                       <input
                         value={form.title}
@@ -2346,7 +3013,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   }}
                 >
                   <div className="expField">
-                    <label className="expField-label">Materia</label>
+                    <label className="expField-label">Materia{autoBadge("materia")}</label>
                     <input
                       value={form.materia}
                       onChange={(e) => setField("materia", e.target.value)}
@@ -2355,7 +3022,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Asunto</label>
+                    <label className="expField-label">Asunto{autoBadge("asunto")}</label>
                     <input
                       value={form.asunto}
                       onChange={(e) => setField("asunto", e.target.value)}
@@ -2364,7 +3031,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                    <label className="expField-label">Resumen</label>
+                    <label className="expField-label">Resumen{autoBadge("resumen")}</label>
                     <textarea
                       rows={3}
                       value={form.resumen}
@@ -2428,7 +3095,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                    <label className="expField-label">Nombre</label>
+                    <label className="expField-label">Nombre{autoBadge("personaNombre")}</label>
                     <input
                       value={form.personaNombre}
                       onChange={(e) => setField("personaNombre", e.target.value)}
@@ -2450,6 +3117,76 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </span>
                   </h3>
                 </div>
+
+                {/* Sugerencias inteligentes de ubicación física */}
+                {(() => {
+                  const last = prefs.lastUbicacion;
+                  const hasLast = Object.values(last).some((v) => v && String(v).trim());
+                  const hasSugerida = Boolean(
+                    ubicacionSugerida &&
+                      Object.values(ubicacionSugerida).some((v) => v !== null && v !== ""),
+                  );
+                  if (!hasLast && !hasSugerida && !siguientePaquete) return null;
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        marginBottom: 12,
+                        alignItems: "center",
+                      }}
+                    >
+                      <span className="expHelpText" style={{ marginTop: 0 }}>
+                        <Lightbulb size={12} /> Sugerencias:
+                      </span>
+                      {hasLast ? (
+                        <button
+                          type="button"
+                          className="expBtn expBtn-secondary expBtn-small"
+                          onClick={() => {
+                            applyUbicacionSugerida({
+                              tipo_almacenamiento: last.tipoAlmacenamiento || null,
+                              nro_archivador: last.nroArchivador || null,
+                              nro_paquete: last.nroPaquete || null,
+                              empastado:
+                                last.empastado === "si"
+                                  ? true
+                                  : last.empastado === "no"
+                                    ? false
+                                    : null,
+                              color_archivador: last.colorArchivador || null,
+                              nro_estante: last.nroEstante || null,
+                              nro_piso: last.nroPiso || null,
+                              nro_local: last.nroLocal || null,
+                            });
+                          }}
+                        >
+                          <History size={13} /> Usar última ubicación
+                        </button>
+                      ) : null}
+                      {hasSugerida && ubicacionSugerida ? (
+                        <button
+                          type="button"
+                          className="expBtn expBtn-secondary expBtn-small"
+                          onClick={() => applyUbicacionSugerida(ubicacionSugerida)}
+                        >
+                          <MapPin size={13} /> Misma caja del archivo
+                        </button>
+                      ) : null}
+                      {siguientePaquete ? (
+                        <button
+                          type="button"
+                          className="expBtn expBtn-ghost expBtn-small"
+                          onClick={() => setField("nroPaquete", siguientePaquete)}
+                          title="Siguiente número de paquete disponible"
+                        >
+                          <Plus size={13} /> Paquete {siguientePaquete}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })()}
                 <div
                   style={{
                     display: "grid",
@@ -2458,7 +3195,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                   }}
                 >
                   <div className="expField">
-                    <label className="expField-label">Tipo de contenedor</label>
+                    <label className="expField-label">Tipo de contenedor{autoBadge("tipoAlmacenamiento")}</label>
                     <select
                       value={form.tipoAlmacenamiento}
                       onChange={(e) => setField("tipoAlmacenamiento", e.target.value)}
@@ -2473,7 +3210,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </select>
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Nº de archivador</label>
+                    <label className="expField-label">Nº de archivador{autoBadge("nroArchivador")}</label>
                     <input
                       value={form.nroArchivador}
                       onChange={(e) => setField("nroArchivador", e.target.value)}
@@ -2482,7 +3219,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Nº de paquete</label>
+                    <label className="expField-label">Nº de paquete{autoBadge("nroPaquete")}</label>
                     <input
                       value={form.nroPaquete}
                       onChange={(e) => setField("nroPaquete", e.target.value)}
@@ -2491,7 +3228,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Empastado</label>
+                    <label className="expField-label">Empastado{autoBadge("empastado")}</label>
                     <select
                       value={form.empastado}
                       onChange={(e) => setField("empastado", e.target.value)}
@@ -2503,7 +3240,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </select>
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Color</label>
+                    <label className="expField-label">Color{autoBadge("colorArchivador")}</label>
                     <select
                       value={form.colorArchivador}
                       onChange={(e) => setField("colorArchivador", e.target.value)}
@@ -2518,7 +3255,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     </select>
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Estante</label>
+                    <label className="expField-label">Estante{autoBadge("nroEstante")}</label>
                     <input
                       value={form.nroEstante}
                       onChange={(e) => setField("nroEstante", e.target.value)}
@@ -2527,7 +3264,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField">
-                    <label className="expField-label">Piso</label>
+                    <label className="expField-label">Piso{autoBadge("nroPiso")}</label>
                     <input
                       value={form.nroPiso}
                       onChange={(e) => setField("nroPiso", e.target.value)}
@@ -2536,7 +3273,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                     />
                   </div>
                   <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                    <label className="expField-label">Local / ambiente</label>
+                    <label className="expField-label">Local / ambiente{autoBadge("nroLocal")}</label>
                     <select
                       value={form.nroLocal}
                       onChange={(e) => setField("nroLocal", e.target.value)}
@@ -2586,6 +3323,11 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                       onConfirm: () => {
                         setForm(EMPTY_FORM);
                         setFile(null);
+                        setExtractedData(null);
+                        setAutoFilledFields(new Set());
+                        setDuplicates([]);
+                        setDupsDismissed(false);
+                        lastDupSignatureRef.current = "";
                         setWizardStep(0);
                         showToast("Subida cancelada", "info");
                       },
@@ -2596,20 +3338,37 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 </button>
               </div>
               {wizardStep < 3 ? (
-                <button
-                  type="button"
-                  className="expBtn expBtn-primary"
-                  onClick={() => {
-                    const check = canProceedStep();
-                    if (!check.ok) {
-                      showToast(check.reason ?? "Completa los datos requeridos", "warning");
-                      return;
-                    }
-                    setWizardStep((s) => (s + 1) as WizardStep);
-                  }}
-                >
-                  Siguiente <ChevronRight size={16} />
-                </button>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {file && !extracting ? (
+                    <button
+                      type="submit"
+                      disabled={uploading}
+                      className="expBtn expBtn-ghost"
+                      title="Subir ya con los datos actuales (los campos vacíos los completa la IA)"
+                    >
+                      {uploading ? (
+                        <Loader2 size={16} className="expSpin" />
+                      ) : (
+                        <UploadCloud size={16} />
+                      )}
+                      Subir ahora
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="expBtn expBtn-primary"
+                    onClick={() => {
+                      const check = canProceedStep();
+                      if (!check.ok) {
+                        showToast(check.reason ?? "Completa los datos requeridos", "warning");
+                        return;
+                      }
+                      setWizardStep((s) => (s + 1) as WizardStep);
+                    }}
+                  >
+                    Siguiente <ChevronRight size={16} />
+                  </button>
+                </div>
               ) : (
                 <button
                   type="submit"
@@ -2635,6 +3394,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
             ) : null}
           </form>
+          )}
 
           {/* Lista de expedientes subidos (recientes) */}
           {canManage ? (
@@ -2713,7 +3473,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         </div>
                         <div className="expRecentItemMeta">
                           {exp.serie_documento ? (
-                            <span>N° {exp.serie_documento}</span>
+                            <span>{exp.serie_documento}</span>
                           ) : (
                             <span>Sin número</span>
                           )}
@@ -2732,6 +3492,22 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                         {exp.error_message ? (
                           <div className="expRecentItemError">
                             {exp.error_message}
+                            <div style={{ marginTop: 8 }}>
+                              <button
+                                type="button"
+                                className="expBtn expBtn-secondary expBtn-small"
+                                onClick={() => void reindexExpediente(exp.id)}
+                                disabled={reindexingId === exp.id}
+                                title="Reintenta la extracción con OCR de alta calidad"
+                              >
+                                {reindexingId === exp.id ? (
+                                  <Loader2 size={13} className="expSpin" />
+                                ) : (
+                                  <RefreshCw size={13} />
+                                )}
+                                Reintentar con OCR de alta calidad
+                              </button>
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -2821,8 +3597,12 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
         </div>
       ) : null}
 
+      {tab === "responder" && canManage ? (
+        <RespuestaPanel showToast={showToast} />
+      ) : null}
+
       {openExp ? (
-        <div className="expSlideOverOverlay" onClick={() => setOpenExp(null)}>
+        <div className="expSlideOverOverlay" onClick={closeSlideOver}>
           <aside
             className="expSlideOver"
             onClick={(e) => e.stopPropagation()}
@@ -2839,7 +3619,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
               </div>
               <button
                 type="button"
-                onClick={() => setOpenExp(null)}
+                onClick={closeSlideOver}
                 className="expSlideOver-close"
                 aria-label="Cerrar"
               >
@@ -2852,58 +3632,319 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 src={`/api/expedientes-archivo/${openExp.id}`}
                 style={{ width: "100%", height: "70vh", border: 0 }}
               />
-              <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-                {openExp.materia ? (
+              {openExp.metadata?.tokenUsage ? (
+                <div
+                  className="expHelpText"
+                  style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}
+                  title="Tokens de OpenAI consumidos al procesar este expediente (OCR + análisis). Coste estimado."
+                >
+                  <Sparkles size={12} />
+                  Consumo IA: {openExp.metadata.tokenUsage.totalTokens.toLocaleString("es-PE")} tokens
+                  {openExp.metadata.tokenUsage.estimatedCostUsd > 0
+                    ? ` · ~$${openExp.metadata.tokenUsage.estimatedCostUsd.toFixed(4)}`
+                    : ""}
+                  {openExp.metadata.tokenUsage.ocr
+                    ? ` · OCR ${openExp.metadata.tokenUsage.ocr.model}${
+                        openExp.metadata.tokenUsage.ocr.fromCache ? " (reutilizado)" : ""
+                      }`
+                    : ""}
+                  {openExp.metadata.tokenUsage.analysis
+                    ? ` · análisis ${openExp.metadata.tokenUsage.analysis.model}`
+                    : ""}
+                </div>
+              ) : null}
+              {editMode ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                    marginTop: 16,
+                  }}
+                >
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Título</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.title ?? "")}
+                      onChange={(e) => setEditField("title", e.target.value)}
+                    />
+                  </div>
                   <div className="expField">
+                    <label className="expField-label">Nº SGD</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.sgd_expediente ?? "")}
+                      onChange={(e) => setEditField("sgd_expediente", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Serie documental</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.serie_documento ?? "")}
+                      onChange={(e) => setEditField("serie_documento", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Año</label>
+                    <input
+                      type="number"
+                      className="expField-input"
+                      value={String(editForm.anio ?? "")}
+                      onChange={(e) => setEditField("anio", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Tipo de documento</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.tipo_documento ?? "")}
+                      onChange={(e) => setEditField("tipo_documento", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Oficina</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.oficina ?? "")}
+                      onChange={(e) => setEditField("oficina", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
                     <label className="expField-label">Materia</label>
-                    <div>{openExp.materia}</div>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.materia ?? "")}
+                      onChange={(e) => setEditField("materia", e.target.value)}
+                    />
                   </div>
-                ) : null}
-                {openExp.asunto ? (
-                  <div className="expField">
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
                     <label className="expField-label">Asunto</label>
-                    <div>{openExp.asunto}</div>
+                    <textarea
+                      className="expField-input"
+                      rows={2}
+                      value={String(editForm.asunto ?? "")}
+                      onChange={(e) => setEditField("asunto", e.target.value)}
+                    />
                   </div>
-                ) : null}
-                {(openExp.nro_estante || openExp.nro_piso || openExp.nro_local) ? (
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Resumen</label>
+                    <textarea
+                      className="expField-input"
+                      rows={3}
+                      value={String(editForm.resumen ?? "")}
+                      onChange={(e) => setEditField("resumen", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Observaciones</label>
+                    <textarea
+                      className="expField-input"
+                      rows={2}
+                      value={String(editForm.observaciones ?? "")}
+                      onChange={(e) => setEditField("observaciones", e.target.value)}
+                    />
+                  </div>
                   <div className="expField">
-                    <label className="expField-label">Ubicación física</label>
-                    <div>
-                      {[openExp.nro_estante && `Estante ${openExp.nro_estante}`, openExp.nro_piso && `Piso ${openExp.nro_piso}`, openExp.nro_local]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
+                    <label className="expField-label">Tipo de persona</label>
+                    <select
+                      className="expField-select"
+                      value={String(editForm.persona_tipo ?? "")}
+                      onChange={(e) => setEditField("persona_tipo", e.target.value)}
+                    >
+                      <option value="">— Sin persona —</option>
+                      <option value="natural">Natural</option>
+                      <option value="juridica">Jurídica</option>
+                    </select>
                   </div>
-                ) : null}
-              </div>
+                  <div className="expField">
+                    <label className="expField-label">Documento de la persona</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.persona_documento ?? "")}
+                      onChange={(e) => setEditField("persona_documento", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Nombre / razón social</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.persona_nombre ?? "")}
+                      onChange={(e) => setEditField("persona_nombre", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Tipo de contenedor</label>
+                    <select
+                      className="expField-select"
+                      value={String(editForm.tipo_almacenamiento ?? "")}
+                      onChange={(e) => setEditField("tipo_almacenamiento", e.target.value)}
+                    >
+                      {CONTENEDOR_TIPOS.map((t) => (
+                        <option key={t} value={t}>
+                          {CONTENEDOR_TIPO_LABELS[t]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Color</label>
+                    <select
+                      className="expField-select"
+                      value={String(editForm.color_archivador ?? "")}
+                      onChange={(e) => setEditField("color_archivador", e.target.value)}
+                    >
+                      <option value="">— Sin color —</option>
+                      {ARCHIVO_COLORES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Nº de archivador</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.nro_archivador ?? "")}
+                      onChange={(e) => setEditField("nro_archivador", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Nº de paquete</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.nro_paquete ?? "")}
+                      onChange={(e) => setEditField("nro_paquete", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Empastado</label>
+                    <select
+                      className="expField-select"
+                      value={String(editForm.empastado ?? "")}
+                      onChange={(e) => setEditField("empastado", e.target.value)}
+                    >
+                      <option value="">— Sin dato —</option>
+                      <option value="si">Sí</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Folio</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.folio ?? "")}
+                      onChange={(e) => setEditField("folio", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Estante</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.nro_estante ?? "")}
+                      onChange={(e) => setEditField("nro_estante", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField">
+                    <label className="expField-label">Piso</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.nro_piso ?? "")}
+                      onChange={(e) => setEditField("nro_piso", e.target.value)}
+                    />
+                  </div>
+                  <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                    <label className="expField-label">Local / ambiente</label>
+                    <input
+                      className="expField-input"
+                      value={String(editForm.nro_local ?? "")}
+                      onChange={(e) => setEditField("nro_local", e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+                  {openExp.materia ? (
+                    <div className="expField">
+                      <label className="expField-label">Materia</label>
+                      <div>{openExp.materia}</div>
+                    </div>
+                  ) : null}
+                  {openExp.asunto ? (
+                    <div className="expField">
+                      <label className="expField-label">Asunto</label>
+                      <div>{openExp.asunto}</div>
+                    </div>
+                  ) : null}
+                  {(openExp.nro_estante || openExp.nro_piso || openExp.nro_local) ? (
+                    <div className="expField">
+                      <label className="expField-label">Ubicación física</label>
+                      <div>
+                        {[openExp.nro_estante && `Estante ${openExp.nro_estante}`, openExp.nro_piso && `Piso ${openExp.nro_piso}`, openExp.nro_local]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
             {canManage ? (
               <div className="expSlideOver-footer">
-                <button
-                  type="button"
-                  className="expBtn expBtn-ghost"
-                  onClick={() => {
-                    setReplaceExp(openExp);
-                    setOpenExp(null);
-                  }}
-                >
-                  <RefreshCw size={14} /> Reemplazar PDF
-                </button>
-                <a
-                  href={`/api/expedientes-archivo/${openExp.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="expBtn expBtn-secondary"
-                >
-                  <Download size={14} /> Descargar
-                </a>
-                <button
-                  type="button"
-                  className="expBtn expBtn-primary"
-                  onClick={() => setOpenExp(null)}
-                >
-                  Cerrar
-                </button>
+                {editMode ? (
+                  <>
+                    <button
+                      type="button"
+                      className="expBtn expBtn-ghost"
+                      onClick={() => setEditMode(false)}
+                      disabled={savingEdit}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="expBtn expBtn-primary"
+                      onClick={() => void saveExpedienteEdits()}
+                      disabled={savingEdit}
+                    >
+                      {savingEdit ? <Loader2 size={14} className="expSpin" /> : <Save size={14} />}
+                      {savingEdit ? "Guardando…" : "Guardar cambios"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="expBtn expBtn-ghost" onClick={startEdit}>
+                      <Pencil size={14} /> Editar datos
+                    </button>
+                    <button
+                      type="button"
+                      className="expBtn expBtn-ghost"
+                      onClick={() => {
+                        setReplaceExp(openExp);
+                        closeSlideOver();
+                      }}
+                    >
+                      <RefreshCw size={14} /> Reemplazar PDF
+                    </button>
+                    <a
+                      href={`/api/expedientes-archivo/${openExp.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="expBtn expBtn-secondary"
+                    >
+                      <Download size={14} /> Descargar
+                    </a>
+                    <button
+                      type="button"
+                      className="expBtn expBtn-primary"
+                      onClick={closeSlideOver}
+                    >
+                      Cerrar
+                    </button>
+                  </>
+                )}
               </div>
             ) : null}
           </aside>
@@ -2933,10 +3974,7 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
           onAsk={askInChat}
           searching={searching}
           messages={chatMessages}
-          onOpenExpediente={(id) => {
-            const exp = expedientes.find((e) => e.id === id);
-            if (exp) setOpenExp(exp);
-          }}
+          onOpenExpediente={(id) => void openExpedienteById(id)}
         />
       ) : null}
 
@@ -3089,7 +4127,10 @@ export function ExpedientesArchivoWorkspace({ canManage }: { canManage: boolean 
                 type="button"
                 className={`expBtn ${confirm.variant === "danger" ? "expBtn-danger" : "expBtn-primary"}`}
                 onClick={() => {
-                  void confirm.onConfirm();
+                  // Cerrar primero para que el aviso de "deshacer" quede visible.
+                  const action = confirm.onConfirm;
+                  closeConfirm();
+                  void action();
                 }}
               >
                 {confirm.variant === "danger" ? "Eliminar" : "Confirmar"}

@@ -11,23 +11,30 @@ export function useLocalStorage<T>(
   initialValue: T,
   validate?: (value: unknown) => value is T,
 ): [T, Setter<T>, () => void] {
-  const [value, setValue] = useState<T>(() => {
-    if (typeof window === "undefined") return initialValue;
-    try {
-      const item = window.localStorage.getItem(key);
-      if (item === null) return initialValue;
-      const parsed = JSON.parse(item) as unknown;
-      if (validate && !validate(parsed)) {
-        return initialValue;
-      }
-      return parsed as T;
-    } catch {
-      return initialValue;
-    }
-  });
+  // Siempre arranca con el default para que el primer render del cliente
+  // coincida con el del servidor (evita hydration mismatch SSR). El valor
+  // guardado se lee tras el montaje en el efecto de abajo.
+  const [value, setValue] = useState<T>(initialValue);
 
   // Ref para evitar writes redundantes
   const lastWrittenRef = useRef<string | null>(null);
+
+  // Hidratar desde localStorage tras el montaje (no en el inicializador, que
+  // correría distinto en server vs cliente). `validate` es un type-guard puro,
+  // así que capturar el del primer render es seguro.
+  useEffect(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null) return;
+      const parsed = JSON.parse(item) as unknown;
+      if (validate && !validate(parsed)) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setValue(parsed as T);
+    } catch {
+      // Ignorar
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const setStoredValue: Setter<T> = useCallback(
     (next) => {
@@ -84,6 +91,36 @@ export function useLocalStorage<T>(
 type ViewMode = "lista" | "tabla" | "tarjetas";
 type StatusFilter = "todos" | "pendientes" | "indexados" | "error";
 
+// Ubicación física recordada entre subidas (subconjunto de SubirForm).
+export type LastUbicacion = {
+  tipoAlmacenamiento: string;
+  nroArchivador: string;
+  nroPaquete: string;
+  empastado: string;
+  colorArchivador: string;
+  nroEstante: string;
+  nroPiso: string;
+  nroLocal: string;
+};
+
+const EMPTY_UBICACION: LastUbicacion = {
+  tipoAlmacenamiento: "",
+  nroArchivador: "",
+  nroPaquete: "",
+  empastado: "",
+  colorArchivador: "",
+  nroEstante: "",
+  nroPiso: "",
+  nroLocal: "",
+};
+
+function isLastUbicacion(v: unknown): v is LastUbicacion {
+  if (typeof v !== "object" || v === null) return false;
+  return Object.keys(EMPTY_UBICACION).every(
+    (k) => typeof (v as Record<string, unknown>)[k] === "string",
+  );
+}
+
 export function useExpedientesPreferences() {
   const [viewMode, setViewMode, resetViewMode] = useLocalStorage<ViewMode>(
     "exp:viewMode",
@@ -120,10 +157,26 @@ export function useExpedientesPreferences() {
     false,
   );
 
-  const [tab, setTab, resetTab] = useLocalStorage<"buscar" | "subir">(
+  const [tab, setTab, resetTab] = useLocalStorage<"buscar" | "subir" | "responder">(
     "exp:lastTab",
     "buscar",
-    (v): v is "buscar" | "subir" => v === "buscar" || v === "subir",
+    (v): v is "buscar" | "subir" | "responder" =>
+      v === "buscar" || v === "subir" || v === "responder",
+  );
+
+  // Analizar el PDF con IA automáticamente al cargarlo (sin pulsar un botón).
+  const [autoExtract, setAutoExtract, resetAutoExtract] = useLocalStorage<boolean>(
+    "exp:autoExtract",
+    true,
+    (v): v is boolean => typeof v === "boolean",
+  );
+
+  // Última ubicación física usada (para precargarla en la siguiente subida del
+  // mismo lote: quien archiva mete N expedientes en la misma caja/estante).
+  const [lastUbicacion, setLastUbicacion, resetLastUbicacion] = useLocalStorage<LastUbicacion>(
+    "exp:lastUbicacion",
+    EMPTY_UBICACION,
+    isLastUbicacion,
   );
 
   // Setters tipados estables (no cambian entre renders)
@@ -146,6 +199,8 @@ export function useExpedientesPreferences() {
     resetFilters();
     resetCollapsed();
     resetTab();
+    resetAutoExtract();
+    resetLastUbicacion();
   }, [
     resetViewMode,
     resetStatusFilter,
@@ -154,6 +209,8 @@ export function useExpedientesPreferences() {
     resetFilters,
     resetCollapsed,
     resetTab,
+    resetAutoExtract,
+    resetLastUbicacion,
   ]);
 
   return {
@@ -171,6 +228,10 @@ export function useExpedientesPreferences() {
     setCollapsed,
     tab,
     setTab,
+    autoExtract,
+    setAutoExtract,
+    lastUbicacion,
+    setLastUbicacion,
     resetAll,
   };
 }

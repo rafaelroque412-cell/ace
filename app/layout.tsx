@@ -19,7 +19,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      {/* suppressHydrationWarning: extensiones del navegador (descargadores,
+          Grammarly, dark-mode…) inyectan atributos en <body> antes de hidratar.
+          Silencia solo los atributos del body, no mismatches del árbol interno. */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

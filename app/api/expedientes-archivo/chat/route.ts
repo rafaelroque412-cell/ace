@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { expedienteChatSchema } from "@/lib/expedientes-archivo";
 import { answerExpedienteQuestion } from "@/lib/expedientes-archivo-search";
+import { estimateCostUsd, roundCostUsd } from "@/lib/openai-cost";
 import { writeAuditLog } from "@/lib/supabase-server";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
 
     const result = await answerExpedienteQuestion(payload.data);
 
+    const usage = result.usage;
     await writeAuditLog({
       action: "expedientes.chat",
       actorReference: auth.user.email ?? auth.user.id,
@@ -41,6 +43,14 @@ export async function POST(request: Request) {
         query: payload.data.query,
         sufficient: result.sufficient,
         sources: result.sources.length,
+        tokenUsage: usage
+          ? {
+              ...usage,
+              estimatedCostUsd: roundCostUsd(
+                estimateCostUsd(usage.model, usage.inputTokens, usage.outputTokens),
+              ),
+            }
+          : null,
       },
       entityType: "expediente_chat",
       module: "expedientes",

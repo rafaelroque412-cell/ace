@@ -139,8 +139,10 @@ export function normalizePersonaTipo(value: unknown): PersonaTipo | null {
 export const expedienteSearchSchema = z.object({
   query: z.string().trim().min(2, "Escribe al menos 2 caracteres").max(500),
   serieDocumento: z.string().trim().optional(),
+  oficina: z.string().trim().max(200).optional(),
+  materia: z.string().trim().max(200).optional(),
   anio: z.coerce.number().int().min(1900).max(2200).optional(),
-  topK: z.number().int().min(1).max(20).optional(),
+  topK: z.number().int().min(1).max(30).optional(),
 });
 
 export type ExpedienteSearchInput = z.infer<typeof expedienteSearchSchema>;

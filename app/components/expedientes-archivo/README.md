@@ -19,23 +19,47 @@ lib/
   expedientes-archivo-processing.ts     # Backend: OCR + Pinecone
 app/api/expedientes-archivo/
   route.ts                              # GET (listar) y POST (subir)
-  [id]/route.ts                         # GET (PDF), PATCH (actualizar), POST (reindexar), DELETE, PUT (reemplazar)
-  search/route.ts                        # Búsqueda por keyword
-  chat/route.ts                          # Chat con RAG
-  ai-search/route.ts                     # Búsqueda por lenguaje natural
+  [id]/route.ts                         # GET (PDF o ?meta=1 JSON), PATCH, POST (reindexar), DELETE, PUT (reemplazar)
+  search/route.ts                        # Búsqueda por contenido (vector) + filtros año/oficina/materia
+  chat/route.ts                          # Chat con RAG (Preguntar a la IA)
   duplicates/route.ts                    # Detección de duplicados
   bulk/route.ts                          # Operaciones masivas
   extract/route.ts                       # Extracción de metadata con IA
   export/route.ts                        # Exportación CSV/JSON
+  drain/route.ts                         # Drenado de la cola de indexación (reprocesa atascados)
 ```
+
+## Procesamiento e indexado (resiliencia)
+
+El OCR + indexado de cada PDF corre en `processExpedienteDocument`. Hay dos vías:
+
+1. **Vía rápida** (`after()`): subida, reindex y reemplazo lanzan el procesado en
+   segundo plano tras responder. Cubre el caso normal.
+2. **Red de seguridad** (drainer): si la invocación serverless muere a mitad del OCR
+   (PDF grande, timeout de 60s), el expediente queda en `uploaded`/`processing` para
+   siempre. `lib/expedientes-archivo-queue.ts` (`drainStuckExpedientes`) reprocesa los
+   atascados a partir del PDF ya guardado en Storage. **El estado (`status` + `updated_at`)
+   ES la cola** — no hace falta tabla de jobs aparte.
+
+El drenado se dispara desde:
+- **Producción**: `netlify/functions/indexing-drain.mjs` (scheduled, cada 5 min) hace
+  POST a `/api/documents/drain` y `/api/expedientes-archivo/drain`.
+- **Local/dev**: `npm run worker:indexing` (o `:once`) drena ambas colas en bucle.
+
+Autorización del endpoint: `Authorization: Bearer CRON_SECRET` o sesión editor/admin.
+El drainer es **idempotente** (limpia chunks/vectores previos antes de reprocesar) y
+**no reintenta** los `error` (terminales; requieren reindex manual). Variables:
+`EXPEDIENTES_STALE_MINUTES` (10), `EXPEDIENTES_CLAIM_SECONDS` (120),
+`EXPEDIENTES_DRAIN_BATCH` (2).
 
 ## Características
 
 ### Pestaña "Buscar"
-Tres modos seleccionables:
-- **Buscar por palabra clave**: vector search sobre el contenido indexado de los PDFs
-- **Chat con IA**: RAG conversacional que responde preguntas fundamentadas
-- **IA en archivo**: filtrado semántico de metadata (oficina, año, materia, ubicación)
+Dos modos:
+- **Buscar**: vector search sobre el contenido indexado de los PDFs, con filtros opcionales de **año / oficina / materia**. Devuelve resultados con extracto, página y ubicación física.
+- **Preguntar a la IA**: RAG conversacional que responde preguntas fundamentadas e indica dónde está físicamente el expediente.
+
+(El antiguo modo "IA en archivo" se retiró por solaparse con "Buscar"; su filtrado por metadata se integró como filtros normales.)
 
 ### Pestaña "Subir"
 Wizard de 4 pasos:
@@ -80,7 +104,6 @@ Funciones puras con validación Zod en runtime:
 ```typescript
 chatWithExpedientes(query: string): Promise<ChatAnswer>
 searchExpedientes(query: string, anio?: number): Promise<SearchResult[]>
-aiSearchExpedientes(query: string, limit?: number): Promise<AiSearchResponse>
 detectDuplicates(params): Promise<DuplicateMatch[]>
 autoFillFromPdf(file: File, title: string): Promise<PdfInventory>
 uploadExpediente(formData, onProgress?): Promise<UploadResult>

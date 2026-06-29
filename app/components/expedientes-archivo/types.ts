@@ -32,7 +32,16 @@ export type ExpedienteItem = {
   storage_path?: string;
   status: "uploaded" | "processing" | "indexed" | "error";
   error_message: string | null;
-  metadata: { chunkCount?: number; pageCount?: number } | null;
+  metadata: {
+    chunkCount?: number;
+    pageCount?: number;
+    tokenUsage?: {
+      ocr: { model: string; inputTokens: number; outputTokens: number; fromCache: boolean } | null;
+      analysis: { model: string; inputTokens: number; outputTokens: number } | null;
+      totalTokens: number;
+      estimatedCostUsd: number;
+    };
+  } | null;
   created_at: string;
   updated_at?: string;
 };
@@ -78,10 +87,10 @@ export type ChatAnswer = {
 };
 
 /** Sub-modo de búsqueda en la pestaña "Buscar" */
-export type SearchMode = "buscar" | "preguntar" | "ia";
+export type SearchMode = "buscar" | "preguntar";
 
 /** Tab principal del workspace */
-export type WorkspaceTab = "buscar" | "subir";
+export type WorkspaceTab = "buscar" | "subir" | "responder";
 
 /** Paso del wizard de subida (0..3) */
 export type WizardStep = 0 | 1 | 2 | 3;
@@ -150,10 +159,16 @@ export type DuplicateMatch = {
 export type PdfInventory = {
   numeroExpediente?: string | null;
   numeroDocumento?: string | null;
+  // Denominación oficial literal del documento (ej. "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A").
+  serieDocumental?: string | null;
   fecha?: string | null;
   anio?: number | null;
   asunto?: string | null;
   materia?: string | null;
+  tipoDocumento?: string | null;
+  oficina?: string | null;
+  personaNombre?: string | null;
+  personaTipo?: "natural" | "juridica" | null;
   resumen?: string | null;
   remitente?: string | null;
   destinatario?: string | null;
@@ -171,17 +186,6 @@ export type DetectedMetadata = {
   tipoDocumento: string | null;
 };
 
-/** Resultado de búsqueda IA en archivo */
-export type AiMatch = {
-  id: string;
-  title: string;
-  matches: string;
-};
-
-export type AiSearchResponse = {
-  matches: AiMatch[];
-  reasoning: string;
-};
 
 /** Estadísticas del dashboard */
 export type Stats = {
