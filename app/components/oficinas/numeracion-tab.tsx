@@ -2,10 +2,9 @@
 
 import { Hash, Loader2, Save } from "lucide-react";
 import { useState } from "react";
-import type { Oficina } from "./use-oficinas";
+import { formatCounterPreview, type Oficina } from "./use-oficinas";
 
 const TIPOS = ["OFICIO", "INFORME", "CARTA", "MEMORANDUM"] as const;
-const API = "/api/configuracion/oficinas";
 
 export function NumeracionTab({
   oficinas,
@@ -36,7 +35,18 @@ export function NumeracionTab({
           ? {
               ...other,
               counters: other.counters.map((c) =>
-                c.tipo === tipo ? { ...c, siguiente } : c,
+                c.tipo === tipo
+                  ? {
+                      ...c,
+                      siguiente,
+                      preview: formatCounterPreview(
+                        c.tipo,
+                        siguiente,
+                        other.ancho,
+                        other.sufijo,
+                      ),
+                    }
+                  : c,
               ),
             }
           : other,
@@ -46,16 +56,35 @@ export function NumeracionTab({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <p style={{ color: "var(--muted, #667)", fontSize: 13, margin: 0, maxWidth: 640 }}>
-        Configura el número inicial del correlativo por cada tipo de documento que
-        emite la oficina. El sistema autoincrementa cada vez que se genera o archiva
-        una respuesta.
-      </p>
+      <div
+        style={{
+          background: "#ecfeff",
+          color: "#155e75",
+          padding: 12,
+          borderRadius: 8,
+          fontSize: 13,
+        }}
+      >
+        <strong>Formato de la numeración:</strong>{" "}
+        <code
+          style={{
+            background: "#fff",
+            padding: "1px 6px",
+            borderRadius: 4,
+            fontSize: 12,
+          }}
+        >
+          {`{TIPO} N° {nro}-{año}-{sufijo}`}
+        </code>{" "}
+        — Ej: <strong>OFICIO N° 001-2026-MDCH-GM</strong>. El año se toma del
+        servidor. El sufijo se descompone por "/" o "-" en varios segmentos.
+      </div>
 
       {oficinas.map((o) => (
         <NumeracionCard
           key={o.id}
           oficina={o}
+          oficinas={oficinas}
           patchCounter={handlePatchCounter}
           setOficinas={setOficinas}
           busyId={busyId}
@@ -69,6 +98,7 @@ export function NumeracionTab({
 
 function NumeracionCard({
   oficina,
+  oficinas,
   patchCounter,
   setOficinas,
   busyId,
@@ -76,6 +106,7 @@ function NumeracionCard({
   setError,
 }: {
   oficina: Oficina;
+  oficinas: Oficina[];
   patchCounter: (oficinaId: string, tipo: string, siguiente: number) => void;
   setOficinas: (v: Oficina[]) => void;
   busyId: string | null;
@@ -83,6 +114,7 @@ function NumeracionCard({
   setError: (v: string | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   function handlePatch(tipo: string, siguiente: number) {
     patchCounter(oficina.id, tipo, siguiente);
@@ -92,20 +124,47 @@ function NumeracionCard({
     setSaving(true);
     setBusyId(oficina.id);
     try {
-      const res = await fetch(API, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: oficina.id,
-          counters: oficina.counters.map((c) => ({
-            tipo: c.tipo,
-            siguiente: c.siguiente,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setOficinas(data.oficinas ?? []);
+      const res = await fetch(
+        `/api/configuracion/oficinas/${oficina.id}/numeracion`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            counters: oficina.counters.map((c) => ({
+              tipo: c.tipo,
+              siguiente: c.siguiente,
+            })),
+          }),
+        },
+      );
+      let data: { ok?: boolean; error?: string; counters?: typeof oficina.counters } = {};
+      try {
+        const text = await res.text();
+        data = text ? (JSON.parse(text) as typeof data) : {};
+      } catch {
+        data = { error: `Respuesta no es JSON (status ${res.status})` };
+      }
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setSavedAt(Date.now());
+      if (data.counters) {
+        setOficinas(
+          oficinas.map((o) =>
+            o.id === oficina.id
+              ? {
+                  ...o,
+                  counters: oficina.counters.map((c) => {
+                    const updated = data.counters!.find(
+                      (dc) => dc.tipo === c.tipo,
+                    );
+                    return updated
+                      ? { ...c, siguiente: updated.siguiente }
+                      : c;
+                  }),
+                }
+              : o,
+          ),
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar la numeración");
     } finally {
@@ -161,6 +220,12 @@ function NumeracionCard({
       >
         {TIPOS.map((t) => {
           const c = oficina.counters.find((x) => x.tipo === t);
+          const preview = formatCounterPreview(
+            t,
+            c?.siguiente ?? 1,
+            oficina.ancho,
+            oficina.sufijo,
+          );
           return (
             <label key={t} className="formField">
               <span>
@@ -171,14 +236,18 @@ function NumeracionCard({
                 min={1}
                 value={c?.siguiente ?? 1}
                 onChange={(e) =>
-                  handlePatch(
-                    t,
-                    Math.max(1, parseInt(e.target.value, 10) || 1),
-                  )
+                  handlePatch(t, Math.max(1, parseInt(e.target.value, 10) || 1))
                 }
               />
-              <small style={{ color: "var(--muted, #889)", fontSize: 11 }}>
-                {c?.preview}
+              <small
+                style={{
+                  color: "var(--brand, #0f766e)",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                {preview}
               </small>
             </label>
           );
@@ -191,6 +260,7 @@ function NumeracionCard({
           gap: 10,
           marginTop: 12,
           alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
         <button
@@ -202,6 +272,17 @@ function NumeracionCard({
           {saving ? <Loader2 size={16} className="expSpin" /> : <Save size={16} />}{" "}
           Guardar numeración
         </button>
+        {savedAt && Date.now() - savedAt < 30_000 ? (
+          <span
+            style={{
+              color: "#1f9d55",
+              fontSize: 12,
+              fontWeight: 500,
+            }}
+          >
+            Guardado
+          </span>
+        ) : null}
         <span style={{ fontSize: 12, color: "var(--muted, #667)" }}>
           El ancho y sufijo se editan en la pestaña <strong>Áreas</strong>.
         </span>
@@ -210,13 +291,7 @@ function NumeracionCard({
   );
 }
 
-function EmptyState({
-  title,
-  message,
-}: {
-  title: string;
-  message: string;
-}) {
+function EmptyState({ title, message }: { title: string; message: string }) {
   return (
     <div
       style={{

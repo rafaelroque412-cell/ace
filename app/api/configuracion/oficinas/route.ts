@@ -34,7 +34,16 @@ function int(value: unknown, min: number, max: number, fallback: number): number
 }
 
 function fmt(tipo: string, siguiente: number, ancho: number, sufijo: string | null): string {
-  return `${tipo} N° ${String(siguiente).padStart(ancho, "0")}${sufijo ? `-${sufijo}` : ""}`;
+  const year = new Date().getFullYear();
+  const num = String(siguiente).padStart(ancho, "0");
+  const parts = [num, String(year)];
+  if (sufijo) {
+    // El sufijo puede traer varios segmentos separados por "/" o "-"
+    // ej: "MDCH/GM" -> se concatenan con guion en el preview
+    const segs = sufijo.split(/[\/\-]/).map((s) => s.trim()).filter(Boolean);
+    parts.push(...segs);
+  }
+  return `${tipo} N° ${parts.join("-")}`;
 }
 
 async function listOficinas() {
