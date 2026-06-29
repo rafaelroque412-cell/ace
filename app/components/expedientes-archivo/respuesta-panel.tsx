@@ -88,11 +88,23 @@ export function RespuestaPanel({
   const reloadSaved = useCallback(() => {
     void listRespuestas(20).then(setSaved).catch(() => undefined);
   }, []);
+
+  // Lista de oficinas con su oficina por defecto segun el usuario logueado.
+  // - admin: recibe TODAS las oficinas
+  // - dec/consulta/legal: solo las de SU entidad
+  // El backend devuelve `defaultOficinaId` (la oficina del usuario) para
+  // pre-seleccionarla en el dropdown sin que tenga que elegir manualmente.
+  const [isAdminOficinas, setIsAdminOficinas] = useState(false);
+  const [userEntity, setUserEntity] = useState<string | null>(null);
+  const [totalActivas, setTotalActivas] = useState(0);
   const reloadOficinas = useCallback(() => {
     void listOficinas()
-      .then((list) => {
-        setOficinas(list);
-        setOficinaId((prev) => prev || list[0]?.id || "");
+      .then((data) => {
+        setOficinas(data.oficinas);
+        setIsAdminOficinas(data.isAdmin);
+        setUserEntity(data.userEntity);
+        setTotalActivas(data.totalActivas);
+        setOficinaId((prev) => prev || data.defaultOficinaId || data.oficinas[0]?.id || "");
       })
       .catch(() => undefined);
   }, []);
@@ -244,7 +256,32 @@ export function RespuestaPanel({
       {oficinas.length === 0 ? (
         <div className="expMessage expMessage-info" role="status" style={{ marginBottom: 12 }}>
           <Settings size={16} />
-          <span>No hay oficinas configuradas. Pídele al administrador que las cree en <strong>Configuración → Oficinas y numeración</strong>.</span>
+          {isAdminOficinas ? (
+            <span>
+              No hay oficinas activas. Crea la primera en{" "}
+              <strong>Configuración → Oficinas y numeración → Áreas</strong>.
+            </span>
+          ) : (
+            <span>
+              No tienes una oficina asignada. Tu entidad es{" "}
+              <strong>{userEntity ?? "(sin entidad)"}</strong>. Pídele al
+              administrador que cree la oficina con esa entidad o que te
+              vincule.
+              {totalActivas > 0 ? ` Hay ${totalActivas} oficina(s) activa(s) en el sistema.` : ""}
+            </span>
+          )}
+        </div>
+      ) : isAdminOficinas && totalActivas > oficinas.length ? (
+        <div
+          className="expMessage expMessage-info"
+          role="status"
+          style={{ marginBottom: 12 }}
+        >
+          <Building2 size={16} />
+          <span>
+            Eres administrador: ves <strong>{oficinas.length}</strong> oficina(s) de tu entidad. Hay{" "}
+            <strong>{totalActivas}</strong> activas en total.
+          </span>
         </div>
       ) : null}
 

@@ -369,12 +369,44 @@ export type OficinaOption = {
   previews: Record<DocTipo, string>;
 };
 
-/** Lista las oficinas activas (para elegir desde cuál se emite la respuesta) */
-export async function listOficinas(): Promise<OficinaOption[]> {
-  const res = await fetch("/api/expedientes-archivo/respuesta/oficinas", { cache: "no-store" });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.oficinas ?? [];
+export type OficinasList = {
+  defaultOficinaId: string | null;
+  isAdmin: boolean;
+  oficinas: OficinaOption[];
+  totalActivas: number;
+  userEntity: string | null;
+};
+
+/**
+ * Lista las oficinas activas para el usuario logueado.
+ * - admin: ve TODAS las oficinas
+ * - dec/consulta/legal: ve solo las oficinas de SU entidad
+ * Devuelve ademas `defaultOficinaId` para pre-seleccionar la oficina del usuario.
+ */
+export async function listOficinas(): Promise<OficinasList> {
+  const empty: OficinasList = {
+    defaultOficinaId: null,
+    isAdmin: false,
+    oficinas: [],
+    totalActivas: 0,
+    userEntity: null,
+  };
+  try {
+    const res = await fetch("/api/expedientes-archivo/respuesta/oficinas", {
+      cache: "no-store",
+    });
+    if (!res.ok) return empty;
+    const data = (await res.json().catch(() => ({}))) as Partial<OficinasList>;
+    return {
+      defaultOficinaId: data.defaultOficinaId ?? null,
+      isAdmin: Boolean(data.isAdmin),
+      oficinas: data.oficinas ?? [],
+      totalActivas: data.totalActivas ?? 0,
+      userEntity: data.userEntity ?? null,
+    };
+  } catch {
+    return empty;
+  }
 }
 
 // ── Subir PDF recibido (OCR) ───────────────────────────────────────────
