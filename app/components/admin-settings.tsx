@@ -250,21 +250,26 @@ export function AdminSettings() {
   async function load() {
     setLoading(true);
     setError(null);
-    const response = await fetch("/api/configuracion");
-    const payload = (await response.json()) as Partial<SettingsPayload> & { error?: string };
-
-    if (!response.ok) {
-      setError(payload.error ?? "No se pudo cargar configuracion");
+    const [settingsResp, usersResp] = await Promise.all([
+      fetch("/api/configuracion/settings", { cache: "no-store" }),
+      fetch("/api/configuracion/users?limit=200", { cache: "no-store" }),
+    ]);
+    const settingsPayload = (await settingsResp.json().catch(() => ({}))) as
+      Partial<SettingsPayload> & { error?: string };
+    if (!settingsResp.ok) {
+      setError(settingsPayload.error ?? "No se pudo cargar configuracion");
       setLoading(false);
       return;
     }
+    const usersPayload = (await usersResp.json().catch(() => ({}))) as
+      Partial<SettingsPayload> & { error?: string };
 
-    setEntity(payload.entity ?? emptyEntity);
-    setGovernmentLevels(payload.governmentLevels ?? []);
-    setProcessTypes(payload.processTypes ?? []);
-    setRoles(payload.roles ?? []);
-    setRolePermissions(payload.rolePermissions ?? []);
-    setUsers(payload.users ?? []);
+    setEntity(settingsPayload.entity ?? emptyEntity);
+    setGovernmentLevels(settingsPayload.governmentLevels ?? []);
+    setProcessTypes(settingsPayload.processTypes ?? []);
+    setRoles(settingsPayload.roles ?? []);
+    setRolePermissions(settingsPayload.rolePermissions ?? []);
+    setUsers(usersPayload.users ?? []);
     setLoading(false);
   }
 
@@ -273,6 +278,14 @@ export function AdminSettings() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, []);
+
+  // El banner "Guardado" se oculta solo despues de 5s para no quedar
+  // pegado si el admin navega entre tabs sin hacer cambios.
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 5000);
+    return () => clearTimeout(timer);
+  }, [saved]);
 
   function updateProcess(index: number, patch: Partial<ProcessTypeSetting>) {
     setProcessTypes((current) =>
@@ -301,6 +314,12 @@ export function AdminSettings() {
   }
 
   function removeProcess(index: number) {
+    const target = processTypes[index];
+    if (!target) return;
+    const confirmed = window.confirm(
+      `Eliminar el proceso "${target.label || target.code || "sin nombre"}"? Esta accion no se puede deshacer hasta que guardes los cambios.`,
+    );
+    if (!confirmed) return;
     setProcessTypes((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
@@ -315,15 +334,33 @@ export function AdminSettings() {
     setSaved(false);
     setError(null);
 
-    const response = await fetch("/api/configuracion", {
+    // Validacion cliente temprana: si la entidad no cumple, no gasta el round-trip
+    if (!entityChecklist.every((c) => c.done)) {
+      const missing = entityChecklist.filter((c) => !c.done).map((c) => c.label);
+      setError(`Completa los datos de la entidad antes de guardar: ${missing.join(", ")}.`);
+      setSaving(false);
+      return;
+    }
+
+    const response = await fetch("/api/configuracion/settings", {
       body: JSON.stringify({ entity, processTypes }),
       headers: { "Content-Type": "application/json" },
       method: "PUT",
     });
-    const payload = (await response.json()) as Partial<SettingsPayload> & { error?: string };
+    const payload = (await response.json()) as Partial<SettingsPayload> & {
+      details?: { fieldErrors?: Record<string, string[]>; formErrors?: string[] };
+      error?: string;
+    };
 
     if (!response.ok) {
-      setError(payload.error ?? "No se pudo guardar configuracion");
+      // Mostrar errores de Zod especificos si los hay
+      const zodErrors = payload.details?.fieldErrors;
+      const zodMsg = zodErrors
+        ? Object.entries(zodErrors)
+            .map(([k, v]) => `${k}: ${v.join(", ")}`)
+            .join("; ")
+        : "";
+      setError(zodMsg ? `${payload.error ?? "Error"} - ${zodMsg}` : payload.error ?? "No se pudo guardar configuracion");
       setSaving(false);
       return;
     }
@@ -345,9 +382,8 @@ export function AdminSettings() {
     setSaved(false);
     setError(null);
 
-    const response = await fetch("/api/configuracion", {
+    const response = await fetch("/api/configuracion/users", {
       body: JSON.stringify({
-        action: "create_user",
         email: newUserEmail.trim(),
         entity: newUserEntity.trim() || entity.name,
         password: newUserPassword,
@@ -356,10 +392,12 @@ export function AdminSettings() {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const payload = (await response.json()) as Partial<SettingsPayload> & {
-      createdCredentials?: CreatedCredential[];
+    const payload = (await response.json().catch(() => ({}))) as {
+      status?: "created" | "linked";
+      email?: string;
+      role?: string;
+      password?: string;
       error?: string;
-      linkedUsers?: LinkedUser[];
     };
 
     if (!response.ok) {
@@ -368,9 +406,23 @@ export function AdminSettings() {
       return;
     }
 
-    setUsers(payload.users ?? users);
-    setCreatedCredentials(payload.createdCredentials ?? []);
-    setLinkedUsers(payload.linkedUsers ?? []);
+    // Si el usuario fue creado nuevo, mostramos la credencial.
+    // Si ya existia, lo marcamos como vinculado.
+    if (payload.status === "created" && payload.email && payload.password && payload.role) {
+      setCreatedCredentials([
+        { email: payload.email, password: payload.password, role: payload.role },
+      ]);
+      setLinkedUsers([]);
+    } else {
+      setLinkedUsers(
+        payload.status === "linked" && payload.email && payload.role
+          ? [{ email: payload.email, role: payload.role, userId: "" }]
+          : [],
+      );
+      setCreatedCredentials([]);
+    }
+    // Refrescar lista
+    void load();
     setNewUserEmail("");
     setNewUserPassword("");
     setNewUserEntity("");
@@ -380,22 +432,23 @@ export function AdminSettings() {
   }
 
   async function seedRoleUsers() {
+    const confirmed = window.confirm(
+      `Esto creara (o vinculara) un usuario por cada perfil del sistema. Las contrasenas temporales se mostraran despues. Continuar?`,
+    );
+    if (!confirmed) return;
     setCreatingUser(true);
     setSaved(false);
     setError(null);
 
-    const response = await fetch("/api/configuracion", {
-      body: JSON.stringify({
-        action: "seed_role_users",
-        entity: entity.name,
-      }),
+    const response = await fetch("/api/configuracion/users/seed", {
+      body: JSON.stringify({ entity: entity.name }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const payload = (await response.json()) as Partial<SettingsPayload> & {
-      createdCredentials?: CreatedCredential[];
+    const payload = (await response.json().catch(() => ({}))) as {
+      created?: Array<{ email: string; password: string; role: string }>;
+      linked?: Array<{ email: string; role: string; userId: string }>;
       error?: string;
-      linkedUsers?: LinkedUser[];
     };
 
     if (!response.ok) {
@@ -404,9 +457,9 @@ export function AdminSettings() {
       return;
     }
 
-    setUsers(payload.users ?? users);
-    setCreatedCredentials(payload.createdCredentials ?? []);
-    setLinkedUsers(payload.linkedUsers ?? []);
+    setCreatedCredentials(payload.created ?? []);
+    setLinkedUsers(payload.linked ?? []);
+    void load();
     setSaved(true);
     setCreatingUser(false);
   }
@@ -416,17 +469,12 @@ export function AdminSettings() {
     setSaved(false);
     setError(null);
 
-    const response = await fetch("/api/configuracion", {
-      body: JSON.stringify({
-        action: "update_user",
-        entity: user.entity,
-        role: user.role,
-        userId: user.id,
-      }),
+    const response = await fetch(`/api/configuracion/users/${encodeURIComponent(user.id)}`, {
+      body: JSON.stringify({ entity: user.entity, role: user.role }),
       headers: { "Content-Type": "application/json" },
       method: "PATCH",
     });
-    const payload = (await response.json()) as Partial<SettingsPayload> & { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
 
     if (!response.ok) {
       setError(payload.error ?? "No se pudo actualizar usuario");
@@ -434,7 +482,7 @@ export function AdminSettings() {
       return;
     }
 
-    setUsers(payload.users ?? users);
+    void load();
     setSaved(true);
     setSavingUserId(null);
   }
@@ -449,10 +497,11 @@ export function AdminSettings() {
     setSaved(false);
     setError(null);
 
-    const response = await fetch(`/api/configuracion?userId=${encodeURIComponent(user.id)}`, {
-      method: "DELETE",
-    });
-    const payload = (await response.json()) as Partial<SettingsPayload> & { error?: string };
+    const response = await fetch(
+      `/api/configuracion/users?userId=${encodeURIComponent(user.id)}`,
+      { method: "DELETE" },
+    );
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
 
     if (!response.ok) {
       setError(payload.error ?? "No se pudo eliminar usuario");
@@ -460,14 +509,14 @@ export function AdminSettings() {
       return;
     }
 
-    setUsers(payload.users ?? users.filter((item) => item.id !== user.id));
+    setUsers(users.filter((item) => item.id !== user.id));
     setSaved(true);
     setSavingUserId(null);
   }
 
-  if (loading) {
+  if (loading && !entity.name) {
     return (
-      <div className="emptyState">
+      <div className="emptyState" role="status" aria-live="polite">
         <span>Cargando configuracion...</span>
       </div>
     );
