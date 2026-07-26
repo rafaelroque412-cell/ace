@@ -1009,6 +1009,11 @@ export function NecesidadDetail({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Campo al que llevar el foco tras un guardado fallido. En una ref y no en
+  // estado: es un dato de un solo uso que no debe provocar un render por si
+  // mismo. Quien dispara el efecto es `fieldErrors`, que cambia de identidad en
+  // cada intento fallido.
+  const focoPendiente = useRef<string | null>(null);
   // Áreas usuarias ya registradas: alimentan el autocompletado del campo, para
   // que la próxima "SUB GERENCIA…" reutilice la grafía existente en vez de
   // crear una variante nueva (mismo criterio que la geografía por catálogo).
@@ -1878,6 +1883,28 @@ export function NecesidadDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fichaForm, fichaEdit, formSucio, conflictoGuardado]);
 
+  /**
+   * Lleva el foco al primer campo obligatorio sin completar tras un guardado
+   * fallido. Antes el usuario se quedaba donde estaba y tenia que buscar a ojo
+   * cual faltaba, que en una ficha de nueve secciones no es poca cosa.
+   *
+   * El ancla es el `data-campo` que ya llevaba cada <label>. Corre despues del
+   * commit, con `saveFicha` habiendo salido ya del modo paso a paso si hacia
+   * falta, de modo que el control esta montado.
+   */
+  useEffect(() => {
+    const api = focoPendiente.current;
+    if (!api) return;
+    focoPendiente.current = null;
+    const contenedor = document.querySelector<HTMLElement>(`[data-campo="${CSS.escape(api)}"]`);
+    if (!contenedor) return;
+    const control = contenedor.querySelector<HTMLElement>("input, select, textarea");
+    // `preventScroll` y luego `block: "center"`: el desplazamiento propio del
+    // foco dejaba el campo pegado al borde, y ahora hay ademas una barra de
+    // secciones fija en la parte de arriba.
+    control?.focus({ preventScroll: true });
+    (control ?? contenedor).scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fieldErrors]);
 
   async function saveFicha() {
     if ((fichaForm.nombre ?? "").trim().length < 3) {
@@ -1897,7 +1924,25 @@ export function NecesidadDetail({
     }
     if (Object.keys(newErrors).length > 0) {
       setFieldErrors(newErrors);
-      setError("Completa todos los campos obligatorios marcados en rojo.");
+      // `newErrors` se llena recorriendo FICHA_SECCIONES y las claves de texto
+      // conservan el orden de insercion: la primera ES la primera del formulario.
+      const faltan = Object.keys(newErrors);
+      const primero = faltan[0];
+      const comoSeLlama = CAMPO_LABEL[primero] ?? primero;
+      // Se nombra el campo en vez de decir "marcados en rojo": el color no es una
+      // senal utilizable por quien no lo distingue ni por un lector de pantalla.
+      setError(
+        faltan.length === 1
+          ? `Falta un campo obligatorio: «${comoSeLlama}».`
+          : `Faltan ${faltan.length} campos obligatorios. El primero es «${comoSeLlama}».`,
+      );
+      focoPendiente.current = primero;
+      // El salto al formulario completo se decide AQUI, en respuesta al clic, no
+      // dentro del efecto. En "paso a paso" se guarda desde el ultimo paso, asi
+      // que el campo que falta casi siempre esta en otro paso y ni siquiera esta
+      // montado; ademas el formulario completo ensena todos los errores a la vez
+      // y el indice de secciones dice cuantos faltan en cada una.
+      if (wizardMode) setWizardMode(false);
       return;
     }
     setFieldErrors({});
@@ -3045,6 +3090,17 @@ export function NecesidadDetail({
               const limpiarError = () => {
                 if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; });
               };
+              // Marcas de accesibilidad del control. Sin ellas el error solo existe
+              // en rojo: `aria-invalid` hace que el lector de pantalla anuncie el
+              // campo como invalido, y `aria-describedby` le engancha el texto del
+              // motivo, que hasta ahora era un <span> suelto sin relacion con el
+              // control. Se declaran una vez y se reparten a los seis controles
+              // para que no puedan divergir.
+              const errorId = `err-${field.api}`;
+              const marcasError = {
+                "aria-describedby": hasError ? errorId : undefined,
+                "aria-invalid": hasError || undefined,
+              } as const;
               // Botón ✨ "Redactar con IA" reutilizable (solo para editores). No
               // se ofrece en Identificación ni en Programación y presupuesto: sus
               // campos son datos factuales, no prosa que redactar.
@@ -3198,6 +3254,7 @@ Ej: ${field.ejemplo}` : ""}
                     // valor previo distinto para no borrarlo en silencio.
                     <select
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
+                      {...marcasError}
                       onChange={(e) => { setFichaField(field.api, e.target.value); limpiarError(); }}
                       value={val}
                     >
@@ -3211,6 +3268,7 @@ Ej: ${field.ejemplo}` : ""}
                     <>
                       <input
                         className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
+                        {...marcasError}
                         list="areas-usuarias-sugeridas"
                         maxLength={LIMITES_TEXTO[field.api]}
                         onChange={(e) => { setFichaField(field.api, e.target.value); limpiarError(); }}
@@ -3228,6 +3286,7 @@ Ej: ${field.ejemplo}` : ""}
                       {botonRedactarIA}
                       <textarea
                         className={cn(FICHA_CTRL, FICHA_CTRL_AREA, hasError && FICHA_CTRL_ERR)}
+                        {...marcasError}
                         maxLength={LIMITES_TEXTO[field.api]}
                         onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
                         // La fórmula se ve al redactar, no escondida en el globo
@@ -3243,6 +3302,7 @@ Ej: ${field.ejemplo}` : ""}
                   ) : field.kind === "select" ? (
                     <select
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
+                      {...marcasError}
                       onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
                       value={val}
                     >
@@ -3262,6 +3322,7 @@ Ej: ${field.ejemplo}` : ""}
                   ) : field.kind === "number" || field.kind === "date" ? (
                     <input
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
+                      {...marcasError}
                       onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
                       type={field.kind === "number" ? "number" : "date"}
                       value={val}
@@ -3271,6 +3332,7 @@ Ej: ${field.ejemplo}` : ""}
                       {botonRedactarIA}
                       <input
                         className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
+                        {...marcasError}
                         maxLength={LIMITES_TEXTO[field.api]}
                         onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
                         type="text"
@@ -3278,7 +3340,7 @@ Ej: ${field.ejemplo}` : ""}
                       />
                     </>
                   )}
-                  {hasError ? <span className="mt-1 text-[12px] font-medium text-danger">{fieldErrors[field.api]}</span> : null}
+                  {hasError ? <span className="mt-1 text-[12px] font-medium text-danger" id={errorId}>{fieldErrors[field.api]}</span> : null}
                 </label>
               );
             }
