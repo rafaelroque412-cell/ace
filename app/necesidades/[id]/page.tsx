@@ -12,6 +12,7 @@ export default async function NecesidadDetailPage({ params }: { params: Promise<
     manage: caps.has("necesidad.manage"),
     derivar: caps.has("expediente.manage"),
   };
+  const role = user?.role ?? "consulta";
 
   return (
     <AppShell
@@ -26,7 +27,7 @@ export default async function NecesidadDetailPage({ params }: { params: Promise<
       title="Ficha de Necesidad"
     >
       <section className="singleWorkspace">
-        <NecesidadDetail necesidadId={id} permisos={permisos} />
+        <NecesidadDetail necesidadId={id} permisos={permisos} role={role} />
       </section>
     </AppShell>
   );

@@ -41,6 +41,39 @@ export const PROCESS_TYPES: TaxonomyOption[] = [
   { label: "Otros", value: "otros" },
 ];
 
+/**
+ * Procedimientos de la Ley 32069 (Art. 54 y Reglamento), para etiquetar.
+ *
+ * PROCESS_TYPES de arriba es la taxonomía de la Ley 30225 y se CONSERVA a
+ * propósito: el módulo documental filtra documentos históricos con esos
+ * valores. Pero los expedientes nuevos guardan estos códigos —los del select
+ * de A4 (`PROCEDIMIENTOS_COMPETITIVOS`) y los del catálogo de Configuración
+ * (`process_type_settings`)— y `processTypeLabel` los devolvía null: la
+ * cabecera de la variable a) del Formato de Estrategia salía vacía.
+ */
+const PROCESS_TYPES_LEY_32069: TaxonomyOption[] = [
+  // Códigos del select de A4 (lib/estrategia-formato.ts).
+  { label: "Licitación pública", value: "licitacion_publica" },
+  { label: "Licitación pública abreviada", value: "licitacion_publica_abreviada" },
+  { label: "Concurso público", value: "concurso_publico" },
+  { label: "Concurso público abreviado", value: "concurso_publico_abreviado" },
+  { label: "Compra pública de innovación", value: "compra_publica_innovacion" },
+  // Códigos del catálogo de Configuración (process_type_settings).
+  { label: "Licitación Pública para Bienes", value: "licitacion_publica_bienes" },
+  { label: "Licitación Pública Abreviada para Bienes", value: "licitacion_publica_abreviada_bienes" },
+  { label: "Licitación Pública para Obras", value: "licitacion_publica_obras" },
+  { label: "Licitación Pública Abreviada para Obras", value: "licitacion_publica_abreviada_obras" },
+  { label: "Concurso Público de Servicios", value: "concurso_publico_servicios" },
+  { label: "Concurso Público Abreviado de Servicios", value: "concurso_publico_abreviado_servicios" },
+  { label: "Concurso Público para Consultorías", value: "concurso_publico_consultoria" },
+  { label: "Concurso Público Abreviado para Consultorías", value: "concurso_publico_abreviado_consultoria" },
+  { label: "Concurso Público Abreviado para Expertos", value: "concurso_publico_expertos" },
+  { label: "Concurso Público para Gerentes de Proyecto", value: "concurso_publico_gerente_proyecto" },
+  { label: "Concurso de Proyectos Arquitectónicos", value: "concurso_proyectos_arquitectonicos" },
+  { label: "Procedimiento de Selección No Competitivo", value: "procedimiento_no_competitivo" },
+  { label: "Contrato Menor", value: "contrato_menor" },
+];
+
 // Expedientes (SDD): tipo de objeto, estado y clases de documento de trabajo.
 export const OBJECT_TYPES: TaxonomyOption[] = [
   { label: "Bienes", value: "bienes" },
@@ -66,13 +99,17 @@ export const PROCESS_STATUSES: TaxonomyOption[] = [
   { label: "Archivo", value: "archivo" },
 ];
 
-// Estados de una Necesidad (Módulo 1).
+// Estados de una Necesidad (Módulo 1). Fuente canónica del workflow por actor:
+// lib/necesidad-workflow.ts (NECESIDAD_ESTADOS). Se replican aquí como opciones
+// de taxonomía por compatibilidad.
 export const NECESIDAD_STATUSES: TaxonomyOption[] = [
   { label: "Borrador", value: "borrador" },
-  { label: "Registrada", value: "registrada" },
-  { label: "Observada", value: "observada" },
-  { label: "Aprobada", value: "aprobada" },
-  { label: "Derivada a expediente", value: "derivada" },
+  { label: "Remitido a la DEC", value: "remitido_dec" },
+  { label: "En revisión (DEC)", value: "en_revision_dec" },
+  { label: "Observado", value: "observado" },
+  { label: "No objeción pendiente", value: "no_objecion_pendiente" },
+  { label: "Requerimiento conforme", value: "conforme" },
+  { label: "Incorporado al CMN (Derivado)", value: "incorporado_cmn" },
 ];
 
 // Clases de documento que adjunta una Necesidad (Módulo 1).
@@ -102,7 +139,11 @@ export const PROCESS_DOC_KINDS: TaxonomyOption[] = [
 ];
 
 const documentTypeLabels = new Map(DOCUMENT_TYPES.map((item) => [item.value, item.label]));
-const processTypeLabels = new Map(PROCESS_TYPES.map((item) => [item.value, item.label]));
+// La Ley 32069 va DESPUÉS: si un código coincide (p. ej. "licitacion_publica"
+// existe en las dos), gana la etiqueta con tildes de la ley vigente.
+const processTypeLabels = new Map(
+  [...PROCESS_TYPES, ...PROCESS_TYPES_LEY_32069].map((item) => [item.value, item.label]),
+);
 const objectTypeLabels = new Map(OBJECT_TYPES.map((item) => [item.value, item.label]));
 const processStatusLabels = new Map(PROCESS_STATUSES.map((item) => [item.value, item.label]));
 const processDocKindLabels = new Map(PROCESS_DOC_KINDS.map((item) => [item.value, item.label]));

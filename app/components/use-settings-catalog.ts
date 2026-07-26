@@ -9,6 +9,14 @@ export type ClientCatalogEntity = {
   governmentLevel: string;
   name: string;
   ruc: string;
+  /** PAC de bienes y servicios (base de la línea de corte, Art. 125). null si no
+   *  está registrado en Configuración → Municipalidad. */
+  pacBienesServicios: number | null;
+  /** Ubicación de la entidad (Configuración → Municipalidad); alimenta los
+   *  desplegables de departamento/provincia/distrito del requerimiento. */
+  department: string;
+  province: string;
+  city: string;
 };
 
 export type ClientCatalogProcess = TaxonomyOption & {
