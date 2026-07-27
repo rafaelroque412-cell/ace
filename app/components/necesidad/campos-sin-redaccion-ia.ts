@@ -20,10 +20,4 @@ export const CAMPOS_SIN_REDACCION_IA: ReadonlySet<string> = new Set([
   "descripcionCatalogo",
   "descripcionDetallada",
   "lugarEntrega",
-  // Huecos de la experiencia del personal clave: se rellenan a mano y el texto
-  // se compone en «personalClaveExperiencia» con «Redactar con IA». El botón en
-  // los huecos sueltos no aporta.
-  "personalClaveTiempo",
-  "personalClaveTrabajos",
-  "personalClavePuesto",
 ]);

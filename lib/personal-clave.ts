@@ -1,48 +1,70 @@
 /**
- * Redacta la «Experiencia del personal clave» (Art. 72.3.b, capacidad técnica y
- * profesional), como requisito de calificación adicional.
+ * Experiencia del personal clave (Art. 72.3.b, capacidad técnica y profesional),
+ * dentro de los requisitos de calificación.
  *
- * El formato de las bases estándar fija la frase y deja tres huecos: el tiempo
- * mínimo, los trabajos o prestaciones en la actividad requerida y el puesto que
- * ocupa ese personal. Se compone, como la forma de pago o la recepción —texto
- * reglamentario con huecos, no prosa que redactar—; un hueco vacío conserva su
- * corchete para que lo que falta se vea en un documento que se firma.
+ * Puede haber VARIOS puestos —un residente, un especialista en estructuras…—,
+ * cada uno con su tiempo de experiencia mínimo, la actividad en la que se exige
+ * y el cargo. Por eso es una LISTA, no un texto suelto, y en el requerimiento
+ * sale como un cuadro.
+ *
+ * Se guarda serializado en una sola columna de texto, con parse/compose
+ * reversibles, igual que «otras penalidades»: el editor compone al escribir y
+ * vuelve a leer al abrir, sin migración por fila, y el Word lo pinta como tabla.
  */
 
-const HUECO_TIEMPO = "CONSIGNAR EL TIEMPO DE EXPERIENCIA MÍNIMO";
-const HUECO_TRABAJOS = "CONSIGNAR LOS TRABAJOS O PRESTACIONES EN LA ACTIVIDAD REQUERIDA";
-const HUECO_PUESTO =
-  "CONSIGNAR LA DENOMINACIÓN DEL PUESTO, CARGO Y/O POSICIÓN QUE OCUPA EL PERSONAL CLAVE REQUERIDO PARA " +
-  "EJECUTAR LA PRESTACIÓN OBJETO DE LA CONVOCATORIA RESPECTO DEL CUAL SE DEBE ACREDITAR ESTE REQUISITO";
-
-export type HuecosPersonalClave = {
-  /** Tiempo de experiencia mínimo exigido. Ej. «tres (3) años». */
+export type FilaPersonalClave = {
+  /** Tiempo de experiencia mínimo. Ej. «tres (3) años». */
   tiempo: string;
   /** Trabajos o prestaciones en la actividad requerida. */
   trabajos: string;
-  /** Denominación del puesto, cargo o posición del personal clave. */
+  /** Puesto, cargo o posición del personal clave. */
   puesto: string;
 };
 
-function hueco(valor: string, textoOriginal: string): string {
-  return valor.trim() || `[${textoOriginal}]`;
+// Etiquetas explícitas, no un separador suelto: son tres campos de texto libre
+// que pueden traer guiones o puntos, y así la línea se sigue leyendo si alguien
+// abre la columna a mano.
+const LINEA = /^\s*\d+\.\s*Tiempo:\s*(.*?)\s*·\s*Actividad:\s*(.*?)\s*·\s*Puesto:\s*(.*?)\s*$/;
+
+export function parsePersonalClave(texto: string | null | undefined): FilaPersonalClave[] {
+  if (!texto) return [];
+  const salida: FilaPersonalClave[] = [];
+  for (const linea of texto.split(/\r?\n/)) {
+    const m = linea.match(LINEA);
+    if (!m) continue;
+    const fila = { tiempo: m[1].trim(), trabajos: m[2].trim(), puesto: m[3].trim() };
+    // Una fila totalmente vacía no es una fila; con algo escrito, se conserva.
+    if (fila.tiempo || fila.trabajos || fila.puesto) salida.push(fila);
+  }
+  return salida;
 }
 
-/** ¿Cuántos de los tres huecos siguen sin rellenar? Para avisar antes de firmar. */
-export function huecosPersonalClavePendientes(h: Partial<HuecosPersonalClave>): number {
-  return [h.tiempo, h.trabajos, h.puesto].filter((v) => !(v ?? "").trim()).length;
+/** Operación inversa de `parsePersonalClave`. El par debe seguir siendo reversible. */
+export function formatPersonalClave(filas: FilaPersonalClave[]): string {
+  const utiles = filas.filter((f) => f.tiempo.trim() || f.trabajos.trim() || f.puesto.trim());
+  if (utiles.length === 0) return "";
+  return utiles
+    .map(
+      (f, k) =>
+        `${k + 1}. Tiempo: ${f.tiempo.trim() || "[POR DEFINIR]"} · ` +
+        `Actividad: ${f.trabajos.trim() || "[POR DEFINIR]"} · ` +
+        `Puesto: ${f.puesto.trim() || "[POR DEFINIR]"}`,
+    )
+    .join("\n");
 }
 
 /**
- * La frase del requisito, con los tres huecos dentro.
+ * Filas a medio declarar: tienen algo pero les falta un campo.
  *
- * «{tiempo} en {trabajos} del personal clave requerido desempeñándose como
- * {puesto}.». Los espacios en blanco no cuentan como relleno: un hueco con solo
- * espacios conserva su corchete.
+ * No bloquea, pero un puesto sin tiempo mínimo, o sin actividad, no es un
+ * requisito acreditable. Devuelve el número de fila (1-based) de cada una.
  */
-export function componerExperienciaPersonalClave(h: Partial<HuecosPersonalClave>): string {
-  return (
-    `${hueco(h.tiempo ?? "", HUECO_TIEMPO)} en ${hueco(h.trabajos ?? "", HUECO_TRABAJOS)} ` +
-    `del personal clave requerido desempeñándose como ${hueco(h.puesto ?? "", HUECO_PUESTO)}.`
-  );
+export function personalClaveIncompletas(filas: FilaPersonalClave[]): number[] {
+  return filas
+    .map((f, i) => {
+      const algo = f.tiempo.trim() || f.trabajos.trim() || f.puesto.trim();
+      const completa = f.tiempo.trim() && f.trabajos.trim() && f.puesto.trim();
+      return algo && !completa ? i + 1 : 0;
+    })
+    .filter((n) => n > 0);
 }

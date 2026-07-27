@@ -118,10 +118,7 @@ export const LIMITES_TEXTO: Record<string, number> = {
   // numeros de dias y este mapa es de topes de TEXTO. Dejarlos capaba «100» a
   // sus primeros caracteres sin motivo.
   requisitosAdicionales: 4000,
-  personalClaveTiempo: 200,
-  personalClaveTrabajos: 1000,
-  personalClavePuesto: 600,
-  personalClaveExperiencia: 2000,
+  personalClaveExperiencia: 4000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,
   disponibilidadTerreno: 2000,

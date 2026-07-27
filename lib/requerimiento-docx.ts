@@ -21,6 +21,7 @@ import {
 import { cuantiaPorSumatoria, importeItem, type NecesidadItem } from "./necesidad-items";
 import type { ObjetoFilter } from "./procesos-seleccion";
 import { parseOtrasPenalidades, textoLibrePenalidades } from "./otras-penalidades";
+import { parsePersonalClave } from "./personal-clave";
 import { parseRequisitos } from "./requisitos-calificacion";
 import {
   type CampoRequerimiento,
@@ -251,6 +252,35 @@ function nota(texto_: string): Paragraph {
 }
 
 /** Cuadro de penalidades distintas a la mora (Art. 119.2). */
+/** Cuadro de la experiencia del personal clave (Art. 72.3.b): un puesto por fila. */
+function tablaPersonalClave(filas: ReturnType<typeof parsePersonalClave>): Table {
+  const cabecera = new TableRow({
+    children: [
+      celda("N°", { ancho: 6, bold: true }),
+      celda("Tiempo de experiencia mínimo", { ancho: 24, bold: true }),
+      celda("Trabajos o prestaciones en la actividad requerida", { ancho: 44, bold: true }),
+      celda("Puesto, cargo y/o posición", { ancho: 26, bold: true }),
+    ],
+    tableHeader: true,
+  });
+  return new Table({
+    rows: [
+      cabecera,
+      ...filas.map((f, i) =>
+        new TableRow({
+          children: [
+            celda(String(i + 1)),
+            celda(f.tiempo ?? ""),
+            celda(f.trabajos ?? ""),
+            celda(f.puesto ?? ""),
+          ],
+        }),
+      ),
+    ],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
 function tablaPenalidades(filas: ReturnType<typeof parseOtrasPenalidades>): Table {
   const cabecera = new TableRow({
     children: [
@@ -288,6 +318,11 @@ function tablaPenalidades(filas: ReturnType<typeof parseOtrasPenalidades>): Tabl
  */
 function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Table> {
   if (!c.valor) return [contenido("")];
+
+  if (c.formato === "tablaPersonalClave") {
+    const filas = parsePersonalClave(c.valor);
+    return filas.length > 0 ? [tablaPersonalClave(filas)] : [contenido(c.valor)];
+  }
 
   if (c.formato === "tabla") {
     const filas = parseOtrasPenalidades(c.valor);

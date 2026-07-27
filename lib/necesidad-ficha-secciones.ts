@@ -25,7 +25,7 @@ import {
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,
 // para leer) con la clave del PATCH (camelCase) y su tipo de control.
-export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "subcontratacion" | "select";
+export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "subcontratacion" | "select";
 
 // Catálogo del "Tipo de proceso de selección" (referencia inicial del área
 // usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
@@ -546,16 +546,13 @@ export const FICHA_SECCIONES: FichaSection[] = [
 
       // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave. La
       // entidad la pide DENTRO de la «Experiencia del postor en la especialidad»,
-      // así que sus campos NO se pintan sueltos aquí: los renderiza el editor de
-      // requisitos, dentro de esa tarjeta (RequisitosCalificacionEditor). Se
-      // marcan `oculto` para que la sección no los muestre por su cuenta, pero
-      // siguen en FICHA_SECCIONES para que se carguen y se guarden como columnas.
-      // El texto se compone en el editor a partir de los tres huecos
-      // (lib/personal-clave.ts), igual que la forma de pago.
-      { col: "personal_clave_tiempo", api: "personalClaveTiempo", label: "Tiempo de experiencia mínimo", oculto: true, baseLegal: "Art. 72.3.b Reglamento · tiempo mínimo de experiencia del personal clave. Se acredita con el Anexo N° 19; no cuenta la antigüedad mayor a 25 años.", ejemplo: "tres (3) años" },
-      { col: "personal_clave_trabajos", api: "personalClaveTrabajos", label: "Trabajos o prestaciones en la actividad requerida", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · las prestaciones o trabajos en la actividad para la que se exige la experiencia del personal clave.", ejemplo: "supervisión de montaje de estructuras metálicas" },
-      { col: "personal_clave_puesto", api: "personalClavePuesto", label: "Puesto, cargo y/o posición del personal clave", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · el puesto respecto del cual se acredita la experiencia del personal clave para ejecutar la prestación.", ejemplo: "Ingeniero residente" },
-      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave (texto del requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · es el texto que va al requerimiento. Se compone con «Redactar con IA» a partir de los tres huecos.", ejemplo: "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente." },
+      // así que NO se pinta suelta aquí: la renderiza el editor de requisitos,
+      // como un cuadro repetible (PersonalClaveEditor), dentro de esa tarjeta.
+      // Es una LISTA de puestos serializada en una columna (lib/personal-clave.ts),
+      // igual que «otras penalidades». Se marca `oculto` para que la sección no la
+      // muestre por su cuenta, pero sigue en FICHA_SECCIONES para cargarse y
+      // guardarse; `kind: "personalClave"` hace que en el Word salga como TABLA.
+      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave", oculto: true, kind: "personalClave", baseLegal: "Art. 72.3.b Reglamento · un puesto por fila: tiempo mínimo de experiencia, la actividad en que se exige y el cargo. Se acredita con el Anexo N° 19.", ejemplo: "tres (3) años · supervisión de montaje · Ingeniero residente" },
     ],
   },
   {

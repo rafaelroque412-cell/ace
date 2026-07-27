@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { componerOtrasPenalidades } from "@/lib/otras-penalidades";
 import { formatRequisitos } from "@/lib/requisitos-calificacion";
 import { ACREDITACION_EXPERIENCIA } from "@/lib/requisitos-experiencia";
+import { formatPersonalClave } from "@/lib/personal-clave";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
 
 /**
@@ -103,6 +104,27 @@ describe("formato del documento", () => {
     const iPrimero = xml.indexOf("La experiencia del postor en la especialidad se acredita");
     const runPrimero = xml.lastIndexOf("<w:r>", iPrimero);
     expect(xml.slice(runPrimero, iPrimero)).not.toContain("<w:b/>");
+  });
+
+  it("la experiencia del personal clave sale en TABLA, un puesto por fila", async () => {
+    const xml = await xmlDel(
+      await generarRequerimientoDocx({
+        ...BASE,
+        apartados: ["3.5.1 Requisitos de calificación obligatorios"],
+        ficha: {
+          personalClaveExperiencia: formatPersonalClave([
+            { tiempo: "tres (3) años", trabajos: "supervisión de montaje", puesto: "Ingeniero residente" },
+            { tiempo: "dos (2) años", trabajos: "control de calidad", puesto: "Supervisor de obra" },
+          ]),
+        },
+      }),
+    );
+    expect(xml).toContain("<w:tbl>");
+    expect(xml).toContain("Tiempo de experiencia mínimo");
+    expect(xml).toContain("Ingeniero residente");
+    expect(xml).toContain("Supervisor de obra");
+    // El campo está `oculto` en la ficha pero SÍ va al documento (kind personalClave).
+    expect(xml).not.toContain("1. Tiempo:"); // no vuelca la serialización cruda
   });
 
   it("las penalidades adicionales salen en TABLA", async () => {

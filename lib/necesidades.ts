@@ -124,10 +124,7 @@ export type Necesidad = {
   plazo_respuestas_texto: string | null;
   requisitos_adicionales: string | null;
   // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave (Art.
-  // 72.3.b): los tres huecos del formato + el texto ya compuesto.
-  personal_clave_tiempo: string | null;
-  personal_clave_trabajos: string | null;
-  personal_clave_puesto: string | null;
+  // 72.3.b): cuadro de puestos serializado (lib/personal-clave.ts).
   personal_clave_experiencia: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
@@ -302,11 +299,9 @@ export const necesidadCreateSchema = z.object({
   // un dato con el que se puede contar y comparar.
   plazoRespuestasTexto: optionalText(1200),
   requisitosAdicionales: optionalText(4000),
-  // Experiencia del personal clave (Art. 72.3.b): tres huecos + texto compuesto.
-  personalClaveTiempo: optionalText(200),
-  personalClaveTrabajos: optionalText(1000),
-  personalClavePuesto: optionalText(600),
-  personalClaveExperiencia: optionalText(2000),
+  // Experiencia del personal clave (Art. 72.3.b): cuadro de puestos serializado
+  // (lib/personal-clave.ts). Varias filas, por eso el tope es holgado.
+  personalClaveExperiencia: optionalText(4000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

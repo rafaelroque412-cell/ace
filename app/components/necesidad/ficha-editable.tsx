@@ -291,10 +291,10 @@ export function FichaEditable({
       : `No puede pasar de ${topeSubsanacionDias} días: es el 30% del plazo de ejecución (${(fichaForm.plazoEjecucion ?? "").trim()} días) que fija el Art. 144.`;
 
   function renderFichaField(field: FichaField) {
-    // Los cuatro valores del personal clave solo se le pasan al campo de
-    // requisitos —que es quien pinta ese bloque—. Al resto de campos se les da
-    // cadena vacía (estable), para que un cambio en el personal clave no repinte
-    // toda la ficha: la memoización de `CampoFicha` depende de props estables.
+    // El cuadro del personal clave solo se le pasa al campo de requisitos —que
+    // es quien lo pinta—. Al resto de campos se les da cadena vacía (estable),
+    // para que un cambio en el personal clave no repinte toda la ficha: la
+    // memoización de `CampoFicha` depende de props estables.
     const esRequisitos = field.kind === "requisitos";
     // El campo se pinta en su propio componente memoizado. Lo que se le
     // pasa son VALORES de este campo, no las estructuras completas: el
@@ -317,9 +317,6 @@ export function FichaEditable({
         montoEstimado={Number(fichaForm.montoEstimado) || null}
         moneda={fichaForm.moneda ?? ""}
         necesidadId={necesidadId}
-        personalClaveTiempo={esRequisitos ? (fichaForm.personalClaveTiempo ?? "") : ""}
-        personalClaveTrabajos={esRequisitos ? (fichaForm.personalClaveTrabajos ?? "") : ""}
-        personalClavePuesto={esRequisitos ? (fichaForm.personalClavePuesto ?? "") : ""}
         personalClaveExperiencia={esRequisitos ? (fichaForm.personalClaveExperiencia ?? "") : ""}
         onCampoFicha={cambiarCampo}
         obligatorio={campoEsObligatorio(field)}

@@ -1,30 +1,16 @@
 -- Experiencia del personal clave (Art. 72.3.b · capacidad técnica y profesional),
--- en la sección 3.5.1 de la ficha, junto a la experiencia del postor.
+-- dentro de la «Experiencia del postor en la especialidad» (sección 3.5.1).
 --
--- El texto lo fija el formato de las bases estándar y tiene tres huecos: el
--- tiempo mínimo, los trabajos o prestaciones en la actividad requerida y el
--- puesto que ocupa el personal clave. Se guardan los tres huecos por separado
--- MÁS el texto ya compuesto:
+-- Es una LISTA de puestos —cada uno con su tiempo de experiencia mínimo, la
+-- actividad en que se exige y el cargo—, así que se guarda serializada en UNA
+-- columna de texto (lib/personal-clave.ts), como «otras penalidades». El editor
+-- compone al escribir y vuelve a leer al abrir; en el Word sale como cuadro.
 --
---   * los huecos permiten rehacer el requisito cuando cambia un dato;
---   * el texto compuesto es lo que viaja al Word y lo que se firma.
---
--- Es el mismo patrón de la forma de pago (Art. 67).
---
--- Ejecutar en el SQL Editor de Supabase. Hasta entonces los cuatro campos no
--- existen y la ficha fallará al guardarlos.
+-- Ejecutar en el SQL Editor de Supabase. Hasta entonces la columna no existe y
+-- la ficha fallará al guardarla.
 
 alter table public.necesidades
-  add column if not exists personal_clave_tiempo text,
-  add column if not exists personal_clave_trabajos text,
-  add column if not exists personal_clave_puesto text,
   add column if not exists personal_clave_experiencia text;
 
-comment on column public.necesidades.personal_clave_tiempo is
-  'Tiempo de experiencia minimo del personal clave (Art. 72.3.b). Ej. «tres (3) años».';
-comment on column public.necesidades.personal_clave_trabajos is
-  'Trabajos o prestaciones en la actividad requerida para el personal clave.';
-comment on column public.necesidades.personal_clave_puesto is
-  'Puesto, cargo o posicion respecto del cual se acredita la experiencia del personal clave.';
 comment on column public.necesidades.personal_clave_experiencia is
-  'Texto del requisito de experiencia del personal clave. Se compone desde los tres campos personal_clave_*.';
+  'Cuadro de experiencia del personal clave (Art. 72.3.b), serializado: una fila por puesto (tiempo, actividad, cargo).';

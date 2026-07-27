@@ -1,98 +1,92 @@
 import { describe, expect, it } from "vitest";
-import { componerExperienciaPersonalClave, huecosPersonalClavePendientes } from "@/lib/personal-clave";
+import {
+  formatPersonalClave,
+  parsePersonalClave,
+  personalClaveIncompletas,
+} from "@/lib/personal-clave";
 import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
 import { LIMITES_TEXTO, necesidadUpdateSchema } from "@/lib/necesidades";
 
 /**
- * «Experiencia del personal clave» (Art. 72.3.b, capacidad técnica y profesional).
- * El formato fija la frase y deja tres huecos; se compone con ellos, como la
- * forma de pago.
+ * Experiencia del personal clave (Art. 72.3.b). Es una LISTA de puestos —cada
+ * uno con su tiempo mínimo, la actividad y el cargo—, serializada en una columna
+ * y pintada como cuadro, igual que «otras penalidades».
  */
-describe("la frase del requisito sale con los tres huecos dentro", () => {
-  it("con datos, en el orden del formato", () => {
-    expect(
-      componerExperienciaPersonalClave({
-        tiempo: "tres (3) años",
-        trabajos: "supervisión de montaje de estructuras metálicas",
-        puesto: "Ingeniero residente",
-      }),
-    ).toBe(
-      "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente.",
-    );
+const FILAS = [
+  { tiempo: "tres (3) años", trabajos: "supervisión de montaje de estructuras metálicas", puesto: "Ingeniero residente" },
+  { tiempo: "dos (2) años", trabajos: "control de calidad de soldadura", puesto: "Supervisor de calidad" },
+];
+
+describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
+  it("el par parse/format es reversible", () => {
+    expect(parsePersonalClave(formatPersonalClave(FILAS))).toEqual(FILAS);
   });
 
-  it("un hueco sin rellenar conserva su corchete", () => {
-    // El requerimiento se firma: lo que falta tiene que verse.
-    const t = componerExperienciaPersonalClave({ tiempo: "dos (2) años", puesto: "Supervisor" });
-    expect(t).toContain("dos (2) años en [CONSIGNAR LOS TRABAJOS O PRESTACIONES EN LA ACTIVIDAD REQUERIDA] del");
-    expect(t).toContain("desempeñándose como Supervisor.");
+  it("numera las filas y etiqueta cada campo", () => {
+    const t = formatPersonalClave(FILAS);
+    expect(t).toContain("1. Tiempo: tres (3) años · Actividad: supervisión de montaje de estructuras metálicas · Puesto: Ingeniero residente");
+    expect(t).toContain("2. Tiempo: dos (2) años ·");
   });
 
-  it("sin nada, salen los tres corchetes del formato", () => {
-    const t = componerExperienciaPersonalClave({});
-    expect((t.match(/\[CONSIGNAR/g) ?? []).length).toBe(3);
-    expect(t).toContain("del personal clave requerido desempeñándose como");
+  it("sin filas útiles no compone nada: el requisito puede no aplicar", () => {
+    expect(formatPersonalClave([])).toBe("");
+    expect(formatPersonalClave([{ tiempo: "", trabajos: "", puesto: "" }])).toBe("");
+    expect(parsePersonalClave("")).toEqual([]);
+    expect(parsePersonalClave(null)).toEqual([]);
   });
 
-  it("los espacios en blanco no cuentan como relleno", () => {
-    expect(componerExperienciaPersonalClave({ tiempo: "   " })).toContain(
-      "[CONSIGNAR EL TIEMPO DE EXPERIENCIA MÍNIMO] en",
-    );
+  it("una fila con algo escrito se conserva, con corchete donde falta", () => {
+    const t = formatPersonalClave([{ tiempo: "un (1) año", trabajos: "", puesto: "" }]);
+    expect(t).toContain("Tiempo: un (1) año · Actividad: [POR DEFINIR] · Puesto: [POR DEFINIR]");
   });
-});
 
-describe("cuántos huecos faltan", () => {
-  it("los cuenta para avisar antes de firmar", () => {
-    expect(huecosPersonalClavePendientes({})).toBe(3);
-    expect(huecosPersonalClavePendientes({ tiempo: "3 años", trabajos: "x", puesto: "y" })).toBe(0);
-    expect(huecosPersonalClavePendientes({ tiempo: "3 años", puesto: "  " })).toBe(2);
+  it("un texto que no es del formato no aporta filas", () => {
+    expect(parsePersonalClave("una frase suelta cualquiera")).toEqual([]);
   });
 });
 
-describe("está en la ficha, en 3.5.1, y se guarda como columnas", () => {
+describe("filas a medio declarar", () => {
+  it("se cuentan para avisar, sin bloquear", () => {
+    expect(personalClaveIncompletas(FILAS)).toEqual([]);
+    expect(personalClaveIncompletas([{ tiempo: "3 años", trabajos: "", puesto: "Residente" }])).toEqual([1]);
+    expect(personalClaveIncompletas([{ tiempo: "", trabajos: "", puesto: "" }])).toEqual([]);
+  });
+});
+
+describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
   const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!;
-  const APIS = ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto", "personalClaveExperiencia"];
+  const campo = seccion.fields.find((f) => f.api === "personalClaveExperiencia");
 
-  it("los cuatro campos existen en 3.5.1", () => {
-    for (const api of APIS) expect(seccion.fields.map((f) => f.api), api).toContain(api);
+  it("existe, es oculta y su kind la pinta como cuadro", () => {
+    // Oculta: no se pinta suelta; el editor de requisitos la pinta dentro de la
+    // tarjeta de experiencia del postor. `kind: "personalClave"` → tabla en Word.
+    expect(campo?.oculto).toBe(true);
+    expect(campo?.kind).toBe("personalClave");
   });
 
-  it("son OCULTOS: no se pintan sueltos, los renderiza el editor de requisitos", () => {
-    // La entidad los pide DENTRO de la experiencia del postor; el editor los
-    // pinta ahí. Siguen en FICHA_SECCIONES para que se carguen y se guarden.
-    for (const api of APIS) {
-      const f = seccion.fields.find((x) => x.api === api)!;
-      expect(f.oculto, api).toBe(true);
+  it("los tres huecos de una sola fila ya no existen: ahora es una lista", () => {
+    for (const api of ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto"]) {
+      expect(FICHA_SECCIONES.flatMap((s) => s.fields).map((f) => f.api), api).not.toContain(api);
     }
   });
 
-  it("el esquema los acepta: sin esto el guardado responde 400", () => {
-    const r = necesidadUpdateSchema.safeParse({
-      personalClaveTiempo: "tres (3) años",
-      personalClaveTrabajos: "supervisión de montaje",
-      personalClavePuesto: "Ingeniero residente",
-      personalClaveExperiencia: componerExperienciaPersonalClave({ tiempo: "3", trabajos: "x", puesto: "y" }),
-    });
+  it("el esquema acepta la lista serializada: sin esto el guardado responde 400", () => {
+    const r = necesidadUpdateSchema.safeParse({ personalClaveExperiencia: formatPersonalClave(FILAS) });
     expect(r.success, r.success ? "" : JSON.stringify(r.error.issues)).toBe(true);
   });
 
-  it("el texto con los tres corchetes cabe en el tope del campo", () => {
-    // Con los huecos vacíos el texto es el MÁS largo: los corchetes del formato
-    // son más largos que casi cualquier valor real.
-    expect(componerExperienciaPersonalClave({}).length).toBeLessThanOrEqual(LIMITES_TEXTO.personalClaveExperiencia);
+  it("un cuadro razonable cabe en el tope del campo", () => {
+    const muchas = Array.from({ length: 8 }, () => FILAS[0]);
+    expect(formatPersonalClave(muchas).length).toBeLessThanOrEqual(LIMITES_TEXTO.personalClaveExperiencia);
   });
 
-  it("el editor de requisitos lo compone dentro de la experiencia del postor", async () => {
-    // Se vigila el fuente porque el suite no monta React. El bloque va en la
-    // tarjeta de experiencia del postor y compone con «componerExperienciaPersonalClave».
+  it("el editor lo pinta dentro de la experiencia del postor, con «Agregar»", async () => {
+    // Se vigila el fuente porque el suite no monta React.
     const { readFileSync } = await import("node:fs");
-    const fuente = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
-    expect(fuente).toContain("componerExperienciaPersonalClave");
-    expect(fuente).toContain('tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha');
-    expect(fuente).toContain('onCampoFicha("personalClaveExperiencia"');
-    // Y escribe los tres huecos por su api.
-    for (const api of ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto"]) {
-      expect(fuente, api).toContain(`onCampoFicha("${api}"`);
-    }
+    const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
+    expect(editor).toContain("PersonalClaveEditor");
+    expect(editor).toContain('tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha');
+    const comp = readFileSync("app/components/personal-clave-editor.tsx", "utf-8");
+    expect(comp).toContain("Agregar personal clave");
   });
 });

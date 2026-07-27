@@ -18,7 +18,7 @@ import type { ObjetoFilter } from "./procesos-seleccion";
  */
 
 /** Cómo se pinta un campo en el documento. */
-export type FormatoCampo = "linea" | "parrafo" | "tabla" | "vinetas";
+export type FormatoCampo = "linea" | "parrafo" | "tabla" | "tablaPersonalClave" | "vinetas";
 
 export type CampoRequerimiento = {
   /** api del campo en la ficha; el renderizador lo necesita para los estructurados. */
@@ -60,6 +60,7 @@ export function etiquetaDeDocumento(label: string): string {
  */
 function formatoDe(field: FichaField): FormatoCampo {
   if (field.kind === "penalidades") return "tabla";
+  if (field.kind === "personalClave") return "tablaPersonalClave";
   if (field.kind === "requisitos") return "vinetas";
   if (field.kind === "textarea" || field.kind === "controversias" || field.kind === "subcontratacion") {
     return "parrafo";
@@ -124,7 +125,11 @@ export function estructuraDelRequerimiento(
     if (SECCIONES_FUERA.has(seccion.title)) continue;
     const campos: CampoRequerimiento[] = [];
     for (const field of seccion.fields) {
-      if (field.oculto || NO_VAN_SOLOS.has(field.api)) continue;
+      // El personal clave está `oculto` porque en la FICHA lo pinta el editor de
+      // requisitos, no la lista de campos; pero en el DOCUMENTO sí es su propio
+      // cuadro, así que se deja pasar. El resto de ocultos son espejos internos.
+      const soloEnDocumento = field.kind === "personalClave";
+      if ((field.oculto && !soloEnDocumento) || NO_VAN_SOLOS.has(field.api)) continue;
       const valor = (ficha[field.api] ?? "").trim();
       const exigido = exigidos.has(field.api);
       // Lo que no aplica a este objeto o procedimiento no entra, aunque haya

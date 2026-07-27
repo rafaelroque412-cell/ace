@@ -12303,14 +12303,11 @@ textarea:focus,
   color: var(--muted);
 }
 
-.reqCalPersonalClave input[type="text"] {
-  width: 100%;
-  font-size: 12.5px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel);
-  color: var(--ink);
+.reqCalPersonalClaveAyuda {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .reqCalSpin {
