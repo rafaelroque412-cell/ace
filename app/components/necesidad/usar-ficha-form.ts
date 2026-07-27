@@ -155,6 +155,14 @@ export function useFichaForm({
       }
     } catch { /* ignora */ }
     setCamposBorrador(delBorrador);
+    // Los valores que la norma ya impone se siembran al abrir: el cómputo del
+    // plazo en días calendario (Art. 105.3), la conformidad en siete días
+    // (Art. 144). Antes solo los pintaba el desplegable, así que el formulario
+    // no los TENÍA y un campo numérico con valor por defecto se guardaba vacío.
+    // Lo que ya está guardado es del usuario: no se siembra sobre ello.
+    for (const f of FICHA_SECCIONES.flatMap((s) => s.fields)) {
+      if (f.porDefecto && !(initial[f.api] ?? "").trim()) initial[f.api] = f.porDefecto;
+    }
     // El área que otorga la conformidad se pide UNA vez, en la forma de pago.
     // La casilla del Art. 144 está oculta y espejada: las fichas anteriores a
     // esto pueden traer el dato en cualquiera de las dos, así que la que tenga

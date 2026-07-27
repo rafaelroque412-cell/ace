@@ -82,6 +82,16 @@ export type CampoFichaProps = {
   tipoObjeto: string;
   tipoProceso: string | null;
   tocado: boolean;
+  /**
+   * Tope que depende de OTRO campo de la ficha, o `null` si no aplica.
+   *
+   * Lo calcula el padre por el mismo motivo que `montoEstimado`: leer el
+   * formulario entero aqui reintroduciria la dependencia que la memo corta.
+   * Manda sobre `field.max`, que es el tope fijo del catalogo.
+   */
+  topeCalculado: number | null;
+  /** Por que existe ese tope. Cadena vacia si no hay. */
+  topeMotivo: string;
   valor: string;
 };
 
@@ -111,6 +121,8 @@ export const CampoFicha = memo(function CampoFicha({
   tipoObjeto,
   tipoProceso,
   tocado,
+  topeCalculado,
+  topeMotivo,
   valor,
 }: CampoFichaProps) {
   const val = valor;
@@ -129,10 +141,30 @@ export const CampoFicha = memo(function CampoFicha({
    * cometio. Solo actua sobre campos ya tocados (o que ya estaban en error),
    * para no senalar lo que nadie ha tocado todavia.
    */
+  /** El tope que de verdad se aplica: el calculado manda sobre el del catalogo. */
+  const topeEfectivo = topeCalculado ?? field.max ?? null;
   const validarAlSalir = () => {
-    if (!obligatorio) return;
+    // El rango de un numero se comprueba SIEMPRE, sea obligatorio o no: pasarse
+    // del tope es un error tanto en un campo opcional como en uno exigido, y
+    // ademas el esquema lo rechazaria con un 400 al guardar.
+    const escrito = String(valor).trim();
+    if (field.kind === "number" && escrito) {
+      const n = Number(escrito);
+      if (Number.isFinite(n) && topeEfectivo !== null && n > topeEfectivo) {
+        onError(field.api, topeMotivo || `No puede pasar de ${topeEfectivo}.`);
+        return;
+      }
+      if (Number.isFinite(n) && field.min !== undefined && n < field.min) {
+        onError(field.api, `No puede ser menor que ${field.min}.`);
+        return;
+      }
+    }
+    if (!obligatorio) {
+      limpiarError();
+      return;
+    }
     if (!tocado && !error) return;
-    onError(field.api, String(valor).trim() ? null : "Campo obligatorio");
+    onError(field.api, escrito ? null : "Campo obligatorio");
   };
   // Marcas de accesibilidad del control. Sin ellas el error solo existe en rojo:
   // `aria-invalid` hace que el lector de pantalla anuncie el campo como
@@ -479,7 +511,7 @@ export const CampoFicha = memo(function CampoFicha({
         <input
           className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
           {...marcasError}
-          max={field.max}
+          max={field.kind === "number" ? topeEfectivo ?? undefined : undefined}
           min={field.min}
           onBlur={validarAlSalir}
           onChange={(e) => { onCambio(field.api, e.target.value); alEscribir(); }}

@@ -86,7 +86,9 @@ describe("la casilla numérica aplica el rango declarado", () => {
     const fuente = readFileSync("app/components/necesidad/campo-ficha.tsx", "utf-8");
     const i = fuente.indexOf('field.kind === "number" || field.kind === "date"');
     const bloque = fuente.slice(i, i + 500);
-    expect(bloque).toContain("max={field.max}");
+    // `topeEfectivo` es `topeCalculado ?? field.max`: el tope del catálogo, o
+    // el que depende de otro campo cuando lo hay (el 30% de la subsanación).
+    expect(bloque).toContain("topeEfectivo");
     expect(bloque).toContain("min={field.min}");
   });
 });

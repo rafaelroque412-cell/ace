@@ -38,12 +38,17 @@ export type FichaField = {
   label: string;
   kind?: FichaFieldKind;
   /**
-   * Valor con el que arranca un desplegable cuando no hay nada guardado.
+   * Valor con el que arranca el campo cuando no hay nada guardado.
    *
-   * Se usa donde la norma YA impone una opcion y «sin definir» no es un estado
+   * Se usa donde la norma YA impone un valor y «sin definir» no es un estado
    * legitimo: el computo del plazo es en dias calendario salvo excepcion (Art.
-   * 105.3), asi que dejarlo vacio solo invita a que cada cual lo interprete.
-   * Con `porDefecto`, el desplegable no ofrece la opcion vacia.
+   * 105.3), y la conformidad se otorga en siete dias salvo que hagan falta
+   * pruebas (Art. 144). Dejarlos vacios solo invita a que cada cual lo
+   * interprete.
+   *
+   * En un desplegable, ademas, hace que no se ofrezca la opcion vacia. El
+   * formulario lo siembra al abrir, asi que el valor EXISTE y se guarda; antes
+   * solo lo pintaba el desplegable sin que el formulario lo tuviera.
    */
   porDefecto?: string;
   /**
@@ -469,8 +474,8 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // Art. 144, y el apartado lo redacta luego el copiloto a partir de ellos.
       // El tope de 999 son los tres dígitos: un plazo de conformidad de cuatro
       // cifras es un error de tecleo, no un plazo.
-      { col: "conformidad_plazo", api: "conformidadPlazo", label: "Plazo máximo para la conformidad (días)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, baseLegal: "Art. 144 Reglamento · siete (7) días, o hasta veinte (20) si hacen falta pruebas que verifiquen el cumplimiento.", ejemplo: "7" },
-      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones (días hábiles)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, mostrarPara: ["servicios", "consultoria_obra"], baseLegal: "No mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. En bienes esa cifra va fija en el texto.", ejemplo: "5" },
+      { col: "conformidad_plazo", api: "conformidadPlazo", label: "Plazo máximo para la conformidad (días)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, porDefecto: "7", baseLegal: "Art. 144 Reglamento · siete (7) días, o hasta veinte (20) si hacen falta pruebas que verifiquen el cumplimiento. Arranca en 7, que es la regla; los veinte son la excepción y hay que elegirlos.", ejemplo: "7" },
+      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones (días hábiles)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, mostrarPara: ["servicios", "consultoria_obra"], baseLegal: "Art. 144 Reglamento · no mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. El tope se calcula sobre el «Plazo de ejecución o prestación» registrado más arriba. En bienes esa cifra va fija en el texto.", ejemplo: "5" },
       { subgrupo: "Recepción y conformidad (Art. 144)", col: "recepcion_conformidad", api: "recepcionConformidad", label: "Recepción y conformidad de la prestación", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad de bienes y servicios.", ejemplo: "Conformidad otorgada por el área usuaria en 10 días hábiles" },
       { subgrupo: "Otras condiciones del contrato", col: "gestion_riesgos", api: "gestionRiesgos", label: "Gestión de riesgos", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.3 Reglamento · al elaborar el requerimiento se inicia la identificación y evaluación de riesgos y su asignación a alguna de las partes, que es insumo de la estrategia de contratación.", ejemplo: "Matriz de riesgos y asignación entre las partes" },
       { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "metas_fisicas", api: "metasFisicas", label: "Metas físicas / objetivos funcionales", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154 Reglamento · requerimiento de obras y consultoría de obras; las metas físicas concretan el alcance del Art. 44.2.a.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Construcción de 1,200 m² de pavimento rígido" },

@@ -17,6 +17,7 @@ import { TIPO_AREA_OPCIONES } from "@/lib/necesidad-workflow";
 import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
 import { componerControversias, parseInstituciones } from "@/lib/instituciones-arbitrales";
 import { NOMBRE_MAX } from "@/lib/necesidades-limites";
+import { topeSubsanacion } from "@/lib/plazo-subsanacion";
 import { cn } from "@/lib/utils";
 import { Alert, Button } from "../ui";
 import { NecesidadItemsEditor } from "../necesidad-items-editor";
@@ -279,6 +280,16 @@ export function FichaEditable({
     comp: completitudSeccion(s),
   }));
 
+  // El plazo para subsanar observaciones no puede pasar del 30% del plazo del
+  // entregable (Art. 144). Es el único tope de la ficha que depende de OTRO
+  // campo, así que se calcula aquí y baja al campo como un número suelto: leer
+  // el formulario dentro de `CampoFicha` anularía su memoización.
+  const topeSubsanacionDias = topeSubsanacion(fichaForm.plazoEjecucion);
+  const motivoSubsanacion =
+    topeSubsanacionDias === null
+      ? ""
+      : `No puede pasar de ${topeSubsanacionDias} días: es el 30% del plazo de ejecución (${(fichaForm.plazoEjecucion ?? "").trim()} días) que fija el Art. 144.`;
+
   function renderFichaField(field: FichaField) {
     // El campo se pinta en su propio componente memoizado. Lo que se le
     // pasa son VALORES de este campo, no las estructuras completas: el
@@ -313,6 +324,8 @@ export function FichaEditable({
         tipoObjeto={ejeObjeto}
         tipoProceso={ejeProceso || null}
         tocado={camposTocados.has(field.api)}
+        topeCalculado={field.api === "conformidadPlazoSubsanacion" ? topeSubsanacionDias : null}
+        topeMotivo={field.api === "conformidadPlazoSubsanacion" ? motivoSubsanacion : ""}
         valor={fichaForm[field.api] ?? ""}
       />
     );
