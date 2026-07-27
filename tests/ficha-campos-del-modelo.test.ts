@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { campoAplica, FICHA_SECCIONES, objetosEfectivosDe } from "@/lib/necesidad-ficha-secciones";
+import {
+  campoAplica,
+  campoObligatorio,
+  FICHA_SECCIONES,
+  objetosEfectivosDe,
+} from "@/lib/necesidad-ficha-secciones";
 
 /**
  * La ficha no puede esconder un campo que el modelo del procedimiento exige.
@@ -33,6 +38,30 @@ describe("los apartados que el modelo de bienes trae están en la ficha", () => 
       for (const objeto of ["servicios", "obras", "consultoria_obra"] as const) {
         expect(campoAplica(CAMPO(api)!, objetosEfectivosDe("", objeto), ""), `${api} · ${objeto}`).toBe(true);
       }
+    }
+  });
+});
+
+describe("el sistema de entrega es obligatorio en bienes", () => {
+  it("lo exige el formato, igual que en obras y consultoría de obra", () => {
+    // Verse y ser obligatorio son dos cosas distintas: primero se abrió el campo
+    // a bienes, y después se confirmó que el formato además lo EXIGE.
+    for (const objeto of ["bienes", "obras", "consultoria_obra"] as const) {
+      expect(
+        campoObligatorio(CAMPO("sistemaEntrega")!, objetosEfectivosDe("", objeto), ""),
+        objeto,
+      ).toBe(true);
+    }
+  });
+
+  it("la subcontratación NO se vuelve obligatoria de rebote", () => {
+    // Se abrió a bienes junto con el sistema de entrega, pero es opcional en
+    // todos los objetos y no se consultó cambiar eso.
+    for (const objeto of ["bienes", "servicios", "obras", "consultoria_obra"] as const) {
+      expect(
+        campoObligatorio(CAMPO("subcontratacion")!, objetosEfectivosDe("", objeto), ""),
+        objeto,
+      ).toBe(false);
     }
   });
 });
