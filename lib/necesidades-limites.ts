@@ -89,13 +89,13 @@ export const LIMITES_TEXTO: Record<string, number> = {
   // Los apartados que se componen con plantilla. Sin tope aqui, el formulario
   // no capaba la entrada y un texto largo llegaba al PATCH para que lo
   // rechazara con un 400 —que es como se cuelan estos fallos—.
-  formaPago: 6000,
+  // 8000 y no 6000: al texto se le sumo el nombre del proyecto de inversion,
+  // que admite 2000 por si solo. Con 6000 un proyecto de nombre largo hacia que
+  // el apartado se CORTARA al escribirlo, sin avisar. Una prueba comprueba que
+  // el peor caso posible cabe.
+  formaPago: 8000,
   formaPagoTipo: 1000,
-  // 2400 y no 300 como los demas nombres de area: aqui no cabe solo el area,
-  // cabe el area MAS el nombre del proyecto de inversion (que admite 2000) y su
-  // CUI, porque el campo se compone con los tres (`componerAreaConformidad`).
-  // Con 300 el nombre de un proyecto real se cortaba a la mitad.
-  formaPagoAreaConformidad: 2400,
+  formaPagoAreaConformidad: 300,
   formaPagoDocumentacion: 1000,
   formaPagoLugar: 300,
   formaPagoDireccion: 300,

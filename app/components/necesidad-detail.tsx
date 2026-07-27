@@ -454,9 +454,14 @@ export function NecesidadDetail({
         "formaPago",
         componerFormaPago({
           areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+          // El proyecto de inversion y su CUI no son huecos del formato: se
+          // traen de «b) Inversion a la que se imputa» para decir contra que
+          // inversion firma la conformidad esa area, que otorga varias.
+          cui: fichaForm.cui ?? "",
           direccion: fichaForm.formaPagoDireccion ?? "",
           documentacionAdicional: fichaForm.formaPagoDocumentacion ?? "",
           lugarPresentacion: fichaForm.formaPagoLugar ?? "",
+          proyectoInversion: fichaForm.proyectoInversion ?? "",
           tipoPago: fichaForm.formaPagoTipo ?? "",
         }),
       );

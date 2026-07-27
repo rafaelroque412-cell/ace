@@ -200,65 +200,95 @@ describe("el área de la conformidad se trae de lo ya registrado", () => {
     expect(componerAreaConformidad({ area: " A ", cui: "  ", proyectoInversion: " " })).toBe("A");
   });
 
-  it("y se lee bien dentro del apartado del Art. 67", () => {
-    const texto = componerFormaPago({
-      ...COMPLETO,
-      areaConformidad: componerAreaConformidad({
-        area: "Sub Gerencia de Desarrollo Económico",
-        cui: "2661009",
-        proyectoInversion: PROYECTO,
-      }),
-    });
+  it("el apartado lo compone solo, a partir de los campos sueltos", () => {
+    // La composición vive DENTRO de `componerFormaPago` y no en el campo de la
+    // ficha: ese campo es de donde sale el área, y escribir en él el resultado
+    // de leerlo sería morderse la cola.
+    const texto = componerFormaPago({ ...COMPLETO, cui: "2661009", proyectoInversion: PROYECTO });
     expect(texto).toContain(
       `responsable del Sub Gerencia de Desarrollo Económico, del proyecto de inversión «${PROYECTO}», con CUI 2661009.`,
     );
   });
-});
 
-describe("el campo compuesto cabe en su propio tope", () => {
-  it("el área más el proyecto más el CUI, todos al máximo, siguen cabiendo", async () => {
-    // Con el tope de 300 que tenían los demás nombres de área, el nombre de un
-    // proyecto real se cortaba a la mitad al componerlo.
-    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
-    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
-    const peor = componerAreaConformidad({
-      area: "á".repeat(LIMITES_TEXTO.conformidadArea),
-      cui: "9".repeat(LIMITES_TEXTO.cui),
-      proyectoInversion: "P".repeat(LIMITES_TEXTO.proyectoInversion),
-    });
-    expect(peor.length).toBeLessThanOrEqual(LIMITES_TEXTO.formaPagoAreaConformidad);
-    expect(necesidadUpdateSchema.safeParse({ formaPagoAreaConformidad: peor }).success).toBe(true);
+  it("sin inversión el apartado no cambia respecto a antes", () => {
+    expect(componerFormaPago(COMPLETO)).toContain(
+      "responsable del Sub Gerencia de Desarrollo Económico.",
+    );
+  });
+
+  it("y el corchete sigue saliendo si falta el área, aunque haya inversión", () => {
+    const texto = componerFormaPago({ ...COMPLETO, areaConformidad: "", cui: "2661009", proyectoInversion: PROYECTO });
+    expect(texto).toContain("[REGISTRAR LA DENOMINACIÓN DEL ÁREA RESPONSABLE");
+    expect(texto).not.toContain(PROYECTO);
   });
 });
 
-describe("el formulario lo compone y deja de hacerlo si se escribe a mano", () => {
-  // Se vigila el fuente porque el suite no monta React.
-  it("los tres campos de origen disparan la recomposición", async () => {
+describe("el área se pide UNA sola vez", () => {
+  it("la casilla del Art. 144 ya no se enseña", async () => {
+    // Estaban las dos en la sección 3.3, con el MISMO rótulo y una debajo de la
+    // otra: se registraba dos veces y nada garantizaba que dijeran lo mismo.
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const visibles = FICHA_SECCIONES.flatMap((s) => s.fields).filter(
+      (f) => !f.oculto && f.label === "Área que otorga la conformidad",
+    );
+    expect(visibles.map((f) => f.api)).toEqual(["formaPagoAreaConformidad"]);
+  });
+
+  it("pero su columna sigue existiendo, espejada", async () => {
+    // El apartado del Art. 144 la usa: se oculta la casilla, no el dato.
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "conformidadArea");
+    expect(campo?.oculto).toBe(true);
+
     const { readFileSync } = await import("node:fs");
     const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
     const i = fuente.indexOf("function setFichaField");
     const cuerpo = fuente.slice(i, fuente.indexOf("\n  }", i));
-    for (const api of ["conformidadArea", "proyectoInversion", "cui"]) {
-      expect(cuerpo, api).toContain(`api === "${api}"`);
-    }
-    expect(cuerpo).toContain("componerAreaConformidad");
+    expect(cuerpo).toContain('if (api === "formaPagoAreaConformidad") next.conformidadArea = value;');
   });
 
-  it("y lo escrito a mano se respeta", async () => {
-    const { readFileSync } = await import("node:fs");
-    const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
-    // La guarda: solo se rehace si el campo está vacío o sigue siendo la salida
-    // de esta misma regla. Sin ella, corregir el CUI borraría lo tecleado.
-    expect(fuente).toContain("compuestoAntes");
-    expect(fuente).toMatch(/if \(!actual\.trim\(\) \|\| actual === compuestoAntes\)/);
-  });
-
-  it("al abrir la ficha se compone si el campo está vacío", async () => {
+  it("y al abrir, la ficha vieja que solo tenga una de las dos rellena la otra", async () => {
     const { readFileSync } = await import("node:fs");
     const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
     const i = fuente.indexOf("function startFichaEdit");
     const cuerpo = fuente.slice(i, fuente.indexOf("setFichaEdit(true)", i));
-    expect(cuerpo).toContain("componerAreaConformidad");
+    expect(cuerpo).toContain("initial.formaPagoAreaConformidad = initial.conformidadArea");
+    expect(cuerpo).toContain("initial.conformidadArea = initial.formaPagoAreaConformidad");
+  });
+});
+
+describe("el apartado entero cabe en su tope", () => {
+  it("el peor caso posible —todos los huecos al máximo— no se corta", async () => {
+    // El texto capa a `LIMITES_TEXTO.formaPago` al escribirlo en la ficha. Si el
+    // peor caso lo rebasa, el apartado se corta SIN avisar en un documento que
+    // se firma. Al sumarle el nombre del proyecto (2000 por sí solo) el tope de
+    // 6000 se quedó corto.
+    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    const relleno = (api: string) => "á".repeat(LIMITES_TEXTO[api]);
+    const peor = componerFormaPago({
+      areaConformidad: relleno("formaPagoAreaConformidad"),
+      cui: relleno("cui"),
+      direccion: relleno("formaPagoDireccion"),
+      documentacionAdicional: relleno("formaPagoDocumentacion"),
+      lugarPresentacion: relleno("formaPagoLugar"),
+      proyectoInversion: relleno("proyectoInversion"),
+      tipoPago: relleno("formaPagoTipo"),
+    });
+    expect(peor.length).toBeLessThanOrEqual(LIMITES_TEXTO.formaPago);
+    expect(necesidadUpdateSchema.safeParse({ formaPago: peor }).success).toBe(true);
+  });
+});
+
+describe("el formulario compone el apartado con la inversión", () => {
+  it("«Redactar con IA» le pasa el proyecto y el CUI", async () => {
+    // Se vigila el fuente porque el suite no monta React.
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+    const i = fuente.indexOf("const pedirRedactarIA");
+    const cuerpo = fuente.slice(i, fuente.indexOf("\n  };", i));
+    expect(cuerpo).toContain("cui: fichaForm.cui");
+    expect(cuerpo).toContain("proyectoInversion: fichaForm.proyectoInversion");
   });
 
   it("el borrador local se guarda DESPUÉS de derivar los campos", async () => {
@@ -269,9 +299,9 @@ describe("el formulario lo compone y deja de hacerlo si se escribe a mano", () =
     const i = fuente.indexOf("function setFichaField");
     const cuerpo = fuente.slice(i, fuente.indexOf("\n  }", i));
     // Los dos tienen que ESTAR: con -1, un «menor que» pasaría solo.
-    expect(cuerpo).toContain("componerAreaConformidad");
+    expect(cuerpo).toContain("next.conformidadArea = value");
     expect(cuerpo).toContain("localStorage.setItem(DRAFT_KEY");
-    expect(cuerpo.indexOf("componerAreaConformidad")).toBeLessThan(
+    expect(cuerpo.indexOf("next.conformidadArea = value")).toBeLessThan(
       cuerpo.indexOf("localStorage.setItem(DRAFT_KEY"),
     );
   });

@@ -22,11 +22,20 @@ export type HuecosFormaPago = {
   lugarPresentacion: string;
   /** Pago único o pagos a cuenta, con su detalle. */
   tipoPago: string;
+  /**
+   * Nombre del proyecto de inversión, de «b) Inversión a la que se imputa».
+   *
+   * No es un hueco del formato: acompaña al área en el texto cuando la
+   * contratación se imputa a una inversión, y se trae de donde ya está.
+   */
+  proyectoInversion: string;
+  /** Código Único de Inversión, del mismo subgrupo. Tampoco es un hueco. */
+  cui: string;
 };
 
 /** De dónde sale el área que otorga la conformidad, ya registrado en la ficha. */
 export type DatosAreaConformidad = {
-  /** «Área que otorga la conformidad» del Art. 144, en Otras condiciones. */
+  /** «Área que otorga la conformidad», el único sitio donde se pide. */
   area: string;
   /** Código Único de Inversión, de «b) Inversión a la que se imputa». */
   cui: string;
@@ -37,14 +46,14 @@ export type DatosAreaConformidad = {
 /**
  * El área que otorga la conformidad, con la inversión a la que pertenece.
  *
- * Este dato ya está registrado tres veces en la ficha —el área en el apartado
- * del Art. 144, y el proyecto y su CUI en «b) Inversión a la que se imputa»—,
- * así que se trae de ahí en vez de pedir que se teclee otra vez en la forma de
- * pago.
- *
- * Y se trae ENTERO, no solo el nombre del área: la misma sub gerencia otorga
+ * Va ENTERO y no solo el nombre del área: la misma sub gerencia otorga
  * conformidades de varios proyectos a la vez, y quien paga necesita saber
- * contra cuál se firma esta.
+ * contra cuál se firma esta. El proyecto y su CUI ya están registrados en «b)
+ * Inversión a la que se imputa», así que se traen de ahí.
+ *
+ * Se compone AQUÍ, al redactar el apartado, y no en el propio campo de la
+ * ficha: ese campo es de donde sale el área, y escribir en él el resultado de
+ * leerlo sería morderse la cola.
  *
  * Sin área no se compone nada: el hueco del formato tiene que seguir viéndose
  * como lo que es. El proyecto y el CUI se añaden por separado —una ficha puede
@@ -98,7 +107,13 @@ export function componerFormaPago(h: Partial<HuecosFormaPago>): string {
     `La entidad contratante realiza el pago de la contraprestación pactada a favor del contratista en ${hueco(h.tipoPago ?? "", "CONSIGNAR SI SE TRATA DE PAGO ÚNICO O PAGOS A CUENTA, ASÍ COMO EL DETALLE QUE CORRESPONDE EN EL CASO DE PAGO A CUENTA")}.`,
     "",
     "Para efectos del pago de las contraprestaciones ejecutadas por el contratista, la entidad contratante debe contar con la siguiente documentación:",
-    `- Documento en el que conste la conformidad de la prestación efectuada suscrita por el servidor responsable del ${hueco(h.areaConformidad ?? "", "REGISTRAR LA DENOMINACIÓN DEL ÁREA RESPONSABLE DE OTORGAR LA CONFORMIDAD")}.`,
+    // El área se acompaña del proyecto de inversión y su CUI cuando los hay. El
+    // hueco sigue siendo el ÁREA: sin ella no hay nada que componer y lo que
+    // debe verse es el corchete, no una inversión sin nadie que firme.
+    `- Documento en el que conste la conformidad de la prestación efectuada suscrita por el servidor responsable del ${hueco(
+      componerAreaConformidad({ area: h.areaConformidad, cui: h.cui, proyectoInversion: h.proyectoInversion }),
+      "REGISTRAR LA DENOMINACIÓN DEL ÁREA RESPONSABLE DE OTORGAR LA CONFORMIDAD",
+    )}.`,
     "- Comprobante de pago.",
     `- ${hueco(h.documentacionAdicional ?? "", "CONSIGNAR OTRA DOCUMENTACIÓN NECESARIA A SER PRESENTADA PARA EL PAGO ÚNICO O LOS PAGOS A CUENTA, SEGÚN CORRESPONDA")}.`,
     "",

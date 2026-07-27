@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { componerAreaConformidad } from "@/lib/forma-pago";
 import { decidirSiembra, GEMELO } from "@/lib/necesidad-denominacion";
 import { FICHA_SECCIONES, type FichaField } from "@/lib/necesidad-ficha-secciones";
 import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
@@ -156,16 +155,15 @@ export function useFichaForm({
       }
     } catch { /* ignora */ }
     setCamposBorrador(delBorrador);
-    // «Área que otorga la conformidad» de la forma de pago sale de lo que ya
-    // está registrado: el área del Art. 144 y, si la contratación se imputa a
-    // una inversión, su proyecto y su CUI. Solo se compone si está vacío —lo
-    // que ya hay escrito es del usuario, igual que con la siembra de arriba—.
-    if (!(initial.formaPagoAreaConformidad ?? "").trim()) {
-      initial.formaPagoAreaConformidad = componerAreaConformidad({
-        area: initial.conformidadArea,
-        cui: initial.cui,
-        proyectoInversion: initial.proyectoInversion,
-      });
+    // El área que otorga la conformidad se pide UNA vez, en la forma de pago.
+    // La casilla del Art. 144 está oculta y espejada: las fichas anteriores a
+    // esto pueden traer el dato en cualquiera de las dos, así que la que tenga
+    // algo rellena a la otra.
+    if (initial.conformidadArea && !initial.formaPagoAreaConformidad) {
+      initial.formaPagoAreaConformidad = initial.conformidadArea;
+    }
+    if (initial.formaPagoAreaConformidad && !initial.conformidadArea) {
+      initial.conformidadArea = initial.formaPagoAreaConformidad;
     }
     // Capar cualquier valor que exceda su tope (p. ej. un borrador con texto de
     // IA demasiado largo): así la ficha se puede guardar y el autoguardado deja
@@ -249,29 +247,10 @@ export function useFichaForm({
           next.costoTotal = "";
         }
       }
-      // El área de la forma de pago SIGUE al área del Art. 144 y a la inversión
-      // a la que se imputa, mientras nadie la haya escrito a mano.
-      //
-      // «A mano» se decide comparando con lo que esta misma regla habría
-      // compuesto ANTES del cambio: si el campo es todavía su propia salida (o
-      // está vacío), se rehace; si no, se respeta y deja de seguir a nadie. Así
-      // no hace falta más estado, y corregir el CUI después de haber escrito el
-      // área no destruye lo tecleado.
-      if (api === "conformidadArea" || api === "proyectoInversion" || api === "cui") {
-        const actual = prev.formaPagoAreaConformidad ?? "";
-        const compuestoAntes = componerAreaConformidad({
-          area: prev.conformidadArea,
-          cui: prev.cui,
-          proyectoInversion: prev.proyectoInversion,
-        });
-        if (!actual.trim() || actual === compuestoAntes) {
-          next.formaPagoAreaConformidad = componerAreaConformidad({
-            area: next.conformidadArea,
-            cui: next.cui,
-            proyectoInversion: next.proyectoInversion,
-          });
-        }
-      }
+      // Quien firma la conformidad del Art. 144 es quien la firma para el pago
+      // del Art. 67: es el mismo dato y ahora se pide una sola vez. La columna
+      // del Art. 144 se conserva porque su apartado la usa, así que se espeja.
+      if (api === "formaPagoAreaConformidad") next.conformidadArea = value;
       // El borrador local se guarda AL FINAL, no en cuanto se copia el valor
       // tecleado: estaba antes de los tres campos que se derivan aquí —centro
       // de costo, costo total y esta área— y por tanto guardaba un estado que
