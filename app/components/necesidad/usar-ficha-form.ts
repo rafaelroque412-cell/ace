@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { componerAreaConformidad } from "@/lib/forma-pago";
 import { decidirSiembra, GEMELO } from "@/lib/necesidad-denominacion";
 import { FICHA_SECCIONES, type FichaField } from "@/lib/necesidad-ficha-secciones";
 import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
@@ -155,6 +156,17 @@ export function useFichaForm({
       }
     } catch { /* ignora */ }
     setCamposBorrador(delBorrador);
+    // «Área que otorga la conformidad» de la forma de pago sale de lo que ya
+    // está registrado: el área del Art. 144 y, si la contratación se imputa a
+    // una inversión, su proyecto y su CUI. Solo se compone si está vacío —lo
+    // que ya hay escrito es del usuario, igual que con la siembra de arriba—.
+    if (!(initial.formaPagoAreaConformidad ?? "").trim()) {
+      initial.formaPagoAreaConformidad = componerAreaConformidad({
+        area: initial.conformidadArea,
+        cui: initial.cui,
+        proyectoInversion: initial.proyectoInversion,
+      });
+    }
     // Capar cualquier valor que exceda su tope (p. ej. un borrador con texto de
     // IA demasiado largo): así la ficha se puede guardar y el autoguardado deja
     // de fallar con 400. Sanea el estado atascado en este mismo navegador.
@@ -224,8 +236,6 @@ export function useFichaForm({
     setFichaForm((prev) => {
       const next = { ...prev, [api]: value };
       if (sembrar) next[sembrar] = value;
-      // Guardar borrador local
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* ignora */ }
       // Área usuaria y Centro de costo son el mismo campo
       if (api === "areaUsuaria") next.centroCosto = value;
       if (api === "centroCosto") next.areaUsuaria = value;
@@ -239,6 +249,35 @@ export function useFichaForm({
           next.costoTotal = "";
         }
       }
+      // El área de la forma de pago SIGUE al área del Art. 144 y a la inversión
+      // a la que se imputa, mientras nadie la haya escrito a mano.
+      //
+      // «A mano» se decide comparando con lo que esta misma regla habría
+      // compuesto ANTES del cambio: si el campo es todavía su propia salida (o
+      // está vacío), se rehace; si no, se respeta y deja de seguir a nadie. Así
+      // no hace falta más estado, y corregir el CUI después de haber escrito el
+      // área no destruye lo tecleado.
+      if (api === "conformidadArea" || api === "proyectoInversion" || api === "cui") {
+        const actual = prev.formaPagoAreaConformidad ?? "";
+        const compuestoAntes = componerAreaConformidad({
+          area: prev.conformidadArea,
+          cui: prev.cui,
+          proyectoInversion: prev.proyectoInversion,
+        });
+        if (!actual.trim() || actual === compuestoAntes) {
+          next.formaPagoAreaConformidad = componerAreaConformidad({
+            area: next.conformidadArea,
+            cui: next.cui,
+            proyectoInversion: next.proyectoInversion,
+          });
+        }
+      }
+      // El borrador local se guarda AL FINAL, no en cuanto se copia el valor
+      // tecleado: estaba antes de los tres campos que se derivan aquí —centro
+      // de costo, costo total y esta área— y por tanto guardaba un estado que
+      // ya no era el que se devolvía. Se corregía solo en la siguiente tecla,
+      // así que solo se notaba cerrando la pestaña justo en medio.
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* ignora */ }
       return next;
     });
   }

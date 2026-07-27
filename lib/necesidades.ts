@@ -259,7 +259,9 @@ export const necesidadCreateSchema = z.object({
   recepcionConformidad: optionalText(2000),
   formaPago: optionalText(6000),
   formaPagoTipo: optionalText(1000),
-  formaPagoAreaConformidad: optionalText(300),
+  // Cabe el area, el nombre del proyecto de inversion y el CUI juntos: el campo
+  // se compone con los tres. Ver el tope en lib/necesidades-limites.ts.
+  formaPagoAreaConformidad: optionalText(2400),
   formaPagoDocumentacion: optionalText(1000),
   formaPagoLugar: optionalText(300),
   formaPagoDireccion: optionalText(300),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { componerFormaPago, huecosPendientes } from "@/lib/forma-pago";
+import { componerAreaConformidad, componerFormaPago, huecosPendientes } from "@/lib/forma-pago";
 
 /**
  * El apartado FORMA DE PAGO no está en los PDF-modelo cargados: lo pide la
@@ -150,6 +150,130 @@ describe("el tipo de pago se elige, no se escribe", () => {
     for (const o of campo.opciones ?? []) {
       expect(necesidadUpdateSchema.safeParse({ formaPagoTipo: o.value }).success, o.value).toBe(true);
     }
+  });
+});
+
+/**
+ * El área que otorga la conformidad ya está registrada en la ficha —en el
+ * apartado del Art. 144— y, cuando la contratación se imputa a una inversión,
+ * también su proyecto y su CUI. Aquí se compone con los tres en vez de pedir
+ * que se teclee otra vez.
+ */
+const PROYECTO =
+  "186 MEJORAMIENTO Y AMPLIACION DE LOS SERVICIOS DE AGUA POTABLE Y SANEAMIENTO BASICO";
+
+describe("el área de la conformidad se trae de lo ya registrado", () => {
+  it("con los tres datos dice a qué inversión pertenece el área", () => {
+    expect(
+      componerAreaConformidad({
+        area: "Sub Gerencia de Desarrollo Económico",
+        cui: "2661009",
+        proyectoInversion: PROYECTO,
+      }),
+    ).toBe(
+      `Sub Gerencia de Desarrollo Económico, del proyecto de inversión «${PROYECTO}», con CUI 2661009`,
+    );
+  });
+
+  it("sin inversión sale solo el área", () => {
+    expect(componerAreaConformidad({ area: "Unidad de Logística" })).toBe("Unidad de Logística");
+  });
+
+  it("el proyecto y el CUI se añaden por separado", () => {
+    // Una ficha puede tener el nombre del proyecto y todavía no el código, o al
+    // revés: esperar a los dos dejaría el campo vacío teniendo ya la mitad.
+    expect(componerAreaConformidad({ area: "A", proyectoInversion: "P" })).toBe(
+      "A, del proyecto de inversión «P»",
+    );
+    expect(componerAreaConformidad({ area: "A", cui: "123" })).toBe("A, con CUI 123");
+  });
+
+  it("sin área no compone nada: el hueco del formato tiene que verse", () => {
+    // Devolver «del proyecto de inversión …» sin decir QUIÉN firma sería peor
+    // que el corchete: parecería un apartado completo.
+    expect(componerAreaConformidad({ cui: "2661009", proyectoInversion: PROYECTO })).toBe("");
+    expect(componerAreaConformidad({ area: "   ", cui: "2661009" })).toBe("");
+    expect(componerAreaConformidad({})).toBe("");
+  });
+
+  it("los espacios sobrantes no cuentan como dato", () => {
+    expect(componerAreaConformidad({ area: " A ", cui: "  ", proyectoInversion: " " })).toBe("A");
+  });
+
+  it("y se lee bien dentro del apartado del Art. 67", () => {
+    const texto = componerFormaPago({
+      ...COMPLETO,
+      areaConformidad: componerAreaConformidad({
+        area: "Sub Gerencia de Desarrollo Económico",
+        cui: "2661009",
+        proyectoInversion: PROYECTO,
+      }),
+    });
+    expect(texto).toContain(
+      `responsable del Sub Gerencia de Desarrollo Económico, del proyecto de inversión «${PROYECTO}», con CUI 2661009.`,
+    );
+  });
+});
+
+describe("el campo compuesto cabe en su propio tope", () => {
+  it("el área más el proyecto más el CUI, todos al máximo, siguen cabiendo", async () => {
+    // Con el tope de 300 que tenían los demás nombres de área, el nombre de un
+    // proyecto real se cortaba a la mitad al componerlo.
+    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    const peor = componerAreaConformidad({
+      area: "á".repeat(LIMITES_TEXTO.conformidadArea),
+      cui: "9".repeat(LIMITES_TEXTO.cui),
+      proyectoInversion: "P".repeat(LIMITES_TEXTO.proyectoInversion),
+    });
+    expect(peor.length).toBeLessThanOrEqual(LIMITES_TEXTO.formaPagoAreaConformidad);
+    expect(necesidadUpdateSchema.safeParse({ formaPagoAreaConformidad: peor }).success).toBe(true);
+  });
+});
+
+describe("el formulario lo compone y deja de hacerlo si se escribe a mano", () => {
+  // Se vigila el fuente porque el suite no monta React.
+  it("los tres campos de origen disparan la recomposición", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
+    const i = fuente.indexOf("function setFichaField");
+    const cuerpo = fuente.slice(i, fuente.indexOf("\n  }", i));
+    for (const api of ["conformidadArea", "proyectoInversion", "cui"]) {
+      expect(cuerpo, api).toContain(`api === "${api}"`);
+    }
+    expect(cuerpo).toContain("componerAreaConformidad");
+  });
+
+  it("y lo escrito a mano se respeta", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
+    // La guarda: solo se rehace si el campo está vacío o sigue siendo la salida
+    // de esta misma regla. Sin ella, corregir el CUI borraría lo tecleado.
+    expect(fuente).toContain("compuestoAntes");
+    expect(fuente).toMatch(/if \(!actual\.trim\(\) \|\| actual === compuestoAntes\)/);
+  });
+
+  it("al abrir la ficha se compone si el campo está vacío", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
+    const i = fuente.indexOf("function startFichaEdit");
+    const cuerpo = fuente.slice(i, fuente.indexOf("setFichaEdit(true)", i));
+    expect(cuerpo).toContain("componerAreaConformidad");
+  });
+
+  it("el borrador local se guarda DESPUÉS de derivar los campos", async () => {
+    // Estaba antes, así que guardaba un estado que ya no era el devuelto y solo
+    // se corregía en la siguiente tecla.
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
+    const i = fuente.indexOf("function setFichaField");
+    const cuerpo = fuente.slice(i, fuente.indexOf("\n  }", i));
+    // Los dos tienen que ESTAR: con -1, un «menor que» pasaría solo.
+    expect(cuerpo).toContain("componerAreaConformidad");
+    expect(cuerpo).toContain("localStorage.setItem(DRAFT_KEY");
+    expect(cuerpo.indexOf("componerAreaConformidad")).toBeLessThan(
+      cuerpo.indexOf("localStorage.setItem(DRAFT_KEY"),
+    );
   });
 });
 

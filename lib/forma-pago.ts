@@ -24,6 +24,43 @@ export type HuecosFormaPago = {
   tipoPago: string;
 };
 
+/** De dónde sale el área que otorga la conformidad, ya registrado en la ficha. */
+export type DatosAreaConformidad = {
+  /** «Área que otorga la conformidad» del Art. 144, en Otras condiciones. */
+  area: string;
+  /** Código Único de Inversión, de «b) Inversión a la que se imputa». */
+  cui: string;
+  /** Nombre del proyecto de inversión, del mismo subgrupo. */
+  proyectoInversion: string;
+};
+
+/**
+ * El área que otorga la conformidad, con la inversión a la que pertenece.
+ *
+ * Este dato ya está registrado tres veces en la ficha —el área en el apartado
+ * del Art. 144, y el proyecto y su CUI en «b) Inversión a la que se imputa»—,
+ * así que se trae de ahí en vez de pedir que se teclee otra vez en la forma de
+ * pago.
+ *
+ * Y se trae ENTERO, no solo el nombre del área: la misma sub gerencia otorga
+ * conformidades de varios proyectos a la vez, y quien paga necesita saber
+ * contra cuál se firma esta.
+ *
+ * Sin área no se compone nada: el hueco del formato tiene que seguir viéndose
+ * como lo que es. El proyecto y el CUI se añaden por separado —una ficha puede
+ * tener el nombre del proyecto y aún no el código, o al revés—.
+ */
+export function componerAreaConformidad(d: Partial<DatosAreaConformidad>): string {
+  const area = (d.area ?? "").trim();
+  if (!area) return "";
+  const partes = [area];
+  const proyecto = (d.proyectoInversion ?? "").trim();
+  if (proyecto) partes.push(`del proyecto de inversión «${proyecto}»`);
+  const cui = (d.cui ?? "").trim();
+  if (cui) partes.push(`con CUI ${cui}`);
+  return partes.join(", ");
+}
+
 /**
  * Lo que se deja escrito cuando un hueco sigue vacío.
  *
