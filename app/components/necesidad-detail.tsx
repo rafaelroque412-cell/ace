@@ -673,6 +673,24 @@ export function NecesidadDetail({
   const extractFileRef = useRef<HTMLInputElement | null>(null);
 
   /**
+   * Los DOS campos que deciden QUE ficha se pinta: cuales aplican, cuales son
+   * obligatorios y cuales exige el modelo del proceso. Del borrador si se esta
+   * editando, y de lo guardado si no.
+   *
+   * Estaban recalculados en CUATRO sitios y no coincidian: `objetosEfectivos`
+   * cruzaba el proceso del BORRADOR con el objeto GUARDADO, mientras que
+   * `campoExigible` y `obligatoriosDelProceso` tomaban los dos del borrador. Al
+   * cambiar el Tipo de objeto sin guardar, la misma pantalla marcaba unos campos
+   * como obligatorios segun el objeto viejo y otros segun el nuevo —y las dos
+   * respuestas se usan en el MISMO filtro de `camposVisibles`—.
+   */
+  const ejeProceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
+  const ejeObjeto = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
+  /** Objetos que el procedimiento admite (Art. 44.10), acotados por el elegido. */
+  const objetosEfectivos = objetosEfectivosDe(ejeProceso, ejeObjeto || undefined);
+
+
+  /**
    * Campos que EXIGE el modelo de requerimiento del proceso elegido.
    *
    * La ficha tiene ~70 campos y ningún procedimiento los pide todos. En vez de
@@ -688,8 +706,8 @@ export function NecesidadDetail({
     // Reactivo al FORMULARIO: si el usuario cambia el Tipo de objeto o el Tipo de
     // proceso en la ficha, se recargan los campos que exige ESE proceso. En
     // lectura (fichaForm aún vacío) manda el dato guardado de la necesidad.
-    const proceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
-    const objeto = fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "";
+    const proceso = ejeProceso;
+    const objeto = ejeObjeto;
     let cancelado = false;
     void (async () => {
       // El vaciado va dentro del bloque asíncrono, no en el cuerpo del efecto:
@@ -718,12 +736,7 @@ export function NecesidadDetail({
     return () => {
       cancelado = true;
     };
-  }, [
-    fichaForm.tipoProcesoSeleccion,
-    fichaForm.tipoObjeto,
-    necesidad?.tipo_proceso_seleccion,
-    necesidad?.tipo_objeto,
-  ]);
+  }, [ejeProceso, ejeObjeto]);
 
   const { entity: configuredEntity, processTypes: procesosEntidad } = useSettingsCatalog();
   const { year } = useYear();
@@ -859,9 +872,6 @@ export function NecesidadDetail({
    * declarado. Es la base tanto del filtrado de campos como del obligatorio
    * condicional (`obligatorioPara`).
    */
-  function objetosEfectivos(): ObjetoFilter[] {
-    return objetosEfectivosDe(fichaForm.tipoProcesoSeleccion, tipoObj);
-  }
 
   /** ¿El campo es obligatorio para el objeto/proceso actual? Contempla el
    *  obligatorio incondicional, el condicional por objeto (`obligatorioPara`) y
@@ -871,7 +881,7 @@ export function NecesidadDetail({
     // dejan de exigirse: el dato vive en cada ítem. Se comprueba antes que nada
     // porque manda sobre cualquier otro criterio de obligatoriedad.
     if (field.noExigibleConItems && items.length > 0) return false;
-    return campoObligatorio(field, objetosEfectivos(), fichaForm.tipoProcesoSeleccion);
+    return campoObligatorio(field, objetosEfectivos, ejeProceso);
   }
 
   function camposParaObjeto(fields: FichaField[]): FichaField[] {
@@ -879,8 +889,8 @@ export function NecesidadDetail({
     // valor se guarda igual desde `construirPayload`, que recorre section.fields.
     // El procedimiento ACOTA los objetos posibles (Art. 44.10) y además puede
     // acotar campos concretos por sí mismo (`mostrarEnProceso`).
-    const efectivos = objetosEfectivos();
-    const proc = fichaForm.tipoProcesoSeleccion;
+    const efectivos = objetosEfectivos;
+    const proc = ejeProceso;
     return fields.filter((f) => !f.oculto && campoAplica(f, efectivos, proc));
   }
 
@@ -963,10 +973,8 @@ export function NecesidadDetail({
    * «14/16 obligatorios»—, sobre conjuntos distintos y sin nada que los separara.
    */
   function campoExigible(field: FichaField): boolean {
-    const procesoActual = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
-    const objetoActual = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
-    const efectivos = objetosEfectivosDe(procesoActual, (objetoActual || undefined) as ObjetoFilter | undefined);
-    return campoObligatorio(field, efectivos, procesoActual) || exigidosModelo.has(field.api);
+    const efectivos = objetosEfectivos;
+    return campoObligatorio(field, efectivos, ejeProceso) || exigidosModelo.has(field.api);
   }
 
   /**
@@ -990,14 +998,12 @@ export function NecesidadDetail({
 
 
   function obligatoriosDelProceso(): FichaField[] {
-    const procesoActual = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
-    const objetoActual = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
-    const efectivos = objetosEfectivosDe(procesoActual, (objetoActual || undefined) as ObjetoFilter | undefined);
+    const efectivos = objetosEfectivos;
     const items: FichaField[] = [];
     for (const section of FICHA_SECCIONES) {
-      if (section.mostrarPara && !(objetoActual && section.mostrarPara.includes(objetoActual as ObjetoFilter))) continue;
+      if (section.mostrarPara && !(ejeObjeto && section.mostrarPara.includes(ejeObjeto as ObjetoFilter))) continue;
       for (const f of section.fields) {
-        if (f.oculto || !campoAplica(f, efectivos, procesoActual)) continue;
+        if (f.oculto || !campoAplica(f, efectivos, ejeProceso)) continue;
         // El modelo SUMA, no resta. La lista que sale del PDF marca lo que ese
         // procedimiento exige DE MÁS; no puede degradar un campo que la ficha —y con
         // ella la norma— ya declara obligatorio. Antes la sustituía por completo: con
@@ -1025,7 +1031,7 @@ export function NecesidadDetail({
     };
     // Del calculo compartido: el panel no puede contar distinto que la cabecera.
     const { done } = avanceRequerimiento(modo);
-    const proceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
+    const proceso = ejeProceso;
     return (
       // La franja izquierda pasa de marca a éxito cuando no queda nada: el cambio
       // de color es la señal, no hace falta un mensaje aparte.
@@ -1623,14 +1629,16 @@ export function NecesidadDetail({
    * quedaban como prosa dentro de `descripcion_detallada`.
    */
   function camposTrasladables(): Array<{ api: string; label: string; seccion: string; kind?: string }> {
-    const proc = necesidad?.tipo_proceso_seleccion ?? "";
-    const efectivos = objetosEfectivosDe(proc, (necesidad?.tipo_objeto ?? undefined) as ObjetoFilter | undefined);
+    // Mismos ejes que el resto de la ficha: el traslado escribe en el
+    // formulario ABIERTO, asi que debe ofrecer los campos del objeto y el
+    // proceso que hay ahora en pantalla, no los de la ultima vez que se guardo.
+    const efectivos = objetosEfectivos;
     const out: Array<{ api: string; label: string; seccion: string; kind?: string }> = [];
     for (const section of FICHA_SECCIONES) {
       if (!SECCIONES_TRASLADABLES.some((p) => section.title.startsWith(p))) continue;
       for (const f of section.fields) {
         if (f.oculto || f.checkbox || f.kind === "date") continue;
-        if (!campoAplica(f, efectivos, proc)) continue;
+        if (!campoAplica(f, efectivos, ejeProceso)) continue;
         // Con el modelo del proceso cargado, solo se traslada lo que ESE
         // procedimiento exige: pedirle a la IA que rellene campos que el
         // formato no pide llena la ficha de contenido que nadie va a usar y
@@ -2451,8 +2459,8 @@ export function NecesidadDetail({
                   onSubirEett={subirEettEstable}
                   onTocar={marcarTocado}
                   puedeGestionar={permisos.manage}
-                  tipoObjeto={fichaForm.tipoObjeto}
-                  tipoProceso={fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? null}
+                  tipoObjeto={ejeObjeto}
+                  tipoProceso={ejeProceso || null}
                   tocado={camposTocados.has(field.api)}
                   valor={fichaForm[field.api] ?? ""}
                 />
