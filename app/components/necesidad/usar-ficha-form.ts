@@ -1,0 +1,452 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { decidirSiembra, GEMELO } from "@/lib/necesidad-denominacion";
+import { FICHA_SECCIONES, type FichaField } from "@/lib/necesidad-ficha-secciones";
+import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
+import type { Necesidad } from "@/lib/necesidades";
+import type { NecesidadItem } from "@/lib/necesidad-items";
+import { cuiDeCadenaFuncional } from "@/lib/pedido-compra-import";
+import { CAMPO_LABEL } from "./campos-etiquetas";
+
+/**
+ * Todo el ciclo de vida del formulario de la ficha: abrirlo, escribir en el,
+ * autoguardar, validar y guardar.
+ *
+ * Vivia suelto en `necesidad-detail.tsx`, repartido en nueve funciones y dos
+ * efectos separados por cientos de lineas de otra cosa, sobre diez variables de
+ * estado declaradas en un tercer sitio. Estaban acopladas de verdad —el
+ * autoguardado y el guardado explicito comparten `construirPayload` y el sello
+ * `baseUpdatedAtRef` para detectar el conflicto de version— pero nada lo decia.
+ *
+ * ATENCION a lo que esto NO hace: el estado sigue viviendo en el componente que
+ * llama al hook, asi que los repintados son los mismos. Lo que cambia es que el
+ * ciclo esta junto y tiene nombre, que es lo que hacia falta ANTES de poder
+ * mover la ficha editable a su propio componente.
+ *
+ * Los cinco callbacks son las unicas salidas hacia el resto de la pantalla, y
+ * estan ahi porque el formulario no manda sobre ellas: el aviso de error es de
+ * la pagina, la recarga trae la necesidad entera, y el modo de trabajo y el
+ * paso a paso son decisiones de presentacion.
+ */
+/** Valor de la base a cadena; null y undefined son cadena vacia. */
+export function toStr(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+export type EstadoAutoguardado = "" | "guardando" | "guardado" | "error";
+
+export function useFichaForm({
+  campoEsObligatorio,
+  camposParaObjeto,
+  entidad,
+  items,
+  itemsGuardados,
+  necesidad,
+  necesidadId,
+  onAntesDeEditar,
+  onError,
+  onRecargar,
+  onSalirDelPasoAPaso,
+  year,
+}: {
+  /** Predicado del catalogo; depende de los ejes, que calcula quien llama. */
+  campoEsObligatorio: (field: FichaField) => boolean;
+  /** Filtra los campos que aplican al objeto y al procedimiento actuales. */
+  camposParaObjeto: (fields: FichaField[]) => FichaField[];
+  /** Entidad configurada, para sembrar entidad y unidad ejecutora al abrir. */
+  entidad: { executingUnit?: string | null; name?: string | null } | null | undefined;
+  items: NecesidadItem[];
+  /** Serializacion de los items tal como estan guardados, para no reescribirlos. */
+  itemsGuardados: string;
+  necesidad: Necesidad | null;
+  necesidadId: string;
+  /** Antes de abrir la edicion: en Revisar la ficha es de solo lectura. */
+  onAntesDeEditar: () => void;
+  /** Cadena vacia limpia el aviso. */
+  onError: (mensaje: string) => void;
+  onRecargar: () => Promise<void> | void;
+  /** Al fallar la validacion: el campo que falta suele estar en otro paso. */
+  onSalirDelPasoAPaso: () => void;
+  /** Ejercicio fiscal, para sembrar el año al abrir. */
+  year: number;
+}) {
+  const [fichaEdit, setFichaEdit] = useState(false);
+  const [fichaForm, setFichaForm] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [camposTocados, setCamposTocados] = useState<Set<string>>(new Set());
+  /** Campos cuyo valor local difiere de lo guardado: trabajo de este navegador. */
+  const [camposBorrador, setCamposBorrador] = useState<string[]>([]);
+  const [formSucio, setFormSucio] = useState(false);
+  const [autoguardado, setAutoguardado] = useState<EstadoAutoguardado>("");
+  const [conflictoGuardado, setConflictoGuardado] = useState(false);
+  const [savingFicha, setSavingFicha] = useState(false);
+  /** Campos sembrados por su gemelo y aun no tocados a mano. */
+  const [sembrados, setSembrados] = useState<ReadonlySet<string>>(new Set());
+  /**
+   * El api del primer campo obligatorio que falta tras un guardado fallido.
+   *
+   * Lo decide el guardado y lo consume el efecto de foco de quien llama. Vive
+   * aqui y no fuera porque un hook no debe modificar lo que le pasan: quien
+   * escribe el dato debe ser su dueño.
+   */
+  const focoPendiente = useRef<string | null>(null);
+  /** Sello de version con el que se abrio: el servidor rechaza si ya no cuadra. */
+  const baseUpdatedAtRef = useRef<string | null>(null);
+
+
+  const DRAFT_KEY = `ficha-draft-${necesidadId}`;
+
+  /**
+   * Los valores tal como están GUARDADOS en la base, sin borrador encima.
+   * Es la referencia contra la que se detecta qué sigue sin guardarse.
+   */
+  function valoresDeLaBase(n: Necesidad): Record<string, string> {
+    const base: Record<string, string> = {
+      nombre: toStr(n.nombre),
+      tipoObjeto: toStr(n.tipo_objeto),
+      tipoProcesoSeleccion: toStr(n.tipo_proceso_seleccion),
+      tipoArea: toStr(n.tipo_area),
+    };
+    for (const section of FICHA_SECCIONES) {
+      for (const field of section.fields) {
+        base[field.api] = field.checkbox ? String(Boolean(n[field.col])) : toStr(n[field.col]);
+      }
+    }
+    // El CUI de las fichas importadas ANTES de que el parser mapeara `act_proy`
+    // vive dentro de la cadena funcional del SIGA
+    // ("03-006-0010-2661009-6000008" → el 4.º segmento). El dato nunca se
+    // perdió, solo no tenía columna: se rescata en vez de obligar a teclearlo.
+    if (!base.cui) base.cui = cuiDeCadenaFuncional(n.cadena_funcional) ?? "";
+    return base;
+  }
+
+  // El sello base sigue a la necesidad cargada (carga inicial, reload, transición).
+  // Los guardados que no recargan (autoguardado) lo avanzan por su cuenta.
+  useEffect(() => {
+    baseUpdatedAtRef.current = necesidad?.updated_at ?? null;
+  }, [necesidad?.updated_at]);
+
+  function startFichaEdit() {
+    // En Revisar la ficha es de solo lectura.
+    onAntesDeEditar();
+    if (!necesidad) return;
+    const initial = valoresDeLaBase(necesidad);
+    if (!initial.entidad && entidad?.name) initial.entidad = entidad.name;
+    if (!initial.unidadEjecutora && entidad?.executingUnit) initial.unidadEjecutora = entidad.executingUnit;
+    if (!initial.anioFiscal) initial.anioFiscal = String(year);
+    if (initial.areaUsuaria && !initial.centroCosto) initial.centroCosto = initial.areaUsuaria;
+    if (initial.centroCosto && !initial.areaUsuaria) initial.areaUsuaria = initial.centroCosto;
+    // Cargar borrador local si existe
+    const base = valoresDeLaBase(necesidad);
+    const delBorrador: string[] = [];
+    try {
+      const draft = localStorage.getItem(DRAFT_KEY);
+      if (draft) {
+        const parsed = JSON.parse(draft) as Record<string, string>;
+        for (const key of Object.keys(parsed)) {
+          if (key in initial || key === "nombre" || key === "tipoObjeto" || key === "tipoArea") {
+            initial[key] = parsed[key];
+            // Lo que el borrador cambia respecto a la base es, literalmente,
+            // trabajo que solo existe en este navegador.
+            if ((parsed[key] ?? "") !== (base[key] ?? "")) delBorrador.push(key);
+          }
+        }
+      }
+    } catch { /* ignora */ }
+    setCamposBorrador(delBorrador);
+    // Capar cualquier valor que exceda su tope (p. ej. un borrador con texto de
+    // IA demasiado largo): así la ficha se puede guardar y el autoguardado deja
+    // de fallar con 400. Sanea el estado atascado en este mismo navegador.
+    for (const [key, lim] of Object.entries(LIMITES_TEXTO)) {
+      const v = initial[key];
+      if (typeof v === "string" && v.length > lim) initial[key] = v.slice(0, lim);
+    }
+    // Lo que ya está guardado es del usuario: nada se siembra sobre ello.
+    setSembrados(new Set());
+    setFormSucio(false);
+    setAutoguardado("");
+    setConflictoGuardado(false);
+    baseUpdatedAtRef.current = necesidad.updated_at ?? null;
+    setFichaForm(initial);
+    setFichaEdit(true);
+  }
+
+  /** Descarta el borrador del navegador y recarga lo guardado. */
+  function descartarBorrador() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
+    if (necesidad) {
+      const base = valoresDeLaBase(necesidad);
+      if (!base.anioFiscal) base.anioFiscal = String(year);
+      setFichaForm(base);
+    }
+    // Descartar es volver a lo guardado: no hay nada que autoguardar, y la
+    // siembra vuelve a partir de cero.
+    setFormSucio(false);
+    setSembrados(new Set());
+    setAutoguardado("");
+    setCamposBorrador([]);
+    setFieldErrors({});
+    onError("");
+  }
+
+  function setFichaField(api: string, value: string) {
+    // Capado defensivo al tope del schema: evita que un texto largo (típicamente
+    // redactado por el copiloto IA en un campo de tope corto) deje la ficha
+    // imposible de guardar (PATCH 400). Los campos numéricos no están en el mapa.
+    const limite = LIMITES_TEXTO[api];
+    if (limite && value.length > limite) value = value.slice(0, limite);
+    setFormSucio(true);
+    // Nombre ↔ Descripción detallada: siembra, no espejo.
+    //
+    // No son el mismo dato: el nombre es la DENOMINACIÓN (va al ASUNTO del
+    // informe A2, a la matriz y a la nomenclatura del expediente) y la
+    // descripción es el Art. 126.1 (especificaciones técnicas o TDR), que
+    // además compone el alcance de A3. Encadenarlos en espejo haría que
+    // escribir uno destruya el otro.
+    //
+    // Así que el que está vacío se siembra con el que se escribe, y se sigue
+    // sembrando MIENTRAS nadie lo haya tocado a mano (si solo se mirara "está
+    // vacío", dejaría de copiar en la segunda pulsación). En cuanto el usuario
+    // escribe en él, deja de seguir al otro para siempre.
+    //
+    // La decisión se toma AQUÍ y no dentro del updater de setFichaForm: ese
+    // updater debe ser puro, porque React puede ejecutarlo durante el render y
+    // más de una vez.
+    const { sembrar, sembrados: proximos } = decidirSiembra({
+      api,
+      maxNombre: NOMBRE_MAX,
+      sembrados,
+      value,
+      valorGemelo: fichaForm[GEMELO[api] ?? ""] ?? "",
+    });
+    if (GEMELO[api]) setSembrados(proximos);
+    setFichaForm((prev) => {
+      const next = { ...prev, [api]: value };
+      if (sembrar) next[sembrar] = value;
+      // Guardar borrador local
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* ignora */ }
+      // Área usuaria y Centro de costo son el mismo campo
+      if (api === "areaUsuaria") next.centroCosto = value;
+      if (api === "centroCosto") next.areaUsuaria = value;
+      // Auto-calcular costo_total = cantidad × costo_unitario
+      if (api === "cantidad" || api === "costoUnitario") {
+        const cant = Number(api === "cantidad" ? value : prev.cantidad ?? "0");
+        const cu = Number(api === "costoUnitario" ? value : prev.costoUnitario ?? "0");
+        if (Number.isFinite(cant) && Number.isFinite(cu) && cant > 0 && cu > 0) {
+          next.costoTotal = String(cant * cu);
+        } else if (api === "costoUnitario" && (value === "" || value === "0")) {
+          next.costoTotal = "";
+        }
+      }
+      return next;
+    });
+  }
+
+  /** Cuerpo del PATCH a partir del formulario. Lo comparten el guardado
+   *  explícito y el autoguardado, para que no puedan divergir. */
+  function construirPayload(): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      nombre: (fichaForm.nombre ?? "").trim(),
+      tipoObjeto: fichaForm.tipoObjeto || undefined,
+      // "" es un valor legítimo ("— Por definir —"): se envía tal cual (no
+      // `|| undefined`) para que volver a esa opción limpie la columna (→ null).
+      tipoProcesoSeleccion: fichaForm.tipoProcesoSeleccion ?? "",
+      tipoArea: fichaForm.tipoArea || undefined,
+    };
+    for (const section of FICHA_SECCIONES) {
+      for (const field of section.fields) {
+        const raw = (fichaForm[field.api] ?? "").trim();
+        if (field.checkbox) {
+          payload[field.api] = raw === "true";
+        } else if (field.kind === "number") {
+          if (raw === "") continue;
+          const num = Number(raw);
+          if (Number.isFinite(num)) payload[field.api] = num;
+        } else {
+          payload[field.api] = raw;
+        }
+      }
+    }
+    return payload;
+  }
+
+  /**
+   * Autoguardado: persiste lo escrito sin cerrar el formulario ni exigir los
+   * obligatorios (se guarda a medias a propósito; el estado de la necesidad no
+   * cambia hasta "Guardar ficha").
+   *
+   * En silencio y sin recargar: no toca `error` ni cierra la edición, porque
+   * dispara mientras el usuario escribe. Lo único que sí hace es limpiar el
+   * borrador local — una vez guardado en la base, el aviso de "sin guardar"
+   * sería mentira.
+   */
+  async function autoguardarFicha() {
+    const payload = construirPayload();
+    // El schema pide min(3) y max(NOMBRE_MAX): con un nombre a medio escribir
+    // se guarda todo lo demás y se deja el nombre para el guardado explícito.
+    const nombre = String(payload.nombre ?? "");
+    if (nombre.length < 3 || nombre.length > NOMBRE_MAX) delete payload.nombre;
+    setAutoguardado("guardando");
+    try {
+      const response = await fetch(`/api/necesidades/${necesidadId}`, {
+        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          ...(baseUpdatedAtRef.current ? { "X-Base-Updated-At": baseUpdatedAtRef.current } : {}),
+        },
+        method: "PATCH",
+      });
+      if (response.status === 409) {
+        // Otro actor guardó en medio: se detiene el autoguardado y se avisa. El
+        // borrador local se conserva para no perder lo tecleado antes de recargar.
+        setConflictoGuardado(true);
+        setAutoguardado("error");
+        return;
+      }
+      if (!response.ok) {
+        setAutoguardado("error");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (data?.necesidad?.updated_at) baseUpdatedAtRef.current = data.necesidad.updated_at;
+      setAutoguardado("guardado");
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
+      setCamposBorrador([]);
+    } catch {
+      setAutoguardado("error");
+    }
+  }
+
+  // Autoguardado: 1,5 s tras la última tecla. El temporizador se reinicia en
+  // cada cambio, así que escribiendo seguido no dispara nada; salta al parar.
+  //
+  // `fichaForm` entero en las dependencias: cualquier cambio del formulario
+  // (incluida la siembra del gemelo) debe persistirse.
+  useEffect(() => {
+    if (!fichaEdit || !formSucio || conflictoGuardado) return;
+    const t = setTimeout(() => { void autoguardarFicha(); }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fichaForm, fichaEdit, formSucio, conflictoGuardado]);
+
+  async function saveFicha() {
+    if ((fichaForm.nombre ?? "").trim().length < 3) {
+      onError("El nombre de la contratación no puede quedar vacío.");
+      return;
+    }
+    const newErrors: Record<string, string> = {};
+    for (const section of FICHA_SECCIONES) {
+      // Solo se exigen los obligatorios que APLICAN al tipo de objeto: si no se
+      // filtra, campos como "Sistema de entrega" (solo servicios/obras) bloquean
+      // el guardado de una necesidad de bienes sin estar siquiera visibles.
+      for (const field of camposParaObjeto(section.fields)) {
+        if (campoEsObligatorio(field) && !(fichaForm[field.api] ?? "").trim()) {
+          newErrors[field.api] = `Campo obligatorio`;
+        }
+      }
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
+      // `newErrors` se llena recorriendo FICHA_SECCIONES y las claves de texto
+      // conservan el orden de insercion: la primera ES la primera del formulario.
+      const faltan = Object.keys(newErrors);
+      const primero = faltan[0];
+      const comoSeLlama = CAMPO_LABEL[primero] ?? primero;
+      // Se nombra el campo en vez de decir "marcados en rojo": el color no es una
+      // senal utilizable por quien no lo distingue ni por un lector de pantalla.
+      onError(
+        faltan.length === 1
+          ? `Falta un campo obligatorio: «${comoSeLlama}».`
+          : `Faltan ${faltan.length} campos obligatorios. El primero es «${comoSeLlama}».`,
+      );
+      focoPendiente.current = primero;
+      // El salto al formulario completo se decide AQUI, en respuesta al clic, no
+      // dentro del efecto. En "paso a paso" se guarda desde el ultimo paso, asi
+      // que el campo que falta casi siempre esta en otro paso y ni siquiera esta
+      // montado; ademas el formulario completo ensena todos los errores a la vez
+      // y el indice de secciones dice cuantos faltan en cada una.
+      onSalirDelPasoAPaso();
+      return;
+    }
+    setFieldErrors({});
+    setCamposTocados(new Set());
+    setSavingFicha(true);
+    onError("");
+    try {
+      const payload = construirPayload();
+      const response = await fetch(`/api/necesidades/${necesidadId}`, {
+        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          ...(baseUpdatedAtRef.current ? { "X-Base-Updated-At": baseUpdatedAtRef.current } : {}),
+        },
+        method: "PATCH",
+      });
+      const data = await response.json();
+      if (response.status === 409) {
+        // Conflicto: se mantiene la edición abierta y el borrador, para que el
+        // usuario recargue (botón del aviso) y reaplique lo suyo sin perderlo.
+        setConflictoGuardado(true);
+        onError(data.error ?? "Otro usuario guardó cambios mientras editabas.");
+        return;
+      }
+      if (!response.ok) {
+        onError(data.error ?? "No se pudo guardar la ficha.");
+        return;
+      }
+      // Los ítems viven en su propia tabla, así que van en una llamada aparte y
+      // SOLO si el cuadro cambió: reemplazar la lista borra y reinserta, y
+      // hacerlo en cada guardado gastaría ids nuevos sin motivo.
+      if (JSON.stringify(items) !== itemsGuardados) {
+        const resItems = await fetch(`/api/necesidades/${necesidadId}/items`, {
+          body: JSON.stringify({ items }),
+          headers: { "Content-Type": "application/json" },
+          method: "PUT",
+        });
+        if (!resItems.ok) {
+          const err = await resItems.json().catch(() => ({}));
+          // La ficha SÍ se guardó; decirlo evita que se reintente todo.
+          onError(
+            `La ficha se guardó, pero los ítems no: ${err.error ?? "error desconocido"}. Vuelve a intentarlo.`,
+          );
+          return;
+        }
+      }
+      setFichaEdit(false);
+      // Guardado con éxito: el borrador ya no representa nada pendiente.
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
+      setCamposBorrador([]);
+      await onRecargar();
+    } catch {
+      onError("No se pudo conectar con el servidor.");
+    } finally {
+      setSavingFicha(false);
+    }
+  }
+
+  return {
+    autoguardado,
+    camposBorrador,
+    camposTocados,
+    conflictoGuardado,
+    descartarBorrador,
+    empezarEdicion: startFichaEdit,
+    fichaEdit,
+    fichaForm,
+    fieldErrors,
+    focoPendiente,
+    formSucio,
+    guardar: saveFicha,
+    savingFicha,
+    setCamposTocados,
+    setFichaEdit,
+    setFichaField,
+    setFieldErrors,
+    /** Tras recargar por un conflicto: se vuelve a permitir guardar. */
+    superarConflicto: () => {
+      setConflictoGuardado(false);
+      setAutoguardado("");
+    },
+  };
+}
