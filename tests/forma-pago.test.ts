@@ -225,14 +225,34 @@ describe("el área de la conformidad se trae de lo ya registrado", () => {
 });
 
 describe("el área se pide UNA sola vez", () => {
-  it("la casilla del Art. 144 ya no se enseña", async () => {
+  it("de las dos casillas del área, solo se enseña una", async () => {
     // Estaban las dos en la sección 3.3, con el MISMO rótulo y una debajo de la
     // otra: se registraba dos veces y nada garantizaba que dijeran lo mismo.
+    // Se comprueba por `api` y no por etiqueta: la etiqueta puede cambiar —de
+    // hecho cambió— y la prueba dejaría de mirar lo que dice mirar.
     const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const lasDos = ["formaPagoAreaConformidad", "conformidadArea"];
     const visibles = FICHA_SECCIONES.flatMap((s) => s.fields).filter(
-      (f) => !f.oculto && f.label === "Área que otorga la conformidad",
+      (f) => !f.oculto && lasDos.includes(f.api),
     );
     expect(visibles.map((f) => f.api)).toEqual(["formaPagoAreaConformidad"]);
+  });
+
+  it("y su etiqueta son las palabras del corchete del formato", async () => {
+    // Se llamaba «Área que otorga la conformidad» y no se reconocía al cotejar
+    // la ficha contra la base estándar, que dice «REGISTRAR LA DENOMINACIÓN DEL
+    // ÁREA RESPONSABLE DE OTORGAR LA CONFORMIDAD».
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find(
+      (f) => f.api === "formaPagoAreaConformidad",
+    )!;
+    expect(campo.label).toBe("Denominación del área responsable de otorgar la conformidad");
+    expect(campo.kind ?? "text").toBe("text");
+    expect(campo.subgrupo).toBe("Forma de pago (Art. 67 de la Ley)");
+    // Y el corchete que rellena sigue siendo ese, no otro.
+    expect(componerFormaPago({})).toContain(
+      `[${campo.label.toUpperCase().replace("DENOMINACIÓN", "REGISTRAR LA DENOMINACIÓN")}]`,
+    );
   });
 
   it("pero su columna sigue existiendo, espejada", async () => {
