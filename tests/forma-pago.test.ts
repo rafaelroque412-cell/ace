@@ -134,12 +134,13 @@ describe("el tipo de pago se elige, no se escribe", () => {
 
   it("el valor guardado encaja en la frase del formato", async () => {
     // La frase es «...a favor del contratista en ___.», así que el valor se
-    // guarda ya redactado —«un pago único»— y no como etiqueta suelta.
+    // guarda ya redactado —«un pago único»— y no como etiqueta suelta. Los
+    // pagos a cuenta arrastran además su detalle, así que se les da uno.
     const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
     const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "formaPagoTipo")!;
     for (const opcion of campo.opciones ?? []) {
-      const texto = componerFormaPago({ ...COMPLETO, tipoPago: opcion.value });
-      expect(texto).toContain(`a favor del contratista en ${opcion.value}.`);
+      const texto = componerFormaPago({ ...COMPLETO, detallePagosACuenta: "", tipoPago: opcion.value });
+      expect(texto).toContain(`a favor del contratista en ${opcion.value}`);
     }
   });
 
@@ -269,11 +270,14 @@ describe("el apartado entero cabe en su tope", () => {
     const peor = componerFormaPago({
       areaConformidad: relleno("formaPagoAreaConformidad"),
       cui: relleno("cui"),
+      // El detalle solo entra si el pago es a cuenta, así que el peor caso lo
+      // es de verdad solo por esa rama: el tipo tiene que decir «a cuenta».
+      detallePagosACuenta: relleno("formaPagoDetalle"),
       direccion: relleno("formaPagoDireccion"),
       documentacionAdicional: relleno("formaPagoDocumentacion"),
       lugarPresentacion: relleno("formaPagoLugar"),
       proyectoInversion: relleno("proyectoInversion"),
-      tipoPago: relleno("formaPagoTipo"),
+      tipoPago: `pagos a cuenta ${relleno("formaPagoTipo")}`.slice(0, LIMITES_TEXTO.formaPagoTipo),
     });
     expect(peor.length).toBeLessThanOrEqual(LIMITES_TEXTO.formaPago);
     expect(necesidadUpdateSchema.safeParse({ formaPago: peor }).success).toBe(true);
@@ -304,6 +308,102 @@ describe("el formulario compone el apartado con la inversión", () => {
     expect(cuerpo.indexOf("next.conformidadArea = value")).toBeLessThan(
       cuerpo.indexOf("localStorage.setItem(DRAFT_KEY"),
     );
+  });
+});
+
+/**
+ * El apartado se coteja contra el formato PUBLICADO en las bases estándar, así
+ * que las diferencias de redacción no son de estilo: se comparan párrafo a
+ * párrafo con el literal.
+ */
+describe("el texto es el de la base estándar, párrafo a párrafo", () => {
+  const t = componerFormaPago({});
+
+  it("el artículo 67 y el plazo van en UN solo párrafo", () => {
+    // Estaban partidos en dos. El formato los publica juntos.
+    expect(t).toContain(
+      "El pago se realiza de conformidad con lo establecido en el artículo 67 de la Ley. La entidad contratante paga las contraprestaciones pactadas a favor del contratista dentro de los diez días hábiles siguientes de otorgada la conformidad por parte del área usuaria y es prorrogable, previa justificación de la demora, por cinco días hábiles.",
+    );
+  });
+
+  it("el del consorcio va entero y aparte", () => {
+    expect(t).toContain(
+      "\nEn el caso que se haya suscrito contrato con un consorcio, el pago se realiza, a quien corresponda, de acuerdo con lo que se indique en el contrato de consorcio.\n",
+    );
+  });
+
+  it("la lista lleva los tres documentos, en su orden", () => {
+    const lineas = t.split("\n").filter((l) => l.startsWith("- "));
+    expect(lineas).toHaveLength(3);
+    expect(lineas[1]).toBe("- Comprobante de pago.");
+  });
+
+  it("y el último párrafo, con el hueco vacío, es el del formato: sin «en»", () => {
+    // El formato escribe «…la documentación restante [CONSIGNAR MESA DE
+    // PARTES…]»: espera la preposición dentro de lo que se consigne.
+    expect(t).toContain(
+      "el contratista debe presentar la documentación restante [CONSIGNAR MESA DE PARTES O LA DEPENDENCIA ESPECÍFICA DE LA ENTIDAD CONTRATANTE DONDE SE DEBE PRESENTAR LA DOCUMENTACIÓN], sito en",
+    );
+  });
+
+  it("pero relleno sí lo lleva, porque si no deja de ser una frase", () => {
+    expect(componerFormaPago(COMPLETO)).toContain(
+      "la documentación restante en Mesa de Partes de la Municipalidad, sito en",
+    );
+  });
+});
+
+describe("el detalle de los pagos a cuenta", () => {
+  const A_CUENTA = { ...COMPLETO, tipoPago: "pagos a cuenta" };
+  const DETALLE = "tres pagos del 30%, 30% y 40% contra la conformidad de cada entregable";
+
+  it("entra en la frase cuando el pago es a cuenta", () => {
+    expect(componerFormaPago({ ...A_CUENTA, detallePagosACuenta: DETALLE })).toContain(
+      `a favor del contratista en pagos a cuenta, según el siguiente detalle: ${DETALLE}.`,
+    );
+  });
+
+  it("y sin escribirlo, el corchete del formato sigue ahí", () => {
+    // Es lo que la base estándar exige en ese mismo hueco. Al cerrar el tipo en
+    // un desplegable el detalle se quedó sin sitio y el apartado salía sin
+    // decir cuántos pagos ni contra qué entregables.
+    expect(componerFormaPago({ ...A_CUENTA, detallePagosACuenta: "" })).toContain(
+      "[CONSIGNAR EL DETALLE QUE CORRESPONDE EN EL CASO DE PAGO A CUENTA]",
+    );
+  });
+
+  it("en un pago único no se escribe, aunque haya algo guardado", () => {
+    // Un detalle sobrante de cuando el pago era a cuenta no puede colarse en un
+    // apartado que dice que el pago es único.
+    const t = componerFormaPago({ ...COMPLETO, detallePagosACuenta: DETALLE, tipoPago: "un pago único" });
+    expect(t).toContain("a favor del contratista en un pago único.");
+    expect(t).not.toContain(DETALLE);
+  });
+
+  it("sin tipo elegido, el corchete es el entero del formato", () => {
+    expect(componerFormaPago({ detallePagosACuenta: DETALLE })).toContain(
+      "[CONSIGNAR SI SE TRATA DE PAGO ÚNICO O PAGOS A CUENTA, ASÍ COMO EL DETALLE QUE CORRESPONDE EN EL CASO DE PAGO A CUENTA]",
+    );
+  });
+
+  it("cuenta como hueco pendiente solo si el pago es a cuenta", () => {
+    expect(huecosPendientes({ ...A_CUENTA, detallePagosACuenta: "" })).toBe(1);
+    expect(huecosPendientes({ ...A_CUENTA, detallePagosACuenta: DETALLE })).toBe(0);
+    // En un pago único no es un hueco pendiente: es un campo que no aplica.
+    expect(huecosPendientes({ ...COMPLETO, detallePagosACuenta: "" })).toBe(0);
+  });
+
+  it("está en la ficha, se guarda y llega al compositor", async () => {
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "formaPagoDetalle")!;
+    expect(campo.subgrupo).toBe("Forma de pago (Art. 67 de la Ley)");
+    expect(necesidadUpdateSchema.safeParse({ formaPagoDetalle: DETALLE }).success).toBe(true);
+
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+    const i = fuente.indexOf("const pedirRedactarIA");
+    expect(fuente.slice(i, fuente.indexOf("\n  };", i))).toContain("fichaForm.formaPagoDetalle");
   });
 });
 

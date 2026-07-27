@@ -102,6 +102,7 @@ export type Necesidad = {
   // ya compuesto, que es lo que viaja al Word y lo que se firma.
   forma_pago: string | null;
   forma_pago_tipo: string | null;
+  forma_pago_detalle: string | null;
   forma_pago_area_conformidad: string | null;
   forma_pago_documentacion: string | null;
   forma_pago_lugar: string | null;
@@ -261,8 +262,9 @@ export const necesidadCreateSchema = z.object({
   recepcionConformidad: optionalText(3000),
   // Cabe el peor caso: todos los huecos al maximo mas el nombre del proyecto de
   // inversion. Ver el tope en lib/necesidades-limites.ts.
-  formaPago: optionalText(8000),
+  formaPago: optionalText(9000),
   formaPagoTipo: optionalText(1000),
+  formaPagoDetalle: optionalText(2000),
   formaPagoAreaConformidad: optionalText(300),
   formaPagoDocumentacion: optionalText(1000),
   formaPagoLugar: optionalText(300),

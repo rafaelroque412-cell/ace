@@ -93,12 +93,14 @@ export const LIMITES_TEXTO: Record<string, number> = {
   // Los apartados que se componen con plantilla. Sin tope aqui, el formulario
   // no capaba la entrada y un texto largo llegaba al PATCH para que lo
   // rechazara con un 400 —que es como se cuelan estos fallos—.
-  // 8000 y no 6000: al texto se le sumo el nombre del proyecto de inversion,
-  // que admite 2000 por si solo. Con 6000 un proyecto de nombre largo hacia que
-  // el apartado se CORTARA al escribirlo, sin avisar. Una prueba comprueba que
-  // el peor caso posible cabe.
-  formaPago: 8000,
+  // 9000: al texto se le suman dos campos largos que no son huecos suyos —el
+  // nombre del proyecto de inversion y el detalle de los pagos a cuenta, 2000
+  // cada uno—. Cada vez que se quedo corto, el apartado se CORTABA al
+  // escribirlo sin avisar. Una prueba compone el peor caso desde estos mismos
+  // topes en vez de fiarse de una cuenta a mano: da 8009.
+  formaPago: 9000,
   formaPagoTipo: 1000,
+  formaPagoDetalle: 2000,
   formaPagoAreaConformidad: 300,
   formaPagoDocumentacion: 1000,
   formaPagoLugar: 300,

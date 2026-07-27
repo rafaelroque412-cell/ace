@@ -459,6 +459,9 @@ export function NecesidadDetail({
           // traen de «b) Inversion a la que se imputa» para decir contra que
           // inversion firma la conformidad esa area, que otorga varias.
           cui: fichaForm.cui ?? "",
+          // El formato mete el tipo y su detalle en un solo corchete; en la
+          // ficha son dos campos porque uno se elige y el otro se escribe.
+          detallePagosACuenta: fichaForm.formaPagoDetalle ?? "",
           direccion: fichaForm.formaPagoDireccion ?? "",
           documentacionAdicional: fichaForm.formaPagoDocumentacion ?? "",
           lugarPresentacion: fichaForm.formaPagoLugar ?? "",
