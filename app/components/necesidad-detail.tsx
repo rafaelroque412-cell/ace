@@ -138,6 +138,7 @@ import {
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
 import { componerFormaPago } from "@/lib/forma-pago";
+import { componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
 
 
 
@@ -460,6 +461,25 @@ export function NecesidadDetail({
         }),
       );
       return;
+    }
+    // Recepcion y conformidad (Art. 144): mismo criterio, y ademas el texto NO
+    // es el mismo para bienes que para servicios —en bienes hay dos actos y en
+    // servicios solo conformidad—, asi que la plantilla la elige el objeto.
+    //
+    // En OBRAS devuelve null: su recepcion tiene procedimiento propio y el
+    // formato facilitado no lo cubre. Se cae al copiloto en vez de escribir algo
+    // aproximado en un documento que se firma.
+    if (api === "recepcionConformidad") {
+      const texto = componerRecepcionConformidad(ejeObjeto, {
+        areaConformidad: fichaForm.conformidadArea ?? "",
+        areaRecepcion: fichaForm.recepcionArea ?? "",
+        plazoConformidad: fichaForm.conformidadPlazo ?? "",
+        plazoSubsanacion: fichaForm.conformidadPlazoSubsanacion ?? "",
+      });
+      if (texto !== null) {
+        setFichaField("recepcionConformidad", texto);
+        return;
+      }
     }
     setCopilotoAbierto(true);
     setCopilotoMontado(true);

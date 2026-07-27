@@ -106,6 +106,11 @@ export type Necesidad = {
   forma_pago_documentacion: string | null;
   forma_pago_lugar: string | null;
   forma_pago_direccion: string | null;
+  // Huecos del apartado del Art. 144 (recepción y conformidad).
+  recepcion_area: string | null;
+  conformidad_area: string | null;
+  conformidad_plazo: string | null;
+  conformidad_plazo_subsanacion: string | null;
   subcontratacion: string | null;
   descripcion_general: string | null;
   ficha_tecnica_identificacion: string | null;
@@ -257,6 +262,10 @@ export const necesidadCreateSchema = z.object({
   formaPagoDocumentacion: optionalText(1000),
   formaPagoLugar: optionalText(300),
   formaPagoDireccion: optionalText(300),
+  recepcionArea: optionalText(300),
+  conformidadArea: optionalText(300),
+  conformidadPlazo: optionalText(200),
+  conformidadPlazoSubsanacion: optionalText(300),
   subcontratacion: optionalText(1000),
   descripcionGeneral: optionalText(4000),
   fichaTecnicaIdentificacion: optionalText(300),

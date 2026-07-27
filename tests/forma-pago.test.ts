@@ -112,8 +112,11 @@ describe("el apartado está en la ficha y se guarda", () => {
     // Ley y parafrasearlo en un documento que se firma seria un defecto.
     const { readFileSync } = await import("node:fs");
     const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+    // Se acota por el CIERRE de la función, no por un número de caracteres: la
+    // primera versión de esta prueba cortaba a 1 400 y empezó a fallar sola en
+    // cuanto se añadió un segundo atajo al mismo manejador.
     const i = fuente.indexOf("const pedirRedactarIA");
-    const cuerpo = fuente.slice(i, i + 1400);
+    const cuerpo = fuente.slice(i, fuente.indexOf("\n  };", i));
     expect(cuerpo).toContain('api === "formaPago"');
     expect(cuerpo).toContain("componerFormaPago");
     // y el atajo va ANTES de abrir el copiloto
