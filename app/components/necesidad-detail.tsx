@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   ArrowRightCircle,
@@ -51,7 +52,7 @@ import {
 } from "@/lib/procesos-seleccion";
 import { resumenNecesidad } from "@/lib/necesidad-verificacion";
 import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
-import { type CopilotoCampo, NecesidadCopiloto } from "./necesidad-copiloto";
+import type { CopilotoCampo } from "./necesidad-copiloto";
 import { cuiDeCadenaFuncional } from "@/lib/pedido-compra-import";
 import { HITO_STATUS_META, type HitosMap, hitosDeFase, progresoDeFase } from "@/lib/procurement-fases";
 import type { Necesidad, NecesidadDocumento, ObservacionNecesidad, RiesgoNecesidad } from "@/lib/necesidades";
@@ -71,8 +72,30 @@ import { ConfirmDialog } from "./confirm-dialog";
 import type { NecesidadItem } from "@/lib/necesidad-items";
 import { NecesidadEettCampo } from "./necesidad-eett-campo";
 import { NecesidadItemsEditor } from "./necesidad-items-editor";
+import { componerControversias, parseInstituciones } from "@/lib/instituciones-arbitrales";
+import { InstitucionesArbitralesEditor } from "./instituciones-arbitrales-editor";
+import { OtrasPenalidadesEditor } from "./otras-penalidades-editor";
+import { SubcontratacionEditor } from "./subcontratacion-editor";
 import { RequisitosCalificacionEditor } from "./requisitos-calificacion-editor";
-import { EettTdrModal, type EettPropuesta, type EettRevision, type EettTdrDoc } from "./necesidad-eett-tdr-modal";
+import type { EettPropuesta, EettRevision, EettTdrDoc } from "./necesidad-eett-tdr-modal";
+
+/**
+ * Los dos paneles pesados de la ficha se cargan cuando hacen falta, no al abrir
+ * la pagina. El modal de EETT/TDR son 963 lineas que solo ve quien sube un
+ * documento, y el copiloto 345 que solo ve quien lo despliega.
+ *
+ * `ssr: false` porque ninguno de los dos aporta nada al HTML inicial: el modal
+ * arranca cerrado y el copiloto oculto. Los tipos se importan aparte con
+ * `import type`, que se borra al compilar y no arrastra el modulo.
+ */
+const EettTdrModal = dynamic(
+  () => import("./necesidad-eett-tdr-modal").then((m) => m.EettTdrModal),
+  { ssr: false },
+);
+const NecesidadCopiloto = dynamic(
+  () => import("./necesidad-copiloto").then((m) => m.NecesidadCopiloto),
+  { ssr: false },
+);
 import {
   Alert,
   Badge,
@@ -104,7 +127,7 @@ type Permisos = { manage: boolean; derivar: boolean };
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,
 // para leer) con la clave del PATCH (camelCase) y su tipo de control.
-type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "select";
+type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "subcontratacion" | "select";
 
 // Catálogo del "Tipo de proceso de selección" (referencia inicial del área
 // usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
@@ -116,6 +139,26 @@ export type FichaField = {
   api: string;
   label: string;
   kind?: FichaFieldKind;
+  /**
+   * Valor con el que arranca un desplegable cuando no hay nada guardado.
+   *
+   * Se usa donde la norma YA impone una opcion y «sin definir» no es un estado
+   * legitimo: el computo del plazo es en dias calendario salvo excepcion (Art.
+   * 105.3), asi que dejarlo vacio solo invita a que cada cual lo interprete.
+   * Con `porDefecto`, el desplegable no ofrece la opcion vacia.
+   */
+  porDefecto?: string;
+  /**
+   * Este campo se muestra siempre que se muestre AQUEL (por su `api`).
+   *
+   * Para pares que el modelo presenta juntos y que no tiene sentido separar:
+   * «Otras penalidades» empieza literalmente por «Adicionalmente a la penalidad
+   * por mora…». Sin esto quedaba escondida tras «Mostrar N campos opcionales»,
+   * porque no es obligatoria ni la exige el modelo, y quien la buscaba no la
+   * encontraba. No infla el modo «Solo obligatorios» con campos sueltos: solo
+   * acompaña a uno que ya estaba en pantalla.
+   */
+  juntoA?: string;
   wide?: boolean;
   /** Campo booleano (checkbox) */
   checkbox?: boolean;
@@ -474,6 +517,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       { col: "modalidad_pago", api: "modalidadPago", label: "Propuesta de modalidad de pago", subgrupo: "a) Modalidad de pago", kind: "select", opciones: etiquetas(OPCIONES_MODALIDAD_PAGO), recomendado: true, baseLegal: "Art. 44.2.c Reglamento · la modalidad de pago es contenido mínimo del requerimiento: el área usuaria la propone y la DEC la determina en la estrategia (Art. 46.1.h). Las modalidades posibles son las siete del Art. 130: suma alzada, precios unitarios, esquema mixto, tarifas, porcentajes, honorario fijo más comisión de éxito y pago por consumo.", ejemplo: "Suma alzada" },
       { col: "sistema_entrega", api: "sistemaEntrega", label: "Propuesta de sistema de entrega", subgrupo: "b) Sistema de entrega", kind: "select", opciones: etiquetas(OPCIONES_SISTEMA_ENTREGA), obligatorioPara: ["obras", "consultoria_obra"], baseLegal: "Art. 44.2.c Reglamento · el sistema de entrega es contenido mínimo del requerimiento: el área usuaria lo propone y la DEC lo determina en la estrategia (Art. 46.1.i). Los sistemas posibles son los del Art. 129; si no se prevé ninguno, se elige «No aplica».", ejemplo: "Llave en mano", mostrarPara: ["servicios", "obras", "consultoria_obra"] },
       { col: "plazo_ejecucion", api: "plazoEjecucion", label: "Plazo de ejecución o prestación (días)", subgrupo: "c) Plazo de prestación", kind: "number", obligatorio: true, baseLegal: "Art. 126.2 Reglamento · En bienes y servicios rutinarios u operacionales de provisión continua, no puede ser menor a un año.", ejemplo: "60" },
+      { col: "plazo_ejecucion_unidad", api: "plazoEjecucionUnidad", label: "Cómputo del plazo", subgrupo: "c) Plazo de prestación", kind: "select", obligatorio: true, porDefecto: "calendario", opciones: [{ value: "calendario", label: "Días calendario" }, { value: "habiles", label: "Días hábiles" }], baseLegal: "Art. 105.3 Reglamento · durante la ejecución contractual los plazos se cuentan en días CALENDARIO, salvo que el Reglamento indique lo contrario; supletoriamente rigen los Arts. 183 y 184 del Código Civil.", ejemplo: "Días calendario" },
       { subgrupo: "d) Lugar de prestación", col: "departamento", api: "departamento", label: "Departamento", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "Lima" },
       { subgrupo: "d) Lugar de prestación", col: "provincia", api: "provincia", label: "Provincia", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "Lima" },
       { subgrupo: "d) Lugar de prestación", col: "distrito", api: "distrito", label: "Distrito", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "San Isidro" },
@@ -483,10 +527,10 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // El Art. 119.1 pide que el contrato establezca la penalidad por mora Y OTRAS
       // penalidades. El apartado f) del modelo trae un cuadro para ellas (supuesto,
       // forma de calculo y procedimiento de verificacion) que la ficha no recogia.
-      { subgrupo: "f) Penalidades", col: "otras_penalidades", api: "otrasPenalidades", label: "Otras penalidades", kind: "textarea", wide: true, baseLegal: "Art. 119.1 Reglamento · el contrato establece la penalidad por mora Y otras penalidades ante el incumplimiento injustificado de las obligaciones contractuales.", plantilla: "Por cada supuesto: [SUPUESTO DE APLICACIÓN] · forma de cálculo: [FÓRMULA] · procedimiento de verificación: [CÓMO SE ACREDITA].", ejemplo: "No presentar el informe mensual en plazo · 0.5 UIT por informe · acta del área usuaria." },
-      { subgrupo: "g) Subcontratación", col: "subcontratacion", api: "subcontratacion", label: "Subcontratación", kind: "textarea", wide: true, baseLegal: "Art. 108 Reglamento · Hasta 40% del contrato; o prohibida", mostrarPara: ["servicios", "obras", "consultoria_obra"], plantilla: "Elige UNO: «El contratista puede subcontratar hasta un máximo del 40% del monto del contrato vigente (Art. 108). No son subcontratables: [PRESTACIONES]», o bien «Se encuentra prohibida la subcontratación de las prestaciones objeto del contrato».", ejemplo: "Prohibida / Permitida hasta 40%" },
-      { subgrupo: "h) Fórmula de reajuste", col: "formula_reajuste", api: "formulaReajuste", label: "Fórmula de reajuste", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 136.2 Reglamento · fórmulas de reajuste y su procedimiento; solo se incluyen en servicios de ejecución periódica o continuada. Es una de las condiciones mínimas del requerimiento (Art. 44.2.e).", ejemplo: "Fórmula polinómica basada en el índice de precios del INEI" },
-      { subgrupo: "i) Solución de controversias contractuales", col: "solucion_controversias", api: "solucionControversias", label: "Solución de controversias contractuales", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 224 Reglamento · toda controversia derivada de la interpretación o cumplimiento del contrato se resuelve por los medios que ahí se prevén.", plantilla: "Las controversias que surjan entre las partes durante la ejecución del contrato se resuelven mediante conciliación, cuando se haya pactado, y arbitraje. Para el arbitraje, el postor ganador de la buena pro selecciona una de estas instituciones arbitrales: 1. [INSTITUCIÓN] (RUC [N°]). 2. [INSTITUCIÓN] (RUC [N°]).", ejemplo: "Conciliación y, de no arribarse a acuerdo, arbitraje institucional." },
+      { subgrupo: "f) Penalidades", col: "otras_penalidades", api: "otrasPenalidades", label: "Otras penalidades", juntoA: "penalidadMora", kind: "penalidades", wide: true, baseLegal: "Arts. 119.1 y 119.2 Reglamento · el contrato establece la penalidad por mora Y otras penalidades ante el incumplimiento injustificado de las obligaciones contractuales.", ejemplo: "No presentar el informe mensual en plazo · 0.5 UIT por informe · acta del área usuaria." },
+      { subgrupo: "g) Subcontratación", col: "subcontratacion", api: "subcontratacion", label: "Subcontratación", kind: "subcontratacion", wide: true, baseLegal: "Art. 108.1 Reglamento · se subcontrata hasta el 40% del monto del contrato vigente; las bases pueden excluir prestaciones esenciales o, si así se evaluó en la estrategia de contratación Y con el sustento correspondiente, prohibirla.", mostrarPara: ["servicios", "obras", "consultoria_obra"], ejemplo: "Prohibida / Permitida hasta 40%" },
+      { subgrupo: "h) Fórmula de reajuste", col: "formula_reajuste", api: "formulaReajuste", label: "Fórmula de reajuste", plantilla: "[DE SER EL CASO, CONSIGNAR LAS FÓRMULAS DE REAJUSTE CORRESPONDIENTES Y EL PROCEDIMIENTO, DE ACUERDO CON LO PREVISTO EN EL NUMERAL 136.2 DEL ARTÍCULO 136 DEL REGLAMENTO]", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 136.2 Reglamento · solo en contratos de ejecución PERIÓDICA O CONTINUADA; el reajuste sigue la variación del IPC nacional o de Lima Metropolitana del mes de pago, según dónde se ejecute la prestación. Se incluye a propuesta del área usuaria y previa validación en la estrategia de contratación.", ejemplo: "Fórmula polinómica basada en el índice de precios del INEI" },
+      { subgrupo: "i) Solución de controversias contractuales", col: "solucion_controversias", api: "solucionControversias", label: "Solución de controversias contractuales", kind: "controversias", wide: true, recomendado: true, baseLegal: "Arts. 330 y 331 Reglamento · conciliación y arbitraje; el arbitraje institucional se inicia ante la Institución Arbitral elegida entre las designadas (Art. 331.2). El Art. 224, que citaba antes este campo, es de contratos estandarizados de ingeniería y construcción de uso internacional.", ejemplo: "Cámara de Comercio de Lima — RUC 20112273922" },
       { subgrupo: "j) Plazo para respuestas entre las partes", col: "plazo_respuestas", api: "plazoRespuestas", label: "Plazo máximo de respuesta entre las partes (días calendario)", kind: "number", baseLegal: "Apartado j) del formato de requerimiento · plazo en que las partes se responden durante la ejecución. No lo fija el Reglamento: es una condición del modelo.", ejemplo: "Cinco (5) días hábiles desde la recepción de la comunicación." },
 
       // Lo que el Art. 44.2 exige y el modelo no numera en su 3.3. Va detrás y con
@@ -697,7 +741,7 @@ function PanelHead({
   return (
     <div className={cn("flex flex-wrap items-center gap-2.5", className)}>
       <span className="grid size-8 shrink-0 place-items-center rounded-[9px] bg-brand-soft text-brand">{icon}</span>
-      <strong className="text-[15px] font-bold tracking-tight text-ink">{title}</strong>
+      <h3 className="m-0 text-[15px] font-bold tracking-tight text-ink">{title}</h3>
       {extra ? <span className="ml-auto">{extra}</span> : null}
     </div>
   );
@@ -799,32 +843,6 @@ function tituloLegible(nombre: string | null | undefined): string {
   });
 }
 
-/**
- * Cuenta los campos OBLIGATORIOS de la ficha que aplican a un requerimiento ya
- * guardado (según su proceso/objeto) y cuántos están rellenos. Sirve para el
- * medidor de avance visible sin entrar a editar. Replica el filtrado por objeto
- * y el obligatorio condicional (`obligatorioPara`) a partir de las columnas.
- */
-function contarObligatorios(n: NecesidadExt): { total: number; done: number } {
-  const proc = n.tipo_proceso_seleccion ?? "";
-  const obj = (n.tipo_objeto ?? undefined) as ObjetoFilter | undefined;
-  const efectivos = objetosEfectivosDe(proc, obj);
-  let total = 0;
-  let done = 0;
-  for (const section of FICHA_SECCIONES) {
-    for (const f of section.fields) {
-      if (f.oculto) continue;
-      if (!campoAplica(f, efectivos, proc)) continue;
-      if (!campoObligatorio(f, efectivos, proc)) continue;
-      total += 1;
-      const v = n[f.col];
-      const lleno = f.checkbox ? Boolean(v) : !(v === null || v === undefined || String(v).trim() === "");
-      if (lleno) done += 1;
-    }
-  }
-  return { total, done };
-}
-
 // Campos geográficos que se resuelven contra la ubicación configurada de la
 // entidad (Configuración → Municipalidad), en vez de escribirse a mano. Es la
 // raíz del problema de grafías divergentes (APURIMAC/Apurímac/Apurimac): la
@@ -842,6 +860,10 @@ const FICHA_CTRL =
   "transition-[border-color,box-shadow] duration-150 placeholder:text-muted/55 " +
   "focus:border-brand focus:shadow-[var(--shadow-focus)] disabled:bg-surface disabled:opacity-70";
 const FICHA_CTRL_H = "h-10";
+// El alto lo fija `rows` con filasTextarea, que cuenta cuanto envuelve cada
+// linea. Se probo `field-sizing:content` —que en teoria ajusta al contenido sin
+// estimar— y MEDIDO en Chrome daba 40px y cortaba el texto, mientras que las
+// filas calculadas daban 349px sin cortar. Descartado por eso, no por gusto.
 const FICHA_CTRL_AREA = "min-h-[80px] resize-y py-2.5 leading-relaxed";
 const FICHA_CTRL_ERR = "!border-danger focus:!border-danger focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_20%,transparent)]";
 const FICHA_LABEL = "mb-1.5 flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-ink";
@@ -1014,6 +1036,16 @@ export function NecesidadDetail({
   // mismo. Quien dispara el efecto es `fieldErrors`, que cambia de identidad en
   // cada intento fallido.
   const focoPendiente = useRef<string | null>(null);
+  // Campos en los que el usuario ha escrito. Sirve para que la validacion al
+  // salir del campo NO pinte de rojo lo que solo se ha recorrido con el
+  // tabulador: en una ficha de nueve secciones, tabular para ver que hay
+  // encenderia el formulario entero sin que nadie se haya equivocado.
+  //
+  // En estado y no en una ref (que seria lo natural para un dato que no pinta
+  // nada) porque los manejadores se crean durante el render y leer `.current`
+  // ahi es justo lo que prohibe react-hooks/refs. No cuesta renders: se anota
+  // al escribir, y escribir ya provoca uno con `setFichaField`.
+  const [camposTocados, setCamposTocados] = useState<Set<string>>(new Set());
   // Áreas usuarias ya registradas: alimentan el autocompletado del campo, para
   // que la próxima "SUB GERENCIA…" reutilice la grafía existente en vez de
   // crear una variante nueva (mismo criterio que la geografía por catálogo).
@@ -1035,6 +1067,10 @@ export function NecesidadDetail({
   const [fichaForm, setFichaForm] = useState<Record<string, string>>({});
   // Panel del copiloto IA del requerimiento (redactar/revisar campos).
   const [copilotoAbierto, setCopilotoAbierto] = useState(false);
+  // Se queda en true tras la primera apertura y ya no vuelve atras: es lo que
+  // permite cargar el modulo bajo demanda SIN desmontar el panel al cerrarlo,
+  // que se llevaria por delante el borrador que el usuario tenga a medias.
+  const [copilotoMontado, setCopilotoMontado] = useState(false);
   /**
    * Sección que el usuario está mirando, para marcarla en el índice.
    *
@@ -1049,6 +1085,7 @@ export function NecesidadDetail({
   const [copilotoRedactar, setCopilotoRedactar] = useState<{ key: string; nonce: number } | null>(null);
   const pedirRedactarIA = (api: string) => {
     setCopilotoAbierto(true);
+    setCopilotoMontado(true);
     setCopilotoRedactar((prev) => ({ key: api, nonce: (prev?.nonce ?? 0) + 1 }));
   };
   // Campos que se están copiando de su gemelo y que nadie ha tocado a mano.
@@ -1433,9 +1470,27 @@ export function NecesidadDetail({
    *  las Bases dentro de cada grupo. En modo "solo obligatorios" se conservan
    *  además los opcionales ya rellenados para no ocultar datos del usuario. */
   function camposVisibles(section: FichaSection): { visibles: FichaField[]; ocultosOpcionales: number } {
-    const all = [...camposParaObjeto(section.fields)].sort(
-      (a, b) => prioridadCampo(a) - prioridadCampo(b),
-    );
+    // Los SUBGRUPOS no se reordenan: son los apartados a), b), c)… del modelo
+    // oficial, y su orden es el del documento que se va a firmar. Antes se
+    // ordenaba la seccion entera por prioridad, y eso los partia: «Penalidad por
+    // mora» (recomendado) se iba con los recomendados y «Otras penalidades»
+    // (opcional) al final, con lo que «f) Penalidades» se pintaba DOS veces y el
+    // apartado quedaba roto en dos trozos distantes.
+    //
+    // Dentro de cada subgrupo si manda la prioridad, que es lo que se buscaba:
+    // primero lo obligatorio. `sort` es estable, asi que a igual prioridad se
+    // conserva la secuencia de las Bases.
+    const declarados = camposParaObjeto(section.fields);
+    const posSubgrupo = new Map<string, number>();
+    declarados.forEach((f, idx) => {
+      const clave = f.subgrupo ?? "";
+      if (!posSubgrupo.has(clave)) posSubgrupo.set(clave, idx);
+    });
+    const all = [...declarados].sort((a, b) => {
+      const sa = posSubgrupo.get(a.subgrupo ?? "") ?? 0;
+      const sb = posSubgrupo.get(b.subgrupo ?? "") ?? 0;
+      return sa !== sb ? sa - sb : prioridadCampo(a) - prioridadCampo(b);
+    });
     if (!obligatoriosOnly || optionalExpanded.has(section.title)) {
       return { visibles: all, ocultosOpcionales: 0 };
     }
@@ -1454,7 +1509,12 @@ export function NecesidadDetail({
       exigidosModelo.size > 0
         ? all.filter((f) => campoEsObligatorio(f) || exigidosModelo.has(f.api) || tieneValor(f))
         : all.filter((f) => campoEsObligatorio(f) || f.recomendado || tieneValor(f));
-    return { visibles, ocultosOpcionales: all.length - visibles.length };
+    // Los acompañantes entran con su pareja, no por su cuenta.
+    const apisVisibles = new Set(visibles.map((f) => f.api));
+    const conAcompanantes = all.filter(
+      (f) => apisVisibles.has(f.api) || (f.juntoA ? apisVisibles.has(f.juntoA) : false),
+    );
+    return { visibles: conAcompanantes, ocultosOpcionales: all.length - conAcompanantes.length };
   }
 
   /**
@@ -1463,6 +1523,41 @@ export function NecesidadDetail({
    * sin modelo, el criterio por objeto de la app. Reactivo al formulario: al
    * cambiar objeto/proceso, la lista cambia.
    */
+  /**
+   * ¿Este requerimiento tiene que llevar este campo?
+   *
+   * UNICA definicion de «exigible»: lo que la ficha declara obligatorio MAS lo que
+   * el PDF-modelo del procedimiento anade. Antes cada sitio la reimplementaba y la
+   * pantalla acababa enseñando tres numeros a la vez —«88% · faltan 2», «17/23» y
+   * «14/16 obligatorios»—, sobre conjuntos distintos y sin nada que los separara.
+   */
+  function campoExigible(field: FichaField): boolean {
+    const procesoActual = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
+    const objetoActual = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
+    const efectivos = objetosEfectivosDe(procesoActual, (objetoActual || undefined) as ObjetoFilter | undefined);
+    return campoObligatorio(field, efectivos, procesoActual) || exigidosModelo.has(field.api);
+  }
+
+  /**
+   * Avance del requerimiento: UN numero para toda la pantalla.
+   *
+   * `modo` solo cambia de donde se lee el valor —del formulario mientras se edita,
+   * del dato guardado al leer—, nunca QUE se cuenta. Asi la cabecera, el panel de
+   * obligatorios y la barra de edicion no pueden discrepar entre si.
+   */
+  function avanceRequerimiento(modo: "edicion" | "lectura") {
+    const campos = obligatoriosDelProceso();
+    const hecho = (f: FichaField) => {
+      if (modo === "edicion") return tieneValor(f);
+      const v = necesidad?.[f.col];
+      return v !== null && v !== undefined && String(v).trim() !== "" && v !== false;
+    };
+    const total = campos.length;
+    const done = campos.filter(hecho).length;
+    return { done, faltan: total - done, pct: total > 0 ? Math.round((done / total) * 100) : 0, total };
+  }
+
+
   function obligatoriosDelProceso(): FichaField[] {
     const procesoActual = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
     const objetoActual = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
@@ -1477,8 +1572,7 @@ export function NecesidadDetail({
         // ella la norma— ya declara obligatorio. Antes la sustituía por completo: con
         // el modelo cargado, «Finalidad pública» o «Área usuaria» dejaban de contar
         // como obligatorios si la IA no los había listado.
-        const oblig = campoObligatorio(f, efectivos, procesoActual) || exigidosModelo.has(f.api);
-        if (oblig) items.push(f);
+        if (campoExigible(f)) items.push(f);
       }
     }
     return items;
@@ -1498,7 +1592,8 @@ export function NecesidadDetail({
       const v = necesidad?.[f.col];
       return v !== null && v !== undefined && String(v).trim() !== "" && v !== false;
     };
-    const done = items.filter(hechoDe).length;
+    // Del calculo compartido: el panel no puede contar distinto que la cabecera.
+    const { done } = avanceRequerimiento(modo);
     const proceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
     return (
       // La franja izquierda pasa de marca a éxito cuando no queda nada: el cambio
@@ -1946,6 +2041,7 @@ export function NecesidadDetail({
       return;
     }
     setFieldErrors({});
+    setCamposTocados(new Set());
     setSavingFicha(true);
     setError("");
     try {
@@ -2502,8 +2598,9 @@ export function NecesidadDetail({
         .filter((c) => c.antes !== c.despues)
     : [];
   // Avance de los campos obligatorios de la ficha (visible sin entrar a editar).
-  const avanceOblig = contarObligatorios(necesidad);
-  const avancePct = avanceOblig.total > 0 ? Math.round((avanceOblig.done / avanceOblig.total) * 100) : 0;
+  // Mismo calculo que el panel y que la barra de edicion. En edicion se mide
+  // sobre el formulario, para que el numero avance mientras se escribe.
+  const avanceOblig = avanceRequerimiento(fichaEdit ? "edicion" : "lectura");
   const acciones = permisos.manage
     ? accionesDisponibles(necesidad.status, lado, { tieneExpediente: Boolean(necesidad.process_id) })
     : [];
@@ -2595,8 +2692,14 @@ export function NecesidadDetail({
     espera: <CircleDot size={16} />,
   };
 
+  // `grid-cols-[minmax(0,1fr)]` y no `grid` a secas: una cuadricula sin columnas
+  // declaradas usa una pista implicita `auto`, cuyo minimo es el min-content.
+  // Basta un descendiente ancho —una tabla, un texto sin puntos de corte— para
+  // que los hermanos se estiren con el y pinten fuera de la tarjeta. Medido: el
+  // hijo pasaba de 622px a 2457px. Los `grid-cols-*` de Tailwind ya usan
+  // minmax(0,1fr) justo por esto; el `grid` desnudo, no.
   return (
-    <div className="tw grid gap-[18px] px-6 py-[22px]">
+    <div className="tw grid grid-cols-[minmax(0,1fr)] gap-[18px] py-[22px]">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-bold leading-tight tracking-tight text-ink" title={necesidad.nombre}>
@@ -2612,16 +2715,18 @@ export function NecesidadDetail({
           {avanceOblig.total > 0 ? (
             <div
               className="mt-3 flex max-w-md items-center gap-2.5"
-              title={`${avanceOblig.done} de ${avanceOblig.total} campos obligatorios completos`}
+              title={`${avanceOblig.done} de ${avanceOblig.total} campos que exige este procedimiento`}
             >
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
                 <div
-                  className={cn("h-full rounded-full transition-[width] duration-500", avancePct >= 100 ? "bg-success" : "bg-brand")}
-                  style={{ width: `${avancePct}%` }}
+                  className={cn("h-full rounded-full transition-[width] duration-500", avanceOblig.faltan === 0 ? "bg-success" : "bg-brand")}
+                  style={{ width: `${avanceOblig.pct}%` }}
                 />
               </div>
-              <span className={cn("shrink-0 text-[12px] font-semibold", avancePct >= 100 ? "text-success" : "text-muted")}>
-                {avancePct >= 100 ? "Requerimiento completo" : `${avancePct}% · faltan ${avanceOblig.total - avanceOblig.done}`}
+              <span className={cn("shrink-0 text-[12px] font-semibold", avanceOblig.faltan === 0 ? "text-success" : "text-muted")}>
+                {avanceOblig.faltan === 0
+                    ? "Requerimiento completo"
+                    : `${avanceOblig.done}/${avanceOblig.total} · faltan ${avanceOblig.faltan}`}
               </span>
             </div>
           ) : null}
@@ -2633,6 +2738,27 @@ export function NecesidadDetail({
           <Badge tone={necesidadStatusTono(necesidad.status)} dot className="px-3 py-1 text-[12.5px]">
             {necesidadStatusLabel(necesidad.status)}
           </Badge>
+          {/* Veredicto en la cabecera. El panel completo vive ahora en la columna
+              lateral, junto a la ficha, porque ahi es donde sirve mientras se
+              rellena. Pero quien entra a REVISAR necesita la respuesta sin bajar:
+              esto se la da, y lleva al detalle de un clic. */}
+          <button
+            type="button"
+            onClick={() => document.querySelector(".verif")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
+              "outline-none focus-visible:shadow-[var(--shadow-focus)]",
+              verificacion.lista
+                ? "border-success/35 bg-success-soft text-success hover:border-success/60"
+                : "border-warning/40 bg-warning-soft text-warning hover:border-warning/70",
+            )}
+          >
+            {verificacion.lista ? (
+              <><CheckCircle2 size={12} aria-hidden /> Lista para remitir</>
+            ) : (
+              <><AlertTriangle size={12} aria-hidden /> Faltan {verificacion.bloquean} para remitir</>
+            )}
+          </button>
           {permisos.manage ? (
             necesidad.process_id ? (
               <span className="text-[11.5px] text-muted" title="Elimina primero el expediente derivado.">
@@ -2662,12 +2788,14 @@ export function NecesidadDetail({
         aria-label="Secciones de la necesidad"
       >
         {[
+          // El mismo orden en que aparecen al bajar: un indice que no coincide con la
+          // pagina desorienta mas de lo que ayuda.
           { id: "sec-flujo", label: "Flujo y estado" },
-          { id: "sec-ficha", label: "Ficha del requerimiento" },
-          { id: "sec-derivacion", label: "Derivación" },
-          { id: "sec-adjuntos", label: "Adjuntos" },
           { id: "sec-eett", label: "EETT / TDR" },
+          { id: "sec-ficha", label: "Ficha del requerimiento" },
+          { id: "sec-adjuntos", label: "Adjuntos" },
           ...(riesgosAplica ? [{ id: "sec-riesgos", label: "Riesgos" }] : []),
+          { id: "sec-derivacion", label: "Derivación" },
         ].map((t) => (
           <button
             key={t.id}
@@ -2851,16 +2979,6 @@ export function NecesidadDetail({
           </p>
         ) : null}
 
-        {/* La verificación va junto a la decisión de remitir, no al final de la
-            ficha: es la respuesta a «¿ya puedo mandar esto?», y esa pregunta se
-            hace aquí. Se muestra siempre, también conforme: saber que está lista
-            es tan útil como saber que no. */}
-        <VerificacionNecesidad onIrACampo={permisos.manage ? irACampo : undefined} resumen={verificacion} />
-
-        {/* Torre de coherencia (B): contradicciones entre campos que la
-            verificación por-campo no ve. Complementa «¿está lista?». */}
-        <CoherenciaNecesidad tarjetas={tarjetasCoh} onIrACampo={permisos.manage ? irACampo : undefined} />
-
         {pendingAction ? (
           <div className="grid gap-2 rounded-[10px] border border-dashed border-brand/30 bg-surface p-3 [&_label]:grid [&_label]:gap-1 [&_label]:text-[12.5px] [&_label]:text-muted [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_textarea]:rounded-lg [&_textarea]:border [&_textarea]:border-line [&_textarea]:bg-panel [&_textarea]:px-[9px] [&_textarea]:py-[7px] [&_textarea]:text-[13px]">
             <label>
@@ -2923,34 +3041,93 @@ export function NecesidadDetail({
           </div>
         ) : null}
 
-        {/* Checklist de admisibilidad de la DEC (P3): visible una vez remitida;
-            editable por la DEC mientras revisa. Es un apoyo, no bloquea el conforme. */}
-        {necesidad.status !== "borrador" ? (
-          <AdmisibilidadDec
-            necesidadId={necesidadId}
-            inicial={admisibilidadInicial}
-            puedeEditar={lado.esDec && (necesidad.status === "remitido_dec" || necesidad.status === "en_revision_dec")}
-          />
-        ) : null}
-
-        <ObservacionesNecesidad
-          campoLabel={campoLabel}
-          campos={camposObservables}
-          observaciones={observaciones}
-          onAgregar={agregarObservacion}
-          onIrACampo={irACampo}
-          onResolver={resolverObservacion}
-          puedeGestionar={permisos.manage}
-        />
-
-        <HistorialNecesidad necesidadId={necesidadId} recarga={histRecarga} />
       </Panel>
 
-      <div className={cn("grid gap-5", fichaEdit && !wizardMode ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(280px,380px)]")}>
-        <section id="sec-ficha" className="grid content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+      {/* ===== EETT / TDR (1.ª versión del área usuaria) ===== */}
+      {permisos.manage ? (
+        <section id="sec-eett" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
           <div className="flex flex-wrap items-center gap-2 text-ink">
             <FileText size={17} />
-            <strong>Ficha de Necesidad (Ampliada)</strong>
+            <h3 className="panelTitle">Especificaciones Técnicas (EETT) / Términos de Referencia (TDR)</h3>
+          </div>
+          <p className="text-xs font-semibold text-muted">
+            Sube el PDF del <strong>EETT</strong> (bienes) o <strong>TDR</strong> (servicios) — la 1.ª versión que
+            propone el área usuaria. Se indexa en el buscador con IA y podrás <strong>revisarlo contra el modelo
+            oficial del OECE</strong> del proceso elegido y editarlo en un editor profesional.
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={eettTipo} onChange={(e) => setEettTipo(e.target.value as "eett" | "tdr")}>
+              <option value="tdr">TDR — Términos de Referencia (servicios)</option>
+              <option value="eett">EETT — Especificaciones Técnicas (bienes)</option>
+            </select>
+            <input
+              ref={eettFileRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void subirEett(f);
+              }}
+            />
+            <Button
+              variant="primary"
+              type="button"
+              disabled={eettUploading}
+              onClick={() => eettFileRef.current?.click()}
+            >
+              {eettUploading ? <Loader size={15} /> : <UploadCloud size={15} />} Subir {eettTipo === "eett" ? "EETT" : "TDR"} (PDF)
+            </Button>
+          </div>
+          {eettDocs.length > 0 ? (
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" style={{ marginTop: 12 }}>
+              {eettDocs.map((d) => (
+                <li className="flex items-center gap-2.5 rounded-[9px] border border-line bg-panel px-2.5 py-2" key={d.id}>
+                  <FileText size={16} className="flex-none text-brand" />
+                  <div className="flex min-w-0 flex-1 flex-col [&_strong]:truncate [&_strong]:text-[13px] [&_strong]:font-semibold [&_strong]:text-ink [&_small]:truncate [&_small]:text-[11px] [&_small]:text-muted" style={{ flex: 1 }}>
+                    <strong>{d.metadata?.tipo === "eett" ? "EETT" : "TDR"} · {d.title}</strong>
+                    <small>{d.file_name}</small>
+                  </div>
+                  <Button type="button" onClick={() => abrirEett(d)}>
+                    <Pencil size={13} /> Revisar / editar
+                  </Button>
+                  <IconButton destructive type="button" aria-label="Eliminar" onClick={() => void borrarEett(d.id)}>
+                    <Trash2 size={15} />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs font-semibold text-muted" style={{ marginTop: 8 }}>Aún no has subido un EETT/TDR para esta necesidad.</p>
+          )}
+        </section>
+      ) : null}
+
+      {eettModal ? (
+        <EettTdrModal
+          necesidadId={necesidadId}
+          doc={eettModal.doc}
+          initialText={eettModal.initialText}
+          initialHtml={eettModal.initialHtml}
+          initialRevision={eettModal.initialRevision}
+          initialPropuesta={eettModal.initialPropuesta}
+          tipoProcesoSeleccion={necesidad.tipo_proceso_seleccion ?? ""}
+          tipoObjeto={necesidad.tipo_objeto ?? ""}
+          camposObjetivo={camposTrasladables()}
+          valoresActuales={valoresActualesTrasladables()}
+          onClose={() => setEettModal(null)}
+          onSaved={() => {
+            void reload();
+            void loadEett();
+          }}
+        />
+      ) : null}
+
+      <div className={cn("grid gap-5", fichaEdit && !wizardMode ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(280px,380px)]")}>
+        <section id="sec-ficha" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+          <div className="flex flex-wrap items-center gap-2 text-ink">
+            <FileText size={17} />
+            <h3 className="panelTitle">Ficha de Necesidad (Ampliada)</h3>
             {!fichaEdit ? (
               permisos.manage ? (
                 <Button className="ml-auto" onClick={startFichaEdit} type="button">
@@ -2998,15 +3175,10 @@ export function NecesidadDetail({
             const totalPasos = 1 + seccionesVisibles.length; // Datos principales + secciones
 
             // Progreso de campos obligatorios (guía al usuario a completar lo mínimo).
-            let obligTotal = 0;
-            let obligDone = 0;
-            for (const s of seccionesVisibles) {
-              for (const f of camposParaObjeto(s.fields)) {
-                if (!campoEsObligatorio(f)) continue;
-                obligTotal += 1;
-                if (tieneValor(f)) obligDone += 1;
-              }
-            }
+            // Antes se recontaba aqui sobre las secciones VISIBLES y solo con los
+            // obligatorios de la ficha: al filtrar por «Solo obligatorios» cambiaba el
+            // denominador y dejaba de cuadrar con la cabecera.
+            const { done: obligDone, total: obligTotal } = avanceRequerimiento("edicion");
             const pasoActual = wizardMode ? Math.min(wizardStep, totalPasos - 1) : -1;
 
             // Campos redactables por el copiloto: los de texto de las secciones
@@ -3016,7 +3188,9 @@ export function NecesidadDetail({
             const vistosCopiloto = new Set<string>();
             for (const s of seccionesVisibles) {
               for (const f of camposParaObjeto(s.fields)) {
-                if (campoEsObligatorio(f) && !tieneValor(f)) faltantesCopiloto.push(f.label);
+                // Lo que el copiloto ve como «falta» es lo mismo que cuenta la cabecera: si
+                // el modelo exige un campo y esta vacio, tiene que saberlo.
+                if (campoExigible(f) && !tieneValor(f)) faltantesCopiloto.push(f.label);
                 if (f.oculto || f.checkbox || f.kind === "number" || f.kind === "date") continue;
                 if (vistosCopiloto.has(f.api)) continue;
                 vistosCopiloto.add(f.api);
@@ -3049,7 +3223,9 @@ export function NecesidadDetail({
               for (const f of campos) {
                 const con = tieneValor(f);
                 if (con) llenos += 1;
-                if (campoEsObligatorio(f)) {
+                // `campoExigible`, no `campoEsObligatorio`: si las partes cuentan con
+                // otro criterio que el total, los chips no suman lo que dice la cabecera.
+                if (campoExigible(f)) {
                   oblig += 1;
                   if (con) obligDone += 1;
                 }
@@ -3089,6 +3265,31 @@ export function NecesidadDetail({
               const geoValorEntidad = geoKey ? (configuredEntity?.[geoKey] ?? "").trim() : "";
               const limpiarError = () => {
                 if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; });
+              };
+              /** Al escribir: se anota el campo como tocado y se retira su error. */
+              const alEscribir = () => {
+                if (!camposTocados.has(field.api)) setCamposTocados((prev) => new Set(prev).add(field.api));
+                limpiarError();
+              };
+              /**
+               * Validacion al salir del campo. Antes solo se validaba al pulsar
+               * Guardar: se rellenaban nueve secciones y el fallo aparecia al final,
+               * lejos de donde se cometio. Solo actua sobre campos ya tocados (o que
+               * ya estaban en error), para no senalar lo que nadie ha tocado todavia.
+               */
+              const validarAlSalir = () => {
+                if (!campoEsObligatorio(field)) return;
+                if (!camposTocados.has(field.api) && !fieldErrors[field.api]) return;
+                const vacio = !String(fichaForm[field.api] ?? "").trim();
+                setFieldErrors((prev) => {
+                  // Mismo objeto si nada cambia: evita un render y no despierta al
+                  // efecto que lleva el foco, que escucha a `fieldErrors`.
+                  if (vacio === Boolean(prev[field.api])) return prev;
+                  const n = { ...prev };
+                  if (vacio) n[field.api] = "Campo obligatorio";
+                  else delete n[field.api];
+                  return n;
+                });
               };
               // Marcas de accesibilidad del control. Sin ellas el error solo existe
               // en rojo: `aria-invalid` hace que el lector de pantalla anuncie el
@@ -3205,7 +3406,107 @@ Ej: ${field.ejemplo}` : ""}
                       ) : null}
                     </span>
                     <RequisitosCalificacionEditor
+                      // Sin la cuantía no se puede comprobar el tope de 3x del modelo, y sin el
+                      // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
+                      montoEstimado={Number(fichaForm.montoEstimado) || null}
+                      tipoProceso={fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? null}
                       objeto={fichaForm.tipoObjeto}
+                      onChange={(next) => setFichaField(field.api, next)}
+                      value={val}
+                    />
+                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
+                  </div>
+                );
+              }
+
+              // Cuadro de instituciones arbitrales: varios inputs, fuera de <label>.
+              if (field.kind === "controversias") {
+                return (
+                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
+                    <span className={FICHA_LABEL}>
+                      {field.label}
+                      {campoEsObligatorio(field) ? (
+                        <span className={FICHA_REQ}>obligatorio</span>
+                      ) : (
+                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+                      )}
+                      {camposDeIA.has(field.api) ? (
+                        <span
+                          className={FICHA_IA}
+                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
+                        >
+                          ✦ propuesto por IA
+                        </span>
+                      ) : null}
+                    </span>
+                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
+                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
+                    {botonRedactarIA}
+                    <InstitucionesArbitralesEditor
+                      onChange={(next) => setFichaField(field.api, next)}
+                      value={val}
+                    />
+                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
+                  </div>
+                );
+              }
+
+              // Cuadro de otras penalidades: varios inputs, fuera de <label>.
+              if (field.kind === "penalidades") {
+                return (
+                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
+                    <span className={FICHA_LABEL}>
+                      {field.label}
+                      {campoEsObligatorio(field) ? (
+                        <span className={FICHA_REQ}>obligatorio</span>
+                      ) : (
+                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+                      )}
+                      {camposDeIA.has(field.api) ? (
+                        <span
+                          className={FICHA_IA}
+                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
+                        >
+                          ✦ propuesto por IA
+                        </span>
+                      ) : null}
+                    </span>
+                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
+                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
+                    {botonRedactarIA}
+                    <OtrasPenalidadesEditor
+                      onChange={(next) => setFichaField(field.api, next)}
+                      value={val}
+                    />
+                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
+                  </div>
+                );
+              }
+
+              // Cuadro de subcontratación: varios inputs, fuera de <label>.
+              if (field.kind === "subcontratacion") {
+                return (
+                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
+                    <span className={FICHA_LABEL}>
+                      {field.label}
+                      {campoEsObligatorio(field) ? (
+                        <span className={FICHA_REQ}>obligatorio</span>
+                      ) : (
+                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+                      )}
+                      {camposDeIA.has(field.api) ? (
+                        <span
+                          className={FICHA_IA}
+                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
+                        >
+                          ✦ propuesto por IA
+                        </span>
+                      ) : null}
+                    </span>
+                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
+                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
+                    {botonRedactarIA}
+                    <SubcontratacionEditor
                       onChange={(next) => setFichaField(field.api, next)}
                       value={val}
                     />
@@ -3255,10 +3556,11 @@ Ej: ${field.ejemplo}` : ""}
                     <select
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
                       {...marcasError}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); limpiarError(); }}
-                      value={val}
+                      onBlur={validarAlSalir}
+                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
+                      value={val || field.porDefecto || ""}
                     >
-                      <option value="">— Sin definir —</option>
+                      {field.porDefecto ? null : <option value="">— Sin definir —</option>}
                       {val && val !== geoValorEntidad ? <option value={val}>{val} — valor actual</option> : null}
                       <option value={geoValorEntidad}>{geoValorEntidad}</option>
                     </select>
@@ -3271,7 +3573,8 @@ Ej: ${field.ejemplo}` : ""}
                         {...marcasError}
                         list="areas-usuarias-sugeridas"
                         maxLength={LIMITES_TEXTO[field.api]}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); limpiarError(); }}
+                        onBlur={validarAlSalir}
+                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
                         type="text"
                         value={val}
                       />
@@ -3288,7 +3591,8 @@ Ej: ${field.ejemplo}` : ""}
                         className={cn(FICHA_CTRL, FICHA_CTRL_AREA, hasError && FICHA_CTRL_ERR)}
                         {...marcasError}
                         maxLength={LIMITES_TEXTO[field.api]}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
+                        onBlur={validarAlSalir}
+                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
                         // La fórmula se ve al redactar, no escondida en el globo
                         // de ayuda: es la estructura que el texto debe seguir.
                         placeholder={field.plantilla}
@@ -3303,7 +3607,8 @@ Ej: ${field.ejemplo}` : ""}
                     <select
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
                       {...marcasError}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
+                      onBlur={validarAlSalir}
+                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
                       value={val}
                     >
                       <option value="">— Sin definir —</option>
@@ -3323,7 +3628,8 @@ Ej: ${field.ejemplo}` : ""}
                     <input
                       className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
                       {...marcasError}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
+                      onBlur={validarAlSalir}
+                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
                       type={field.kind === "number" ? "number" : "date"}
                       value={val}
                     />
@@ -3334,7 +3640,8 @@ Ej: ${field.ejemplo}` : ""}
                         className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
                         {...marcasError}
                         maxLength={LIMITES_TEXTO[field.api]}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; }); }}
+                        onBlur={validarAlSalir}
+                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
                         type="text"
                         value={val}
                       />
@@ -3672,7 +3979,7 @@ Ej: ${field.ejemplo}` : ""}
                     >
                       {modoSimple ? "Mostrar detalle legal" : "Modo simple"}
                     </Button>
-                    <Button variant={copilotoAbierto ? "primary" : "secondary"} size="sm" onClick={() => setCopilotoAbierto((v) => !v)}>
+                    <Button variant={copilotoAbierto ? "primary" : "secondary"} size="sm" onClick={() => { setCopilotoAbierto((v) => !v); setCopilotoMontado(true); }}>
                       <Sparkles size={13} /> Copiloto IA
                     </Button>
                   </div>
@@ -3844,16 +4151,29 @@ Ej: ${field.ejemplo}` : ""}
                   </>
                 ) : null}
 
-                <NecesidadCopiloto
-                  abierto={copilotoAbierto}
-                  campos={camposCopiloto}
-                  faltantes={faltantesCopiloto}
-                  onAplicarCampo={(api, valor) => setFichaField(api, valor)}
-                  onCerrar={() => setCopilotoAbierto(false)}
-                  redactarSolicitud={copilotoRedactar}
-                  tipoObjeto={tipoObj ? objectTypeLabel(tipoObj) : ""}
-                  tipoProcesoSeleccion={fichaForm.tipoProcesoSeleccion ?? ""}
-                />
+                {copilotoMontado ? (
+                  <NecesidadCopiloto
+                    abierto={copilotoAbierto}
+                    campos={camposCopiloto}
+                    faltantes={faltantesCopiloto}
+                    // La solución de controversias se FUSIONA en vez de sustituirse: su valor
+                    // lleva el cuadro de instituciones designadas, y volcar encima el texto de
+                    // la IA las borraría. Se conservan y lo redactado pasa a ser el bloque de
+                    // condiciones adicionales.
+                    onAplicarCampo={(api, valor) =>
+                      setFichaField(
+                        api,
+                        api === "solucionControversias"
+                          ? componerControversias(parseInstituciones(fichaForm.solucionControversias ?? ""), valor)
+                          : valor,
+                      )
+                    }
+                    onCerrar={() => setCopilotoAbierto(false)}
+                    redactarSolicitud={copilotoRedactar}
+                    tipoObjeto={tipoObj ? objectTypeLabel(tipoObj) : ""}
+                    tipoProcesoSeleccion={fichaForm.tipoProcesoSeleccion ?? ""}
+                  />
+                ) : null}
               </div>
             );
           }          )(          ) : (
@@ -3947,91 +4267,51 @@ Ej: ${field.ejemplo}` : ""}
           )}
         </section>
 
-        <aside className="grid content-start gap-4">
-          <section id="sec-derivacion" className="grid content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-            <div className="flex flex-wrap items-center gap-2 text-ink">
-              <ArrowRightCircle size={17} />
-              <strong>Derivación a expediente</strong>
-            </div>
-            {necesidad.process_id ? (
-              <>
-                <p className="text-xs font-semibold text-muted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
-                {/* El avance REAL del expediente, sin tener que abrirlo: antes la
-                    necesidad solo decía "derivada" y no contaba nada de la Fase 1. */}
-                {avanceFase1 ? (
-                  <div className="fase1Avance">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-line [&>div]:h-full [&>div]:bg-success [&>div]:transition-[width] [&>div]:duration-200">
-                      <div style={{ width: `${avanceFase1.porcentaje}%` }} />
-                    </div>
-                    <small>
-                      Actuaciones preparatorias: <strong>{avanceFase1.completados}</strong> de{" "}
-                      {avanceFase1.total} pasos
-                    </small>
-                    <div className="flex flex-wrap gap-1">
-                      {avanceFase1.pasos.map((paso) => (
-                        <span
-                          className="rounded border border-line px-[5px] py-px text-[10px] font-semibold text-muted"
-                          data-status={paso.status}
-                          key={paso.code}
-                          title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
-                        >
-                          {paso.code}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${necesidad.process_id}`}>
-                  <Briefcase size={15} />
-                  Abrir expediente
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="text-xs font-semibold text-muted">
-                  Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a “Incorporado al CMN”. Requiere que
-                  el requerimiento esté <strong>conforme</strong>.
-                </p>
-                <Button
-                  variant="primary"
-                  disabled={!permisos.derivar || deriving || necesidad.status !== "conforme"}
-                  onClick={derivar}
-                  type="button"
-                >
-                  {deriving ? <Loader size={15} /> : <ArrowRightCircle size={15} />}
-                  Derivar a expediente
-                </Button>
-                {!permisos.derivar ? (
-                  <small className="text-xs font-semibold text-muted">Derivar requiere rol con gestión de expedientes (DEC, AGA, Titular).</small>
-                ) : necesidad.status !== "conforme" ? (
-                  <div className="mt-1 grid gap-1.5 rounded-lg border border-line bg-brand-soft px-2.5 py-2 [&_small]:leading-[1.45]">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                      Estado actual:{" "}
-                      <Badge tone={necesidadStatusTono(necesidad.status)}>
-                        {necesidadStatusLabel(necesidad.status)}
-                      </Badge>
-                    </span>
-                    <small className="text-xs font-semibold text-muted">
-                      El requerimiento debe estar <strong>Conforme</strong> para derivar.{" "}
-                      {siguienteAccion ? (
-                        <>
-                          Siguiente paso: pulsa <strong>«{siguienteAccion.label}»</strong> en el panel “Requerimiento ·
-                          flujo” de arriba y continúa hasta “Conforme”.
-                        </>
-                      ) : (
-                        <>Usa las acciones del panel “Requerimiento · flujo” de arriba para avanzar hasta “Conforme”.</>
-                      )}
-                    </small>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </section>
+        {/* Fijo SOLO cuando de verdad hay dos columnas: al editar la ficha el
+            diseno pasa a una sola y este bloque cae debajo, donde pegarlo arriba
+            no acompanaria nada, solo taparia contenido. */}
+        <aside
+          className={cn(
+            "grid content-start gap-4",
+            !(fichaEdit && !wizardMode) &&
+              "xl:sticky xl:top-0 xl:max-h-[calc(100dvh-16px)] xl:overflow-y-auto xl:pr-0.5",
+          )}
+        >
+          {/* Los diagnosticos viven AQUI, no en la cabecera: dicen que falta,
+              y eso sirve mientras se rellena la ficha, no antes de empezar. La
+              columna es fija para que sigan a la vista durante todo el scroll. */}
+          {/* La verificación va junto a la decisión de remitir, no al final de la
+              ficha: es la respuesta a «¿ya puedo mandar esto?», y esa pregunta se
+              hace aquí. Se muestra siempre, también conforme: saber que está lista
+              es tan útil como saber que no. */}
+          {/* Los bloques anidados llevan `id` propio para ser alcanzables desde la
+              navegacion rapida y comprobables por el reparto de modos. */}
+          <div id="sec-verificacion">
+            <VerificacionNecesidad onIrACampo={permisos.manage ? irACampo : undefined} resumen={verificacion} />
+          </div>
 
-          <section id="sec-adjuntos" className="grid content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+          {/* Torre de coherencia (B): contradicciones entre campos que la
+              verificación por-campo no ve. Complementa «¿está lista?». */}
+          <div id="sec-coherencia">
+            <CoherenciaNecesidad tarjetas={tarjetasCoh} onIrACampo={permisos.manage ? irACampo : undefined} />
+          </div>
+
+          <div id="sec-observaciones">
+            <ObservacionesNecesidad
+              campoLabel={campoLabel}
+              campos={camposObservables}
+              observaciones={observaciones}
+              onAgregar={agregarObservacion}
+              onIrACampo={irACampo}
+              onResolver={resolverObservacion}
+              puedeGestionar={permisos.manage}
+            />
+          </div>
+
+          <section id="sec-adjuntos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
             <div className="flex flex-wrap items-center gap-2 text-ink">
               <FileText size={17} />
-              <strong>Adjuntos</strong>
+              <h3 className="panelTitle">Adjuntos</h3>
             </div>
 
             {puedeAdjuntar ? (
@@ -4226,92 +4506,12 @@ Ej: ${field.ejemplo}` : ""}
         </aside>
       </div>
 
-      {/* ===== EETT / TDR (1.ª versión del área usuaria) ===== */}
-      {permisos.manage ? (
-        <section id="sec-eett" className="grid content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-          <div className="flex flex-wrap items-center gap-2 text-ink">
-            <FileText size={17} />
-            <strong>Especificaciones Técnicas (EETT) / Términos de Referencia (TDR)</strong>
-          </div>
-          <p className="text-xs font-semibold text-muted">
-            Sube el PDF del <strong>EETT</strong> (bienes) o <strong>TDR</strong> (servicios) — la 1.ª versión que
-            propone el área usuaria. Se indexa en el buscador con IA y podrás <strong>revisarlo contra el modelo
-            oficial del OECE</strong> del proceso elegido y editarlo en un editor profesional.
-          </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={eettTipo} onChange={(e) => setEettTipo(e.target.value as "eett" | "tdr")}>
-              <option value="tdr">TDR — Términos de Referencia (servicios)</option>
-              <option value="eett">EETT — Especificaciones Técnicas (bienes)</option>
-            </select>
-            <input
-              ref={eettFileRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void subirEett(f);
-              }}
-            />
-            <Button
-              variant="primary"
-              type="button"
-              disabled={eettUploading}
-              onClick={() => eettFileRef.current?.click()}
-            >
-              {eettUploading ? <Loader size={15} /> : <UploadCloud size={15} />} Subir {eettTipo === "eett" ? "EETT" : "TDR"} (PDF)
-            </Button>
-          </div>
-          {eettDocs.length > 0 ? (
-            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" style={{ marginTop: 12 }}>
-              {eettDocs.map((d) => (
-                <li className="flex items-center gap-2.5 rounded-[9px] border border-line bg-panel px-2.5 py-2" key={d.id}>
-                  <FileText size={16} className="flex-none text-brand" />
-                  <div className="flex min-w-0 flex-1 flex-col [&_strong]:truncate [&_strong]:text-[13px] [&_strong]:font-semibold [&_strong]:text-ink [&_small]:truncate [&_small]:text-[11px] [&_small]:text-muted" style={{ flex: 1 }}>
-                    <strong>{d.metadata?.tipo === "eett" ? "EETT" : "TDR"} · {d.title}</strong>
-                    <small>{d.file_name}</small>
-                  </div>
-                  <Button type="button" onClick={() => abrirEett(d)}>
-                    <Pencil size={13} /> Revisar / editar
-                  </Button>
-                  <IconButton destructive type="button" aria-label="Eliminar" onClick={() => void borrarEett(d.id)}>
-                    <Trash2 size={15} />
-                  </IconButton>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs font-semibold text-muted" style={{ marginTop: 8 }}>Aún no has subido un EETT/TDR para esta necesidad.</p>
-          )}
-        </section>
-      ) : null}
-
-      {eettModal ? (
-        <EettTdrModal
-          necesidadId={necesidadId}
-          doc={eettModal.doc}
-          initialText={eettModal.initialText}
-          initialHtml={eettModal.initialHtml}
-          initialRevision={eettModal.initialRevision}
-          initialPropuesta={eettModal.initialPropuesta}
-          tipoProcesoSeleccion={necesidad.tipo_proceso_seleccion ?? ""}
-          tipoObjeto={necesidad.tipo_objeto ?? ""}
-          camposObjetivo={camposTrasladables()}
-          valoresActuales={valoresActualesTrasladables()}
-          onClose={() => setEettModal(null)}
-          onSaved={() => {
-            void reload();
-            void loadEett();
-          }}
-        />
-      ) : null}
-
       {/* ===== Matriz de riesgos de la contratación ===== */}
       {riesgosAplica ? (
-      <section id="sec-riesgos" className="grid content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+      <section id="sec-riesgos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
         <div className="flex flex-wrap items-center gap-2 text-ink">
           <ShieldAlert size={17} />
-          <strong>Matriz de riesgos</strong>
+          <h3 className="panelTitle">Matriz de riesgos</h3>
           <span className="text-xs font-semibold text-muted">{riesgos.length} registrado{riesgos.length === 1 ? "" : "s"}</span>
         </div>
 
@@ -4501,6 +4701,106 @@ Ej: ${field.ejemplo}` : ""}
         ) : null}
       </section>
       ) : null}
+
+      {/* Cierre del ciclo: los dos actos de la DEC sobre algo ya redactado.
+          Estaban en la cabecera y en el lateral de la ficha, es decir, antes
+          y al lado del trabajo que juzgan. */}
+      {/* Checklist de admisibilidad de la DEC (P3): visible una vez remitida;
+          editable por la DEC mientras revisa. Es un apoyo, no bloquea el conforme. */}
+      {necesidad.status !== "borrador" ? (
+        <div id="sec-admisibilidad">
+          <AdmisibilidadDec
+            necesidadId={necesidadId}
+            inicial={admisibilidadInicial}
+            puedeEditar={lado.esDec && (necesidad.status === "remitido_dec" || necesidad.status === "en_revision_dec")}
+          />
+        </div>
+      ) : null}
+
+      <section id="sec-derivacion" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+        <div className="flex flex-wrap items-center gap-2 text-ink">
+          <ArrowRightCircle size={17} />
+          <h3 className="panelTitle">Derivación a expediente</h3>
+        </div>
+        {necesidad.process_id ? (
+          <>
+            <p className="text-xs font-semibold text-muted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
+            {/* El avance REAL del expediente, sin tener que abrirlo: antes la
+                necesidad solo decía "derivada" y no contaba nada de la Fase 1. */}
+            {avanceFase1 ? (
+              <div className="fase1Avance">
+                <div className="h-1.5 overflow-hidden rounded-full bg-line [&>div]:h-full [&>div]:bg-success [&>div]:transition-[width] [&>div]:duration-200">
+                  <div style={{ width: `${avanceFase1.porcentaje}%` }} />
+                </div>
+                <small>
+                  Actuaciones preparatorias: <strong>{avanceFase1.completados}</strong> de{" "}
+                  {avanceFase1.total} pasos
+                </small>
+                <div className="flex flex-wrap gap-1">
+                  {avanceFase1.pasos.map((paso) => (
+                    <span
+                      className="rounded border border-line px-[5px] py-px text-[10px] font-semibold text-muted"
+                      data-status={paso.status}
+                      key={paso.code}
+                      title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
+                    >
+                      {paso.code}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${necesidad.process_id}`}>
+              <Briefcase size={15} />
+              Abrir expediente
+            </Link>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-semibold text-muted">
+              Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a “Incorporado al CMN”. Requiere que
+              el requerimiento esté <strong>conforme</strong>.
+            </p>
+            <Button
+              variant="primary"
+              disabled={!permisos.derivar || deriving || necesidad.status !== "conforme"}
+              onClick={derivar}
+              type="button"
+            >
+              {deriving ? <Loader size={15} /> : <ArrowRightCircle size={15} />}
+              Derivar a expediente
+            </Button>
+            {!permisos.derivar ? (
+              <small className="text-xs font-semibold text-muted">Derivar requiere rol con gestión de expedientes (DEC, AGA, Titular).</small>
+            ) : necesidad.status !== "conforme" ? (
+              <div className="mt-1 grid gap-1.5 rounded-lg border border-line bg-brand-soft px-2.5 py-2 [&_small]:leading-[1.45]">
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  Estado actual:{" "}
+                  <Badge tone={necesidadStatusTono(necesidad.status)}>
+                    {necesidadStatusLabel(necesidad.status)}
+                  </Badge>
+                </span>
+                <small className="text-xs font-semibold text-muted">
+                  El requerimiento debe estar <strong>Conforme</strong> para derivar.{" "}
+                  {siguienteAccion ? (
+                    <>
+                      Siguiente paso: pulsa <strong>«{siguienteAccion.label}»</strong> en el panel “Requerimiento ·
+                      flujo” de arriba y continúa hasta “Conforme”.
+                    </>
+                  ) : (
+                    <>Usa las acciones del panel “Requerimiento · flujo” de arriba para avanzar hasta “Conforme”.</>
+                  )}
+                </small>
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      <div id="sec-historial">
+        <HistorialNecesidad necesidadId={necesidadId} recarga={histRecarga} />
+      </div>
+
 
       <ConfirmDialog
         open={confirmDeleteDocId !== null}
