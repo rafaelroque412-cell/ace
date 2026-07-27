@@ -13,9 +13,15 @@ import { describe, expect, it } from "vitest";
  * Ocurrió dos veces en el mismo día: la primera con «Cómputo del plazo», y la
  * segunda quedó sin diagnosticar precisamente porque el mensaje no llegaba.
  *
- * La distinción importa: un 400 es de validación, no se arregla solo y va a
+ * La distinción importa: si el servidor DIJO por qué, no se arregla solo y va a
  * fallar en cada tecla. Un fallo de red es pasajero, y anunciarlo mientras se
  * escribe sería ruido.
+ *
+ * Ocurrió una TERCERA vez, y por afinar de más: el mensaje solo se enseñaba en
+ * el 400. Cuando la base no tiene una columna que la ficha ya envía —una
+ * migración sin correr— la ruta responde 500 con el nombre exacto de la
+ * columna, y ese 500 se callaba por «pasajero». No lo era. Ahora se enseña
+ * cualquier respuesta que traiga motivo, sea cual sea el código.
  */
 const FUENTE = readFileSync("app/components/necesidad/usar-ficha-form.ts", "utf-8");
 
@@ -28,16 +34,22 @@ function cuerpoDe(nombre: string): string {
 describe("el autoguardado dice por qué falló", () => {
   const cuerpo = cuerpoDe("async function autoguardarFicha");
 
-  it("distingue el 400 del resto de fallos", () => {
-    expect(cuerpo).toContain("response.status === 400");
+  it("enseña el motivo venga con el código que venga", () => {
+    // `onError` es lo que pinta el aviso de la página. Sin esta llamada, el
+    // usuario no puede saber qué corregir.
+    const iFallo = cuerpo.indexOf("if (!response.ok)");
+    expect(iFallo).toBeGreaterThan(-1);
+    const tramo = cuerpo.slice(iFallo, cuerpo.indexOf("return;", iFallo));
+    expect(tramo).toContain("detalle?.error");
+    expect(tramo).toContain("onError(detalle.error)");
   });
 
-  it("y en ese caso surfacea el mensaje de la ruta", () => {
-    // `onError` es lo que pinta el aviso de la página. Sin esta llamada, el
-    // usuario no puede saber qué campo corregir.
-    const i400 = cuerpo.indexOf("response.status === 400");
-    const tramo = cuerpo.slice(i400, i400 + 400);
-    expect(tramo).toContain("onError");
+  it("y ya NO lo limita al 400", () => {
+    // Limitarlo al 400 dejó sin diagnosticar un 500 que decía exactamente qué
+    // columna faltaba. El conflicto de versión (409) se atiende antes, aparte.
+    const iFallo = cuerpo.indexOf("if (!response.ok)");
+    expect(cuerpo.slice(iFallo)).not.toContain("response.status === 400");
+    expect(cuerpo).toContain("response.status === 409");
   });
 
   it("los fallos de red siguen callados: son pasajeros", () => {

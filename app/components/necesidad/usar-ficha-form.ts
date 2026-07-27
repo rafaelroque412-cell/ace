@@ -359,18 +359,20 @@ export function useFichaForm({
       }
       if (!response.ok) {
         setAutoguardado("error");
-        // Un 400 es de VALIDACIÓN: no se arregla solo y va a fallar en cada
-        // tecla hasta que alguien corrija el campo. La ruta responde diciendo
-        // CUÁL es y por qué —se mejoró justo para eso— y aquí se estaba tirando
-        // ese mensaje: el usuario veía «No se pudo autoguardar» y no tenía forma
-        // de saber qué mirar entre setenta campos.
+        // Si el servidor DIJO por qué, se enseña. No se arregla solo y va a
+        // fallar en cada tecla hasta que alguien lo corrija; callarlo deja al
+        // usuario con «No se pudo autoguardar» y setenta campos que mirar.
         //
-        // El resto de fallos (red, 5xx) sí se callan: son pasajeros y el
-        // autoguardado dispara mientras se escribe.
-        if (response.status === 400) {
-          const detalle = await response.json().catch(() => null);
-          if (detalle?.error) onError(detalle.error);
-        }
+        // Antes solo se enseñaba en el 400. El 500 se callaba por «pasajero», y
+        // resultó no serlo: cuando la base no tiene una columna que la ficha ya
+        // envía —el SQL de una migración sin correr— la ruta responde 500 con el
+        // nombre exacto de la columna, y ese mensaje se estaba tirando. Es justo
+        // el que resuelve el problema en un minuto.
+        //
+        // Lo que sigue callado es lo que NO trae mensaje: un fallo de red deja
+        // el `catch` de abajo, y ahí sí es pasajero.
+        const detalle = await response.json().catch(() => null);
+        if (detalle?.error) onError(detalle.error);
         return;
       }
       const data = await response.json().catch(() => null);
