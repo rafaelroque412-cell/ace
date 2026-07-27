@@ -1,95 +1,50 @@
 import { APARTADOS_MODELO } from "./modelo-apartados";
-import { FICHA_SECCIONES } from "./necesidad-ficha-secciones";
+import { campoAplica, FICHA_SECCIONES, type FichaField, objetosEfectivosDe } from "./necesidad-ficha-secciones";
+import type { ObjetoFilter } from "./procesos-seleccion";
 
 /**
- * Qué apartados lleva el Word del requerimiento, y cómo se pinta cada uno.
+ * Qué lleva el Word del requerimiento, y cómo se pinta cada cosa.
  *
- * El documento salía con NUEVE secciones fijas, iguales para una Subasta Inversa
- * de bienes que para una Licitación Pública de obras. Los modelos del OECE no
- * piden lo mismo: los de obras traen metas físicas y fórmulas de reajuste, y el
- * procedimiento no competitivo no trae ni penalidades ni subcontratación.
+ * El documento SE DEJABA información. Salía solo con los apartados que el modelo
+ * del procedimiento declara —diecinueve campos— mientras que la ficha tiene
+ * setenta y cuatro: en REQ-2026-0020 se registraron 29 y salían 5. Meta
+ * presupuestal, CUI, cadena funcional, monto estimado, plazo, alcance y
+ * garantías se quedaban fuera sin que nadie lo notara.
  *
- * Así que la estructura la manda el MODELO del procedimiento, con los apartados
- * que `modelo-apartados.ts` detecta. Este módulo es la parte pura —de nombres de
- * apartado a secciones con sus campos— para poder probarla sin generar un .docx.
+ * Ahora manda la FICHA: el documento recorre sus secciones en el MISMO ORDEN que
+ * la pantalla y saca todo lo registrado. El modelo sigue pintando, pero en su
+ * sitio: decide qué campos son EXIGIBLES, y esos salen aunque estén vacíos para
+ * que se vea lo que falta.
  */
 
 /** Cómo se pinta un campo en el documento. */
 export type FormatoCampo = "linea" | "parrafo" | "tabla" | "vinetas";
 
 export type CampoRequerimiento = {
-  formato: FormatoCampo;
   /** api del campo en la ficha; el renderizador lo necesita para los estructurados. */
   api: string;
+  /** El modelo del procedimiento lo exige: sale aunque no tenga valor. */
+  exigido: boolean;
+  formato: FormatoCampo;
   label: string;
+  /** Subgrupo de la ficha («a) Modalidad de pago»); encabeza sus campos. */
+  subgrupo?: string;
   valor: string;
 };
 
 export type SeccionRequerimiento = {
   campos: CampoRequerimiento[];
-  /** Cita legal del apartado; va en cursiva, como en los modelos del OECE. */
+  /** Cita legal de la sección; va en cursiva, como en los modelos del OECE. */
   nota?: string;
   titulo: string;
 };
-
-/** api del campo -> su etiqueta y su `kind` en la ficha. */
-const CATALOGO = (() => {
-  const m = new Map<string, { baseLegal?: string; kind?: string; label: string }>();
-  for (const s of FICHA_SECCIONES) for (const f of s.fields) m.set(f.api, { baseLegal: f.baseLegal, kind: f.kind, label: f.label });
-  return m;
-})();
-
-/**
- * El `kind` de la ficha ya distingue los campos estructurados, así que el
- * formato se deriva de él en vez de mantener una segunda lista que se
- * desincronice.
- */
-function formatoDe(api: string): FormatoCampo {
-  const kind = CATALOGO.get(api)?.kind;
-  if (kind === "penalidades") return "tabla";
-  if (kind === "requisitos") return "vinetas";
-  if (kind === "textarea" || kind === "controversias" || kind === "subcontratacion") return "parrafo";
-  return "linea";
-}
-
-/**
- * Título del apartado tal como va en el documento.
- *
- * Se quita la numeración del modelo («3.5 ») porque el Word numera sus propias
- * secciones, y el «(obras)» de la tabla de apartados, que es una nota para quien
- * lee el código, no parte del nombre oficial.
- */
-export function tituloDeApartado(apartado: string): string {
-  return apartado
-    .replace(/^\d+(?:\.\d+)*\s+/, "")
-    .replace(/\s*\((?:obras)\)\s*$/i, "")
-    .toUpperCase();
-}
-
-/**
- * Estructura de reserva cuando el procedimiento no tiene modelo cargado.
- *
- * Son los apartados que el Art. 44.2 pide en TODO requerimiento, sea cual sea el
- * procedimiento. Degradar así es lo mismo que ya hace la ficha sin modelo: se
- * queda corta, no se rompe.
- */
-export const SECCIONES_BASE: ReadonlyArray<{ apis: readonly string[]; titulo: string }> = [
-  { apis: ["finalidadPublica"], titulo: "FINALIDAD PÚBLICA" },
-  { apis: ["descripcionGeneral"], titulo: "DESCRIPCIÓN GENERAL" },
-  { apis: ["descripcionDetallada"], titulo: "ESPECIFICACIONES TÉCNICAS O TÉRMINOS DE REFERENCIA" },
-  { apis: ["plazoEjecucion", "plazoEjecucionUnidad"], titulo: "PLAZO DE EJECUCIÓN" },
-  { apis: ["lugarEntrega", "departamento", "provincia", "distrito"], titulo: "LUGAR DE ENTREGA O PRESTACIÓN" },
-  { apis: ["requisitosCalificacion"], titulo: "REQUISITOS DE CALIFICACIÓN" },
-];
 
 /**
  * La etiqueta del documento no es la de la ficha.
  *
  * En el formulario se lee «Propuesta de modalidad de pago» porque el área
- * usuaria PROPONE y la DEC decide. En el requerimiento firmado esa frase sobra:
- * el apartado ya se llama «MODALIDAD DE PAGO», y la coletilla convertía el
- * documento en una copia de la pantalla. Igual con el «(días)», que es una ayuda
- * para teclear.
+ * usuaria PROPONE y la DEC decide. En el requerimiento firmado esa coletilla
+ * sobra. Igual con el «(días)» del plazo, que es una ayuda para teclear.
  */
 export function etiquetaDeDocumento(label: string): string {
   return label
@@ -99,54 +54,94 @@ export function etiquetaDeDocumento(label: string): string {
 }
 
 /**
- * Campos que NO van sueltos al documento.
- *
- * La unidad del plazo viaja DENTRO del plazo («52 días calendario»), así que
- * como campo aparte solo ponía una raya suelta debajo.
+ * El `kind` de la ficha ya distingue los campos estructurados, así que el
+ * formato se deriva de él en vez de mantener una segunda lista que se
+ * desincronice.
  */
-const NO_VAN_SOLOS = new Set(["plazoEjecucionUnidad"]);
-
-function campo(api: string, ficha: Record<string, string>): CampoRequerimiento {
-  return {
-    api,
-    formato: formatoDe(api),
-    label: etiquetaDeDocumento(CATALOGO.get(api)?.label ?? api),
-    valor: (ficha[api] ?? "").trim(),
-  };
+function formatoDe(field: FichaField): FormatoCampo {
+  if (field.kind === "penalidades") return "tabla";
+  if (field.kind === "requisitos") return "vinetas";
+  if (field.kind === "textarea" || field.kind === "controversias" || field.kind === "subcontratacion") {
+    return "parrafo";
+  }
+  return "linea";
 }
 
 /**
- * Las secciones del documento, en el orden en que el modelo las trae.
+ * Secciones de la ficha que NO van al requerimiento.
  *
- * Un apartado que el modelo pide y la ficha no rellenó sale IGUAL, vacío: el
- * requerimiento se firma, y un apartado que desaparece sin que nadie lo note es
- * peor que uno en blanco que se ve.
+ * No son contenido del documento: son el control interno de la DEC y el resumen
+ * que la propia ficha compone para la pantalla.
+ */
+const SECCIONES_FUERA = new Set(["Verificaciones DEC (Art. 14 Reglamento)", "Resumen"]);
+
+/**
+ * Campos que no van SUELTOS al documento.
+ *
+ * La unidad del plazo viaja DENTRO del plazo («52 días calendario»), así que
+ * sola solo ponía una raya debajo.
+ */
+const NO_VAN_SOLOS = new Set(["plazoEjecucionUnidad"]);
+
+/** Los apis que el modelo del procedimiento declara exigibles. */
+export function apisExigidos(apartados: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const nombre of apartados) {
+    const entrada = APARTADOS_MODELO.find((a) => a.apartado === nombre);
+    for (const api of entrada?.apis ?? []) out.add(api);
+  }
+  return out;
+}
+
+/** Una casilla sin marcar es un "false", no un dato. */
+function tieneValor(v: string): boolean {
+  const t = v.trim();
+  return t !== "" && t !== "false";
+}
+
+/**
+ * Las secciones del documento, en el ORDEN DE LA FICHA.
+ *
+ * Un campo sale si tiene valor o si el modelo lo exige. Lo primero es el
+ * requisito de la entidad —que el Word lleve todo lo registrado—; lo segundo
+ * hace visible lo que el procedimiento pide y nadie rellenó, que en un documento
+ * que se firma vale más en blanco que desaparecido.
+ *
+ * `objeto` y `proceso` filtran lo que no aplica: un campo de obras no debe
+ * asomar en un requerimiento de bienes porque quedara un valor suelto.
  */
 export function estructuraDelRequerimiento(
   apartados: readonly string[],
   ficha: Record<string, string>,
+  opciones?: { objeto?: ObjetoFilter | ""; proceso?: string },
 ): SeccionRequerimiento[] {
-  if (apartados.length === 0) {
-    return SECCIONES_BASE.map((s) => ({
-      campos: s.apis.filter((api) => !NO_VAN_SOLOS.has(api)).map((api) => campo(api, ficha)),
-      nota: CATALOGO.get(s.apis[0])?.baseLegal,
-      titulo: s.titulo,
-    }));
-  }
-  const secciones: SeccionRequerimiento[] = [];
-  for (const nombre of apartados) {
-    const entrada = APARTADOS_MODELO.find((a) => a.apartado === nombre);
-    if (!entrada) continue;
-    const titulo = tituloDeApartado(nombre);
-    // Dos apartados del modelo pueden mapear al mismo título (p. ej. «Fórmula de
-    // reajuste» y «Fórmulas de reajustes»): se funden en uno.
-    const ya = secciones.find((s) => s.titulo === titulo);
-    const campos = entrada.apis.filter((api) => !NO_VAN_SOLOS.has(api)).map((api) => campo(api, ficha));
-    if (ya) {
-      for (const c of campos) if (!ya.campos.some((x) => x.api === c.api)) ya.campos.push(c);
-    } else {
-      secciones.push({ campos, nota: CATALOGO.get(entrada.apis[0])?.baseLegal, titulo });
+  const exigidos = apisExigidos(apartados);
+  const proceso = opciones?.proceso ?? "";
+  const efectivos = objetosEfectivosDe(proceso, opciones?.objeto || undefined);
+
+  const salida: SeccionRequerimiento[] = [];
+  for (const seccion of FICHA_SECCIONES) {
+    if (SECCIONES_FUERA.has(seccion.title)) continue;
+    const campos: CampoRequerimiento[] = [];
+    for (const field of seccion.fields) {
+      if (field.oculto || NO_VAN_SOLOS.has(field.api)) continue;
+      // Lo que no aplica a este objeto o procedimiento no entra, aunque haya
+      // quedado un valor: el documento describe ESTA contratación.
+      if (efectivos.length > 0 && !campoAplica(field, efectivos, proceso)) continue;
+      const valor = (ficha[field.api] ?? "").trim();
+      const exigido = exigidos.has(field.api);
+      if (!tieneValor(valor) && !exigido) continue;
+      campos.push({
+        api: field.api,
+        exigido,
+        formato: formatoDe(field),
+        label: etiquetaDeDocumento(field.label),
+        subgrupo: field.subgrupo,
+        valor,
+      });
     }
+    if (campos.length === 0) continue;
+    salida.push({ campos, nota: seccion.fields[0]?.baseLegal, titulo: seccion.title.toUpperCase() });
   }
-  return secciones;
+  return salida;
 }

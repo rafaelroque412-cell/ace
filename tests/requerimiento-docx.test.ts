@@ -96,16 +96,35 @@ describe("formato del documento", () => {
     expect(xml).toContain("No usar uniforme");
   });
 
-  it("la estructura la manda el modelo: sin sus apartados no salen", async () => {
+  it("nada de lo registrado se queda fuera", async () => {
+    // Este es el fallo que se corrigio: el documento salia SOLO con los
+    // apartados del modelo, y lo demas que el area usuaria habia registrado
+    // desaparecia. Medido sobre datos reales: en REQ-2026-0020 se registraron 29
+    // campos y salian 5.
     const xml = await xmlDel(
       await generarRequerimientoDocx({
         ...BASE,
         apartados: ["Modalidad de pago"],
-        ficha: { formulaReajuste: "K = 0.4", modalidadPago: "Pago único" },
+        ficha: {
+          cui: "2456789",
+          formulaReajuste: "K = 0.4",
+          metaPresupuestal: "0034",
+          modalidadPago: "Pago único",
+        },
       }),
     );
-    expect(xml).toContain("MODALIDAD DE PAGO");
-    // El dato está en la ficha, pero este procedimiento no pide ese apartado.
-    expect(xml).not.toContain("K = 0.4");
+    expect(xml).toContain("Pago único");
+    expect(xml).toContain("K = 0.4");
+    expect(xml).toContain("2456789");
+    expect(xml).toContain("0034");
+  });
+
+  it("un apartado que el modelo exige sale aunque este vacio", async () => {
+    // Al reves que arriba: en un documento que se firma, lo que el
+    // procedimiento pide y nadie relleno vale mas en blanco que desaparecido.
+    const xml = await xmlDel(
+      await generarRequerimientoDocx({ ...BASE, apartados: ["Subcontratación"], ficha: {} }),
+    );
+    expect(xml).toContain("Subcontratación");
   });
 });

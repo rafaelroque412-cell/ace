@@ -4,6 +4,8 @@ import { MIME_DOCX } from "@/lib/archivar-formato";
 import { objectTypeLabel } from "@/lib/legal-taxonomy";
 import type { Necesidad } from "@/lib/necesidades";
 import { apartadosDelModelo } from "@/lib/modelo-apartados";
+import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
+import type { ObjetoFilter } from "@/lib/procesos-seleccion";
 import { resolverModelosDocIds } from "@/lib/necesidad-copiloto";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
 import { slugify } from "@/lib/slugify";
@@ -12,12 +14,9 @@ import { supabaseRest, supabaseUserRest } from "@/lib/supabase-server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const SELECT =
-  "codigo,nombre,area_usuaria,responsable,finalidad_publica,tipo_objeto,descripcion_detallada,cantidad,unidad_medida," +
-  "alcance,condiciones_ejecucion,plazo_ejecucion,plazo_ejecucion_unidad,modalidad_pago,sistema_entrega,garantias,penalidad_mora,adelanto_directo," +
-  "subcontratacion,formula_reajuste,recepcion_conformidad,requisitos_calificacion,departamento,provincia,distrito,lugar_entrega," +
-  "meta_presupuestal,fuente_financiamiento,clasificador_gasto,monto_estimado," +
-  "tipo_proceso_seleccion,descripcion_general,otras_penalidades,solucion_controversias,metas_fisicas,plazo_respuestas";
+// Todas las columnas: el documento lleva TODO lo registrado, y una lista a mano
+// se queda corta en cuanto la ficha crece un campo —que es justo lo que pasaba—.
+const SELECT = "*";
 
 const str = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
 
@@ -101,34 +100,29 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const hoy = new Date();
     const fechaISO = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
 
-    // La ficha por api: es lo que el generador rellena en cada apartado.
-    const ficha: Record<string, string> = {
-      adelantoDirecto: str(necesidad.adelanto_directo),
-      departamento: str(necesidad.departamento),
-      descripcionDetallada: str(necesidad.descripcion_detallada),
-      descripcionGeneral: str(necesidad.descripcion_general),
-      distrito: str(necesidad.distrito),
-      finalidadPublica: str(necesidad.finalidad_publica),
-      formulaReajuste: str(necesidad.formula_reajuste),
-      lugarEntrega: str(necesidad.lugar_entrega),
-      metasFisicas: str(necesidad.metas_fisicas),
-      modalidadPago: str(necesidad.modalidad_pago),
-      otrasPenalidades: str(necesidad.otras_penalidades),
-      penalidadMora: str(necesidad.penalidad_mora),
-      plazoEjecucion: necesidad.plazo_ejecucion
-        ? `${necesidad.plazo_ejecucion} días ${necesidad.plazo_ejecucion_unidad === "habiles" ? "hábiles" : "calendario"}`
-        : "",
-      plazoRespuestas: str(necesidad.plazo_respuestas),
-      provincia: str(necesidad.provincia),
-      requisitosCalificacion: str(necesidad.requisitos_calificacion),
-      sistemaEntrega: str(necesidad.sistema_entrega),
-      solucionControversias: str(necesidad.solucion_controversias),
-      subcontratacion: str(necesidad.subcontratacion),
-    };
+    // La ficha por api, derivada del CATALOGO. Escribir el mapa a mano fue como
+    // se quedaron fuera veinte campos: cada campo nuevo de la ficha habia que
+    // acordarse de anadirlo aqui, y nadie se acuerda.
+    const ficha: Record<string, string> = {};
+    for (const seccion of FICHA_SECCIONES) {
+      for (const field of seccion.fields) {
+        ficha[field.api] = field.checkbox
+          ? String(Boolean(necesidad[field.col]))
+          : str(necesidad[field.col]);
+      }
+    }
+    // El plazo lleva su unidad dentro: un numero de dias sin unidad no significa
+    // nada en un contrato (Art. 105.3).
+    if (necesidad.plazo_ejecucion) {
+      ficha.plazoEjecucion = `${necesidad.plazo_ejecucion} días ${necesidad.plazo_ejecucion_unidad === "habiles" ? "hábiles" : "calendario"}`;
+    }
+
 
     const buffer = await generarRequerimientoDocx({
       apartados,
       ficha,
+      objeto: (str(necesidad.tipo_objeto) || undefined) as ObjetoFilter | undefined,
+      proceso: str(necesidad.tipo_proceso_seleccion),
       codigo: str(necesidad.codigo),
       entidad: str(ent?.name) || str(auth.user.entity),
       areaUsuaria: str(necesidad.area_usuaria),

@@ -19,6 +19,7 @@ import {
   WidthType,
 } from "docx";
 import { cuantiaPorSumatoria, importeItem, type NecesidadItem } from "./necesidad-items";
+import type { ObjetoFilter } from "./procesos-seleccion";
 import { parseOtrasPenalidades, textoLibrePenalidades } from "./otras-penalidades";
 import { parseRequisitos } from "./requisitos-calificacion";
 import {
@@ -38,8 +39,12 @@ const MESES = [
 export type RequerimientoDocInput = {
   /** Apartados que trae el MODELO del procedimiento, en su orden. */
   apartados?: readonly string[];
-  /** Valores de la ficha por api, para los apartados que manda el modelo. */
+  /** Valores de la ficha por api. */
   ficha?: Record<string, string>;
+  /** Objeto contractual; descarta los campos que no aplican. */
+  objeto?: ObjetoFilter | "";
+  /** Procedimiento de seleccion; acota igual que el objeto. */
+  proceso?: string;
   codigo: string;
   entidad: string;
   areaUsuaria: string;
@@ -84,6 +89,16 @@ export type RequerimientoDocInput = {
 
 const texto = (v: string | null | undefined) => (v ?? "").trim();
 
+/** Para comparar un titulo con una etiqueta: sin acentos, sin letra de orden. */
+function normalizar(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/^[a-z]\)\s*/, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 function run(text: string, opts?: { bold?: boolean; italics?: boolean; size?: number }): TextRun {
   return new TextRun({ text, bold: opts?.bold, italics: opts?.italics, font: FUENTE, size: opts?.size ?? TAM });
 }
@@ -94,7 +109,20 @@ function p(children: TextRun[], align: (typeof AlignmentType)[keyof typeof Align
 }
 
 /** Encabezado de sección numerado ("1. FINALIDAD PÚBLICA"). */
+/**
+ * Titulo de apartado.
+ *
+ * La ficha ya numera las suyas —«3.1 Finalidad publica»— asi que anteponerles un
+ * contador daba «4. 3.1 FINALIDAD PUBLICA». Cuando el titulo ya empieza por un
+ * numero, se respeta el suyo.
+ */
 function seccion(numero: number, titulo: string): Paragraph {
+  if (/^\d/.test(titulo)) {
+    return new Paragraph({
+      spacing: { after: 100, before: 200 },
+      children: [run(titulo, { bold: true })],
+    });
+  }
   return new Paragraph({
     spacing: { before: 200, after: 100 },
     children: [run(`${numero}. ${titulo}`, { bold: true })],
@@ -176,6 +204,9 @@ function fechaLarga(iso: string, lugar: string): string {
 }
 
 
+/** Campos que son dinero: se imprimen como importe, no como numero. */
+const IMPORTES = new Set(["montoEstimado", "costoUnitario", "costoTotal", "valorEstimado"]);
+
 /** Viñeta de primer nivel. El modelo del OECE lista así los requisitos. */
 function vineta(texto_: string): Paragraph {
   return new Paragraph({
@@ -255,6 +286,14 @@ function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Ta
     return out.length > 0 ? out : [contenido(c.valor)];
   }
 
+  // Los importes se formatean: «75920» en un documento que se firma no es una
+  // cifra, es un numero suelto.
+  if (IMPORTES.has(c.api)) {
+    const n = Number(c.valor.replace(/,/g, ""));
+    const v = Number.isFinite(n) ? importeTexto(n) : c.valor;
+    return [solo ? p([run(v)]) : (linea(c.label, v) ?? contenido(""))];
+  }
+
   if (c.formato === "linea") {
     // Con un solo campo, el titulo del apartado YA dice que es: repetir la
     // etiqueta daba «8. PLAZO DE PRESTACION» y debajo «Plazo de prestacion: 52
@@ -306,17 +345,45 @@ export async function generarRequerimientoDocx(input: RequerimientoDocInput): Pr
   // obras; los modelos del OECE no piden lo mismo. Sin modelo cargado se cae a
   // la estructura base del Art. 44.2, que se queda corta pero no se rompe.
   let numero = 2;
-  for (const s of estructuraDelRequerimiento(input.apartados ?? [], input.ficha ?? {})) {
+  for (const s of estructuraDelRequerimiento(input.apartados ?? [], input.ficha ?? {}, {
+    objeto: input.objeto,
+    proceso: input.proceso,
+  })) {
     children.push(seccion(numero, s.titulo));
     numero += 1;
     if (s.nota) children.push(nota(s.nota));
+    let subgrupoActual: string | undefined;
     for (const c of s.campos) {
-      // Con varios campos en el apartado se rotula cada uno; con uno solo, el
-      // titulo de la seccion ya dice que es.
-      if (s.campos.length > 1 && c.formato !== "linea") {
-        children.push(new Paragraph({ spacing: { before: 60, after: 40 }, children: [run(`${c.label}:`, { bold: true })] }));
+      // El subgrupo de la ficha —«a) Modalidad de pago»— es el mismo apartado
+      // con letra del modelo del OECE, asi que encabeza sus campos igual que
+      // alli. Solo cuando cambia: repetirlo por campo seria ruido.
+      if (c.subgrupo && c.subgrupo !== subgrupoActual) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 40, before: 120 },
+            children: [run(c.subgrupo, { bold: true })],
+          }),
+        );
+        subgrupoActual = c.subgrupo;
       }
-      children.push(...pintarCampo(c, s.campos.length === 1));
+      // La etiqueta se omite solo si el encabezado de arriba YA dice que es.
+      // «a) Modalidad de pago» + «SUMA ALZADA» se lee; «a) Programacion en el
+      // CMN y el PAC» + «168» no dice nada.
+      const unicoDelGrupo =
+        Boolean(c.subgrupo) && s.campos.filter((x) => x.subgrupo === c.subgrupo).length === 1;
+      const encabezadoLoDice =
+        unicoDelGrupo && normalizar(c.subgrupo ?? "").includes(normalizar(c.label));
+      const soloEnSuGrupo = encabezadoLoDice || (s.campos.length === 1 && !c.subgrupo);
+      // Con etiqueta propia se rotula; si el subgrupo o el titulo ya lo dicen, no.
+      if (!soloEnSuGrupo && c.formato !== "linea" && s.campos.length > 1) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 40, before: 60 },
+            children: [run(`${c.label}:`, { bold: true })],
+          }),
+        );
+      }
+      children.push(...pintarCampo(c, soloEnSuGrupo));
       // El desagregado del Art. 52 va donde va la descripcion, que es lo que
       // desagrega.
       if (c.api === "descripcionDetallada" && (input.items ?? []).length > 0) {
@@ -334,7 +401,6 @@ export async function generarRequerimientoDocx(input: RequerimientoDocInput): Pr
       }
     }
   }
-
 
   // Pie: fecha y firma.
   children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { before: 300, after: 300 }, children: [run(fechaLarga(input.fecha, input.lugar))] }));
