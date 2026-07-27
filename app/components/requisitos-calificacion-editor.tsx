@@ -18,6 +18,7 @@ import {
 } from "@/lib/requisitos-calificacion";
 import { avisosDeTopes } from "@/lib/requisitos-topes";
 import {
+  ACREDITACION_EXPERIENCIA,
   componerExperienciaPostor,
   montoDeExperiencia,
   objetoConvocatoria,
@@ -160,11 +161,22 @@ export function RequisitosCalificacionEditor({
   // modelo: es texto reglamentario con un solo hueco, el monto. El monto y su
   // versión en letras salen del número tecleado, en la moneda de la convocatoria.
   function redactarExperiencia() {
-    editar(
-      "experiencia_postor",
-      "detalle",
-      componerExperienciaPostor({ monto: montoExp, moneda, objeto, similares: similaresExp }),
-    );
+    // Se rellenan LOS DOS campos a la vez: el detalle (qué se exige, con el
+    // monto y lo similar) y la acreditación (cómo se prueba), que es texto fijo
+    // del formato. Un solo `emit` para no dejar la ficha en un estado a medias.
+    const next = new Map(porTipo);
+    const actual = next.get("experiencia_postor") ?? {
+      estado: "obligatorio" as EstadoRequisito,
+      detalle: "",
+      acreditacion: "",
+      sustento: "",
+    };
+    next.set("experiencia_postor", {
+      ...actual,
+      detalle: componerExperienciaPostor({ monto: montoExp, moneda, objeto, similares: similaresExp }),
+      acreditacion: ACREDITACION_EXPERIENCIA,
+    });
+    emit(next);
   }
 
   const hayHeredados = otrosObligatorios.length > 0 || otrosFacultativos.length > 0;

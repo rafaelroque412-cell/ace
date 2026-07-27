@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACREDITACION_EXPERIENCIA,
   HUECO_MONTO_EXPERIENCIA,
   HUECO_SIMILARES,
   componerExperienciaPostor,
@@ -7,6 +8,7 @@ import {
   montoDeExperiencia,
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
+import { formatRequisitos, parseRequisitos, repartirRequisitos } from "@/lib/requisitos-calificacion";
 import { numeroALetras, nombreMoneda } from "@/lib/numero-a-letras";
 
 /**
@@ -129,6 +131,40 @@ describe("el monto se relee del detalle al reabrir", () => {
     expect(montoDeExperiencia("El postor debe acreditar experiencia.")).toBe("");
     expect(montoDeExperiencia("")).toBe("");
     expect(montoDeExperiencia(null)).toBe("");
+  });
+});
+
+describe("la acreditación es el texto fijo del formato", () => {
+  it("es el literal de las bases estándar, no un resumen", () => {
+    expect(ACREDITACION_EXPERIENCIA).toContain(
+      "La experiencia del postor en la especialidad se acredita con un máximo de veinte (20) contrataciones",
+    );
+    expect(ACREDITACION_EXPERIENCIA).toContain("comprobante de retención electrónico emitido por SUNAT por la retención del IGV");
+    expect(ACREDITACION_EXPERIENCIA).toContain("Anexo N° 14");
+  });
+
+  it("no arrastra los números de nota al pie del original (15, 16, 17)", () => {
+    // Remiten a notas que este documento no lleva; sueltos serían ruido.
+    expect(ACREDITACION_EXPERIENCIA).not.toContain("pago15");
+    expect(ACREDITACION_EXPERIENCIA).not.toContain("IGV 16");
+    expect(ACREDITACION_EXPERIENCIA).not.toContain("privados 17");
+  });
+
+  it("el cierre del Anexo 11 va marcado en negrita, y nada más", () => {
+    const enNegrita = ACREDITACION_EXPERIENCIA.match(/\*\*([^*]+)\*\*/g) ?? [];
+    expect(enNegrita).toHaveLength(1);
+    expect(enNegrita[0]).toContain("los postores deben llenar y presentar el Anexo N° 11");
+  });
+
+  it("sobrevive intacta al round-trip del texto canónico de requisitos", () => {
+    // Va en el campo «acreditación» de un obligatorio, que se serializa pegado
+    // al nombre; los saltos de párrafo y la marca de negrita deben volver.
+    const canonico = formatRequisitos({
+      obligatorios: [`Experiencia del postor en la especialidad — Acredita: ${ACREDITACION_EXPERIENCIA}`],
+      facultativos: [],
+    });
+    const vuelta = repartirRequisitos(parseRequisitos(canonico)).porTipo.get("experiencia_postor");
+    expect(vuelta?.acreditacion).toBe(ACREDITACION_EXPERIENCIA);
   });
 });
 

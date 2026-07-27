@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { componerOtrasPenalidades } from "@/lib/otras-penalidades";
 import { formatRequisitos } from "@/lib/requisitos-calificacion";
+import { ACREDITACION_EXPERIENCIA } from "@/lib/requisitos-experiencia";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
 
 /**
@@ -74,6 +75,34 @@ describe("formato del documento", () => {
     expect(xml).toContain("<w:numPr>"); // la viñeta
     expect(xml).toContain("Capacidad legal: RNP vigente");
     expect(xml).toContain("3 obras similares");
+  });
+
+  it("la acreditación de la experiencia lleva el cierre del Anexo 11 en NEGRITA", async () => {
+    const xml = await xmlDel(
+      await generarRequerimientoDocx({
+        ...BASE,
+        apartados: ["3.5 Requisitos de calificación"],
+        ficha: {
+          requisitosCalificacion: formatRequisitos({
+            obligatorios: [`Experiencia del postor en la especialidad — Acredita: ${ACREDITACION_EXPERIENCIA}`],
+            facultativos: [],
+          }),
+        },
+      }),
+    );
+    // El `**…**` del texto NO llega al documento: se convierte en negrita real.
+    expect(xml).not.toContain("**");
+    // El párrafo del Anexo 11 va en un run con <w:b/>.
+    const iAnexo = xml.indexOf("Sin perjuicio de lo anterior");
+    expect(iAnexo).toBeGreaterThan(-1);
+    const runAnexo = xml.lastIndexOf("<w:r>", iAnexo);
+    expect(xml.slice(runAnexo, iAnexo)).toContain("<w:b/>");
+    // Y los párrafos del texto se separan con saltos de línea, no van pegados.
+    expect(xml).toContain("<w:br/>");
+    // El primer párrafo, que NO va en negrita, no arrastra el <w:b/>.
+    const iPrimero = xml.indexOf("La experiencia del postor en la especialidad se acredita");
+    const runPrimero = xml.lastIndexOf("<w:r>", iPrimero);
+    expect(xml.slice(runPrimero, iPrimero)).not.toContain("<w:b/>");
   });
 
   it("las penalidades adicionales salen en TABLA", async () => {

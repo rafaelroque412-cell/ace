@@ -103,6 +103,32 @@ function run(text: string, opts?: { bold?: boolean; italics?: boolean; size?: nu
   return new TextRun({ text, bold: opts?.bold, italics: opts?.italics, font: FUENTE, size: opts?.size ?? TAM });
 }
 
+/**
+ * Convierte texto plano con marcas ligeras en runs de Word.
+ *
+ * Dos convenciones, las únicas que los apartados compuestos usan:
+ *   - `\n` es un salto de línea dentro del párrafo (un texto largo del formato
+ *     —la acreditación de la experiencia— viene en varios párrafos);
+ *   - `**negrita**` marca lo que el formato imprime en negrita (el cierre del
+ *     Anexo N° 11).
+ *
+ * Un texto sin ninguna de las dos da un único run idéntico al de antes, así que
+ * los campos que no las usan no cambian.
+ */
+function runsDesdeTexto(valor: string, opts?: { bold?: boolean }): TextRun[] {
+  const runs: TextRun[] = [];
+  const lineas = valor.split("\n");
+  lineas.forEach((linea, i) => {
+    if (i > 0) runs.push(new TextRun({ break: 1 }));
+    for (const parte of linea.split(/(\*\*[^*]+\*\*)/g)) {
+      if (!parte) continue;
+      const negrita = parte.startsWith("**") && parte.endsWith("**");
+      runs.push(run(negrita ? parte.slice(2, -2) : parte, { bold: negrita || opts?.bold }));
+    }
+  });
+  return runs.length > 0 ? runs : [run("")];
+}
+
 /** Párrafo justificado con aire debajo. */
 function p(children: TextRun[], align: (typeof AlignmentType)[keyof typeof AlignmentType] = AlignmentType.JUSTIFIED): Paragraph {
   return new Paragraph({ alignment: align, spacing: { after: 140, line: 276 }, children });
@@ -131,7 +157,8 @@ function seccion(numero: number, titulo: string): Paragraph {
 
 /** Texto de contenido; si viene vacío, un guion tenue para no dejar el hueco. */
 function contenido(valor: string): Paragraph {
-  return p([run(texto(valor) || "—")]);
+  const v = texto(valor);
+  return p(v ? runsDesdeTexto(v) : [run("—")]);
 }
 
 /** Línea "Etiqueta: valor". Devuelve null si el valor está vacío (se omite). */
@@ -212,7 +239,9 @@ function vineta(texto_: string): Paragraph {
   return new Paragraph({
     bullet: { level: 0 },
     spacing: { after: 40 },
-    children: [run(texto_)],
+    // La acreditación de la experiencia trae varios párrafos y una negrita; el
+    // resto de viñetas es una línea suelta y sale igual que antes.
+    children: runsDesdeTexto(texto_),
   });
 }
 

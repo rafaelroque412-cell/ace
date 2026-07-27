@@ -25,6 +25,28 @@ export const HUECO_MONTO_EXPERIENCIA =
 /** El corchete de la segunda frase: qué se considera similar al objeto. */
 export const HUECO_SIMILARES = "CONSIGNAR LOS SERVICIOS SIMILARES AL OBJETO CONVOCADO";
 
+/**
+ * Cómo se acredita la experiencia del postor, texto literal de las bases estándar.
+ *
+ * Es fijo: no depende de nada que el área usuaria escriba, así que se pone entero
+ * y no se deja a su criterio. Va en el campo «¿Con qué se acredita?».
+ *
+ * El último párrafo va en NEGRITA en el formato; se marca con `**…**`, la misma
+ * convención que el Word entiende (lib/requerimiento-docx.ts). Los números de
+ * nota al pie del original (15, 16, 17) NO se copian: remiten a notas que este
+ * documento no lleva, y sueltos en el texto serían ruido.
+ */
+export const ACREDITACION_EXPERIENCIA = [
+  "La experiencia del postor en la especialidad se acredita con un máximo de veinte (20) contrataciones, mediante copia simple de: (i) contratos u órdenes de servicios, y su respectiva conformidad o constancia de prestación; o (ii) comprobantes de pago cuya cancelación se acredite documental o fehacientemente, con constancia de depósito, reporte de estado de cuenta, cualquier otro documento emitido por entidad del sistema financiero que acredite el abono o mediante cancelación en el mismo comprobante de pago, o comprobante de retención electrónico emitido por SUNAT por la retención del IGV. En caso el postor sustente su experiencia en la especialidad mediante contrataciones realizadas con privados, para acreditarla debe presentar de forma obligatoria lo indicado en el numeral (ii) del presente párrafo; no es posible que acredite su experiencia únicamente con la presentación de contratos u órdenes de servicio con conformidad o constancia de prestación.",
+  "En caso los postores presenten varios comprobantes de pago para acreditar una sola contratación, se debe acreditar que corresponden a dicha contratación; de lo contrario, se asumirá que los comprobantes acreditan contrataciones independientes, en cuyo caso solo se considerará, para la evaluación, las veinte (20) primeras contrataciones indicadas en el Anexo N° 11 referido a la Experiencia del Postor en la Especialidad.",
+  "En el caso de servicios de ejecución periódica o continuada, solo se considera como experiencia la parte del contrato que haya sido ejecutada durante los quince años anteriores a la fecha de presentación de ofertas, debiendo adjuntarse copia de las conformidades correspondientes a tal parte o los respectivos comprobantes de pago cancelados.",
+  "Si el titular de la experiencia no es el postor, consignar si dicha experiencia corresponde a la matriz en caso de que el postor sea sucursal, o fue transmitida por reorganización societaria, debiendo acompañar la documentación sustentatoria correspondiente.",
+  "Si el postor acredita experiencia de otra persona jurídica como consecuencia de una reorganización societaria, debe presentar adicionalmente el Anexo N° 14.",
+  "Las personas jurídicas resultantes de un proceso de reorganización societaria no pueden acreditar como experiencia del postor en la especialidad aquella que le hubieran transmitido como parte de dicha reorganización las personas jurídicas sancionadas con inhabilitación vigente o definitiva.",
+  "Cuando en los contratos, órdenes de servicios o comprobantes de pago el monto facturado se encuentre expresado en moneda extranjera, debe indicarse el tipo de cambio venta publicado por la Superintendencia de Banca, Seguros y AFP correspondiente a la fecha de suscripción del contrato, de emisión de la orden de servicio o de cancelación del comprobante de pago, según corresponda.",
+  "**Sin perjuicio de lo anterior, los postores deben llenar y presentar el Anexo N° 11 referido a la Experiencia del Postor en la Especialidad.**",
+].join("\n\n");
+
 /** Símbolo con el que se escribe la cifra: «S/» o «US$». */
 function simboloMoneda(moneda?: string | null): string {
   return nombreMoneda(moneda) === "DÓLARES AMERICANOS" ? "US$" : "S/";
