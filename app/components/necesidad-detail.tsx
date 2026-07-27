@@ -84,7 +84,29 @@ import { AccionesFlujo } from "./necesidad/acciones-flujo";
 import { PanelDerivacion } from "./necesidad/panel-derivacion";
 import { toStr, useFichaForm } from "./necesidad/usar-ficha-form";
 import { CAMPO_LABEL } from "./necesidad/campos-etiquetas";
-import { FichaEditable } from "./necesidad/ficha-editable";
+/**
+ * El formulario completo se descarga al abrirlo, no al abrir la pagina.
+ *
+ * MEDIDO: la carga inicial de /necesidades/[id] pasa de 107,5 a 88,3 KB brotli
+ * —19,2 KB menos, un 18 %— porque casi mil quinientas lineas de formulario solo
+ * las necesita quien pulsa «Editar». Quien entra a LEER una necesidad no las
+ * descargaba para nada.
+ *
+ * `ssr: false` porque este bloque nunca sale en el HTML inicial: exige una
+ * interaccion previa. El `loading` evita que el panel parpadee vacio mientras
+ * llega el trozo, y `precargarFicha` lo trae al pasar el raton por «Editar»,
+ * asi que en la practica ya esta cuando se pulsa.
+ */
+const importarFichaEditable = () => import("./necesidad/ficha-editable");
+const FichaEditable = dynamic(() => importarFichaEditable().then((m) => m.FichaEditable), {
+  loading: () => (
+    <div className="grid gap-3" aria-busy="true">
+      <div className="h-10 animate-pulse rounded-[10px] bg-line/70" />
+      <div className="h-64 animate-pulse rounded-[10px] bg-line/70" />
+    </div>
+  ),
+  ssr: false,
+});
 import { FichaLectura } from "./necesidad/ficha-lectura";
 import { PanelAdjuntos } from "./necesidad/panel-adjuntos";
 import { PanelRiesgos } from "./necesidad/panel-riesgos";
@@ -436,6 +458,11 @@ export function NecesidadDetail({
   const subirEettEstable = useCallbackEstable((archivo: File, tipo: "eett" | "tdr") => {
     void subirEett(archivo, tipo);
   });
+  // Trae el formulario antes de que haga falta: al pasar el raton por «Editar»
+  // o al enfocarlo con el teclado. Si ya esta, no hace nada.
+  const precargarFicha = useCallback(() => {
+    void importarFichaEditable();
+  }, []);
   const marcarTocado = useCallback((api: string) => {
     setCamposTocados((prev) => (prev.has(api) ? prev : new Set(prev).add(api)));
   }, []);
@@ -1708,7 +1735,7 @@ export function NecesidadDetail({
               <strong className="font-semibold">¿Qué sigue?</strong> {proximoPaso.texto}
             </p>
             {proximoPaso.accion ? (
-              <Button variant="primary" size="sm" onClick={startFichaEdit} className="shrink-0">
+              <Button variant="primary" size="sm" onClick={startFichaEdit} onFocus={precargarFicha} onMouseEnter={precargarFicha} className="shrink-0">
                 {proximoPaso.accion.label}
               </Button>
             ) : null}
@@ -1887,7 +1914,7 @@ export function NecesidadDetail({
             <h3 className="panelTitle">Ficha de Necesidad (Ampliada)</h3>
             {!fichaEditable ? (
               permisos.manage ? (
-                <Button className="ml-auto" onClick={startFichaEdit} type="button">
+                <Button className="ml-auto" onClick={startFichaEdit} onFocus={precargarFicha} onMouseEnter={precargarFicha} type="button">
                   <Pencil size={14} />
                   Editar ficha
                 </Button>
