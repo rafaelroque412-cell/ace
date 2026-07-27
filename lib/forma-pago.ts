@@ -69,11 +69,21 @@ export type DatosAreaConformidad = {
 export function componerAreaConformidad(d: Partial<DatosAreaConformidad>): string {
   const area = (d.area ?? "").trim();
   if (!area) return "";
+  // Si en el área ya está escrita la inversión, no se vuelve a añadir.
+  //
+  // Pasó de verdad: alguien tecleó «SUB GERENCIA …, para el proyecto de
+  // inversión "CREACION DEL SERVICIO …"» y el apartado salió nombrando el
+  // proyecto DOS veces seguidas, una con las palabras del usuario y otra con
+  // las de aquí. Se mira si lo MENCIONA, no si lo contiene entero: el campo
+  // tiene tope y el nombre que se tecleó puede estar cortado.
+  const yaDicho = area.toLowerCase();
   const partes = [area];
   const proyecto = (d.proyectoInversion ?? "").trim();
-  if (proyecto) partes.push(`del proyecto de inversión «${proyecto}»`);
+  if (proyecto && !yaDicho.includes("proyecto de inversión")) {
+    partes.push(`del proyecto de inversión «${proyecto}»`);
+  }
   const cui = (d.cui ?? "").trim();
-  if (cui) partes.push(`con CUI ${cui}`);
+  if (cui && !yaDicho.includes("cui")) partes.push(`con CUI ${cui}`);
   return partes.join(", ");
 }
 

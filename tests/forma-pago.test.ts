@@ -278,6 +278,57 @@ describe("el área se pide UNA sola vez", () => {
   });
 });
 
+describe("no repite la inversión si ya está escrita en el área", () => {
+  // Caso real: se tecleó la denominación con el proyecto dentro, y el apartado
+  // salió nombrándolo dos veces seguidas —una con las palabras del usuario y
+  // otra con las de `componerAreaConformidad`— dentro de un documento firmable.
+  const AREA_CON_PROYECTO =
+    'SUB GERENCIA DE EJECUCIÓN DE INVERSIONES Y MANTENIMIENTO, para el proyecto de inversión "CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA"';
+
+  it("si el área ya menciona el proyecto, no se añade otra vez", () => {
+    const t = componerAreaConformidad({
+      area: AREA_CON_PROYECTO,
+      cui: "2656190",
+      proyectoInversion: "CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA Y/O RECREATIVA",
+    });
+    expect(t.match(/proyecto de inversión/gi)).toHaveLength(1);
+  });
+
+  it("se mira si lo MENCIONA, no si lo contiene entero", () => {
+    // El campo tiene tope: el nombre que se tecleó puede estar cortado, y
+    // comparar textos completos no habría detectado nada.
+    const cortado = 'Área X, para el proyecto de inversión "CREACION DEL SERV';
+    expect(componerAreaConformidad({ area: cortado, proyectoInversion: "CREACION DEL SERVICIO ENTERO" })).toBe(cortado);
+  });
+
+  it("y el CUI tampoco se duplica", () => {
+    const t = componerAreaConformidad({ area: "Área X, con CUI 2656190", cui: "2656190" });
+    expect(t.match(/CUI/g)).toHaveLength(1);
+  });
+
+  it("pero si el área es solo el nombre, se añaden los dos", () => {
+    expect(componerAreaConformidad({ area: "Área X", cui: "9", proyectoInversion: "P" })).toBe(
+      "Área X, del proyecto de inversión «P», con CUI 9",
+    );
+  });
+});
+
+describe("la denominación del área cabe con su proyecto dentro", () => {
+  it("un caso real de 299 caracteres ya no se corta", async () => {
+    // Se bajó el tope a 300 razonando que aquí solo cabe un nombre. No es
+    // cierto: el formato pide la DENOMINACIÓN del área responsable, y en una
+    // inversión eso se escribe con el proyecto al que pertenece. El valor real
+    // se guardó cortado a mitad de palabra, «…DE COTABAMBAS DEL».
+    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    const real =
+      'SUB GERENCIA DE EJECUCION DE INVERSIONES Y MANTENIMIENTO, para el proyecto de inversión "CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA Y/O RECREATIVA EN LOS CASERÍOS DE PANCHAMA, JAWAPAYLLA Y CHUSPIRE DE LA COMUNIDAD DE NUEVA FUERABAMBA DEL DISTRITO DE CHALLHUAHUACHO DE LA PROVINCIA DE COTABAMBAS DEL DEPARTAMENTO DE APURIMAC"';
+    expect(real.length).toBeGreaterThan(300);
+    expect(real.length).toBeLessThanOrEqual(LIMITES_TEXTO.formaPagoAreaConformidad);
+    expect(necesidadUpdateSchema.safeParse({ formaPagoAreaConformidad: real }).success).toBe(true);
+  });
+});
+
 describe("el apartado entero cabe en su tope", () => {
   it("el peor caso posible —todos los huecos al máximo— no se corta", async () => {
     // El texto capa a `LIMITES_TEXTO.formaPago` al escribirlo en la ficha. Si el

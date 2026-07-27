@@ -74,11 +74,12 @@ export const LIMITES_TEXTO: Record<string, number> = {
   adelantoDirecto: 1000,
   penalidadMora: 2000,
   garantias: 2000,
-  // 3000 y no 2000: el apartado se compone con el texto literal del formato
+  // 5000: el apartado se compone con el texto literal del formato
   // (lib/recepcion-conformidad.ts), que en bienes ya mide 1791 con los huecos
-  // SIN rellenar. Con 2000 el ultimo parrafo se cortaba en cuanto las dos areas
-  // tenian nombre largo. Una prueba compone el peor caso y comprueba que cabe.
-  recepcionConformidad: 3000,
+  // SIN rellenar, y encima lleva las DOS areas. Cuando se quedo corto, el
+  // ultimo parrafo se cortaba sin avisar. Una prueba compone el peor caso desde
+  // estos mismos topes: da 4189.
+  recepcionConformidad: 5000,
   subcontratacion: 1000,
   descripcionGeneral: 4000,
   fichaTecnicaIdentificacion: 300,
@@ -93,15 +94,20 @@ export const LIMITES_TEXTO: Record<string, number> = {
   // Los apartados que se componen con plantilla. Sin tope aqui, el formulario
   // no capaba la entrada y un texto largo llegaba al PATCH para que lo
   // rechazara con un 400 —que es como se cuelan estos fallos—.
-  // 9000: al texto se le suman dos campos largos que no son huecos suyos —el
-  // nombre del proyecto de inversion y el detalle de los pagos a cuenta, 2000
-  // cada uno—. Cada vez que se quedo corto, el apartado se CORTABA al
+  // 11000: al texto se le suman campos largos que no son huecos suyos —la
+  // denominacion del area, el nombre del proyecto de inversion y el detalle de
+  // los pagos a cuenta—. Cada vez que se quedo corto, el apartado se CORTABA al
   // escribirlo sin avisar. Una prueba compone el peor caso desde estos mismos
-  // topes en vez de fiarse de una cuenta a mano: da 8009.
-  formaPago: 9000,
+  // topes en vez de fiarse de una cuenta a mano: da 10109.
+  formaPago: 11000,
   formaPagoTipo: 1000,
   formaPagoDetalle: 2000,
-  formaPagoAreaConformidad: 300,
+  // 2400 y no 300 como los demas nombres de area. Se bajo a 300 razonando que
+  // aqui solo cabe un nombre, y no es cierto: el formato pide la DENOMINACION
+  // del area responsable, y en una inversion eso se escribe con el proyecto al
+  // que pertenece. Con 300, un caso real se guardo cortado a mitad de palabra
+  // —«...DE COTABAMBAS DEL»— dentro de un documento que se firma.
+  formaPagoAreaConformidad: 2400,
   formaPagoDocumentacion: 1000,
   formaPagoLugar: 300,
   formaPagoDireccion: 300,
