@@ -1169,6 +1169,11 @@ export function NecesidadDetail({
     setModo(siguiente);
     try { localStorage.setItem("ficha-modo-trabajo", siguiente); } catch { /* ignora */ }
   }
+
+  // En Revisar la ficha es de SOLO LECTURA: quien revisa necesita leer lo que
+  // juzga, no editarlo. Se deriva del estado en vez de duplicarlo, para que no
+  // puedan quedar en desacuerdo.
+  const fichaEditable = fichaEdit && modo === "redactar";
   
   const [modoSimple, setModoSimple] = useState(false);
   useEffect(() => {
@@ -1789,6 +1794,9 @@ export function NecesidadDetail({
    * buscándola entre 59 campos.
    */
   function irACampo(api: string) {
+    // La ficha solo es editable en Redactar: sin este cambio, pulsar «ir al
+    // campo» desde un diagnostico en Revisar no haria nada visible.
+    cambiarModo("redactar");
     startFichaEdit();
     // Formulario completo: en modo "paso a paso" el campo podría estar en otro
     // paso y no existir aún en el DOM. Con todo desplegado el salto siempre acierta.
@@ -1802,6 +1810,8 @@ export function NecesidadDetail({
   }
 
   function startFichaEdit() {
+    // En Revisar la ficha es de solo lectura.
+    cambiarModo("redactar");
     if (!necesidad) return;
     const initial = valoresDeLaBase(necesidad);
     if (!initial.entidad && configuredEntity?.name) initial.entidad = configuredEntity.name;
@@ -2811,21 +2821,23 @@ export function NecesidadDetail({
         className="sticky top-0 z-20 -my-1 flex flex-wrap gap-1.5 border-b border-line bg-canvas/85 py-2 backdrop-blur"
         aria-label="Secciones de la necesidad"
       >
-        {[
-          // El mismo orden en que aparecen al bajar: un indice que no coincide con la
-          // pagina desorienta mas de lo que ayuda.
-          { id: "sec-flujo", label: "Flujo y estado" },
-          { id: "sec-eett", label: "EETT / TDR" },
-          { id: "sec-ficha", label: "Ficha del requerimiento" },
-          { id: "sec-adjuntos", label: "Adjuntos" },
-          ...(riesgosAplica ? [{ id: "sec-riesgos", label: "Riesgos" }] : []),
-          { id: "sec-derivacion", label: "Derivación" },
-        ].map((t) => (
+        {/* Del catalogo, no de una lista propia: dos listas que dicen lo mismo
+            acaban discrepando, y el chip que sobra lleva a un bloque que no existe
+            en ese modo. Los riesgos solo cuando aplican. */}
+        {BLOQUES_FICHA.filter((t) => t.id !== "sec-riesgos" || riesgosAplica).map((t) => (
           <button
             key={t.id}
             type="button"
             className="rounded-full border border-line bg-panel px-3 py-1 text-[12.5px] font-medium text-muted transition hover:border-brand/40 hover:bg-brand-soft hover:text-brand"
-            onClick={() => document.getElementById(t.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            // El destino puede vivir en el otro modo. Sin esto el clic no haria nada
+            // y nadie sabria por que.
+            onClick={() => {
+              const destino = modoParaSeccion(t.id);
+              if (destino) cambiarModo(destino);
+              requestAnimationFrame(() => {
+                document.getElementById(t.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            }}
           >
             {t.label}
           </button>
@@ -3068,7 +3080,7 @@ export function NecesidadDetail({
       </Panel>
 
       {/* ===== EETT / TDR (1.ª versión del área usuaria) ===== */}
-      {permisos.manage ? (
+      {permisos.manage && panelesDelModo(modo).includes("sec-eett") ? (
         <section id="sec-eett" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
           <div className="flex flex-wrap items-center gap-2 text-ink">
             <FileText size={17} />
@@ -3152,7 +3164,7 @@ export function NecesidadDetail({
           <div className="flex flex-wrap items-center gap-2 text-ink">
             <FileText size={17} />
             <h3 className="panelTitle">Ficha de Necesidad (Ampliada)</h3>
-            {!fichaEdit ? (
+            {!fichaEditable ? (
               permisos.manage ? (
                 <Button className="ml-auto" onClick={startFichaEdit} type="button">
                   <Pencil size={14} />
@@ -3182,7 +3194,7 @@ export function NecesidadDetail({
             </p>
           ) : null}
 
-          {fichaEdit ? (() => {
+          {fichaEditable ? (() => {
             const seccionesVisibles = FICHA_SECCIONES.filter((s) => {
               if (s.mostrarPara && !(tipoObj && s.mostrarPara.includes(tipoObj))) return false;
               // Sección sin campos visibles (p. ej. 3.5.2 quedó vacía tras
@@ -4350,206 +4362,208 @@ Ej: ${field.ejemplo}` : ""}
             />
           </div>
 
-          <section id="sec-adjuntos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-            <div className="flex flex-wrap items-center gap-2 text-ink">
-              <FileText size={17} />
-              <h3 className="panelTitle">Adjuntos</h3>
-            </div>
-
-            {puedeAdjuntar ? (
-              <form className="flex flex-wrap items-center gap-2 rounded-[10px] border border-dashed border-line p-2.5 [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_select]:rounded-lg [&_select]:border [&_select]:border-line [&_select]:bg-panel [&_select]:px-[9px] [&_select]:py-[7px] [&_select]:text-[13px]" onSubmit={uploadDocumento}>
-                <select onChange={(event) => setKind(event.target.value)} value={kind}>
-                  {NECESIDAD_DOC_KINDS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <input accept="application/pdf,.pdf" ref={fileRef} type="file" />
-                <Button variant="primary" disabled={uploading} type="submit">
-                  {uploading ? <Loader size={15} /> : <UploadCloud size={15} />}
-                  {uploading ? "Subiendo..." : "Adjuntar PDF"}
-                </Button>
-                {uploadingFile ? (
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-line">
-                    <div className="h-full bg-brand transition-[width] duration-200" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                ) : null}
-              </form>
-            ) : null}
-
-            {puedeAdjuntar ? (
-              <>
-                <input
-                  ref={extractFileRef}
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void handleExtract(f);
-                    e.target.value = "";
-                  }}
-                />
-                <Button
-                  className="mt-2"
-                  disabled={extracting}
-                  onClick={() => extractFileRef.current?.click()}
-                  type="button"
-                  title="Lee un PDF de Especificaciones Técnicas o TDR y autocompleta la ficha"
-                >
-                  {extracting ? <Loader size={15} /> : <Sparkles size={15} />}
-                  {extracting ? "Leyendo con IA…" : "Autocompletar desde EETT/TDR (IA)"}
-                </Button>
-                <Button
-                  className="mt-2"
-                  disabled={completandoModelo || !necesidad?.tipo_proceso_seleccion}
-                  onClick={() => void completarConModelo()}
-                  type="button"
-                  title={
-                    necesidad?.tipo_proceso_seleccion
-                      ? `Analiza el requerimiento de «${necesidad.tipo_proceso_seleccion}» y propone valores para los campos`
-                      : "Elige y guarda primero el tipo de proceso de selección en la ficha"
-                  }
-                >
-                  {completandoModelo ? <Loader size={15} /> : <WandSparkles size={15} />}
-                  {completandoModelo ? "Analizando el modelo…" : "Completar con el modelo del proceso (IA)"}
-                </Button>
-              </>
-            ) : null}
-
-            {extractResult ? (
-              <div className="mt-2.5 rounded-[10px] border border-brand/30 bg-brand-soft px-3 py-2.5">
-                <div className="flex items-center gap-[7px] text-[13px] text-ink [&_svg]:text-brand">
-                  {extractResult.origen === "modelo" ? <WandSparkles size={14} /> : <Sparkles size={14} />}
-                  <strong>
-                    {extractResult.origen === "modelo"
-                      ? "Propuesta desde el modelo del proceso"
-                      : "Datos detectados por IA"}
-                  </strong>
-                  <IconButton onClick={() => setExtractResult(null)} type="button" aria-label="Cerrar">
-                    <X size={14} />
-                  </IconButton>
-                </div>
-                {Object.keys(extractResult.campos).length === 0 ? (
-                  extractResult.origen === "modelo" ? (
-                    <div className="grid gap-1.5">
-                      <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>
-                        El modelo no permitió proponer campos automáticamente.
-                      </p>
-                      <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                        {extractResult.exigidos && extractResult.exigidos.length > 0
-                          ? "Se marcaron los campos que este proceso exige (en la ficha), pero su contenido depende de datos propios de la contratación que debes redactar."
-                          : "Redacta los campos con el copiloto o desde un EETT/TDR; el proceso no aportó texto reutilizable."}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-1.5">
-                      <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>No se detectaron campos en el documento.</p>
-                      <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                        Lectura: {extractResult.extractionMethod === "pdf-text" ? "texto del PDF" : "OCR (escaneado)"} ·{" "}
-                        {extractResult.pageCount} pág · {extractResult.textLength} caracteres.
-                      </p>
-                      <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                        {(extractResult.textLength ?? 0) < 200
-                          ? "El documento devolvió muy poco texto: probablemente el escaneo es de baja calidad o el OCR no lo leyó bien. Prueba con un PDF de mejor resolución o con texto seleccionable."
-                          : "Se leyó texto pero la IA no reconoció datos del requerimiento en él. Revisa la vista previa para confirmar qué se leyó."}
-                      </p>
-                      {extractResult.textPreview ? (
-                        <details className="[&_summary]:cursor-pointer [&_summary]:text-[11.5px] [&_summary]:font-semibold [&_summary]:text-brand [&_pre]:mt-1.5 [&_pre]:max-h-[200px] [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-line [&_pre]:bg-surface [&_pre]:px-2.5 [&_pre]:py-2 [&_pre]:text-[11px] [&_pre]:leading-[1.45] [&_pre]:text-ink">
-                          <summary>Ver texto leído</summary>
-                          <pre>{extractResult.textPreview}</pre>
-                        </details>
-                      ) : null}
-                    </div>
-                  )
-                ) : (
-                  <>
-                    <p className="mx-0 mb-2 mt-1.5 text-[11.5px] leading-snug text-muted">
-                      Revisa y marca los campos a aplicar. Los que ya tienen valor vienen desmarcados para no sobrescribirlos.
-                    </p>
-                    <div className="grid max-h-[320px] gap-1.5 overflow-y-auto">
-                      {Object.entries(extractResult.campos).map(([key, val]) => {
-                        const col = API_TO_COL[key];
-                        const cur = col ? necesidad?.[col] : undefined;
-                        const yaTiene = cur !== null && cur !== undefined && String(cur).trim() !== "";
-                        return (
-                          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-surface px-[9px] py-[7px] [&_input]:mt-0.5 [&_input]:flex-none" key={key}>
-                            <input checked={extractSelected.has(key)} onChange={() => toggleExtractSel(key)} type="checkbox" />
-                            <div className="grid min-w-0 gap-0.5">
-                              <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
-                                {CAMPO_LABEL[key] ?? key}
-                                {extractResult.exigidos?.includes(key) ? (
-                                  <em
-                                    className="ml-1.5 font-semibold not-italic text-accent"
-                                    style={{ color: "var(--accent, #7c3aed)", fontWeight: 600, marginLeft: 6 }}
-                                  >
-                                    exige este proceso
-                                  </em>
-                                ) : null}
-                                {yaTiene ? <em className="text-[10px] font-bold uppercase not-italic tracking-[0.03em] text-warning">ya tiene valor</em> : null}
-                              </span>
-                              <span className="break-words text-xs leading-snug text-muted">{String(val)}</span>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-2.5 flex justify-end gap-2">
-                      <Button onClick={() => setExtractResult(null)} type="button">
-                        Descartar
-                      </Button>
-                      <Button
-                        variant="primary"
-                        disabled={applyingExtract || extractSelected.size === 0}
-                        onClick={() => void applyExtract()}
-                        type="button"
-                      >
-                        {applyingExtract ? <Loader size={14} /> : <CheckCircle2 size={14} />}
-                        Aplicar {extractSelected.size} a la ficha
-                      </Button>
-                    </div>
-                  </>
-                )}
+          {panelesDelModo(modo).includes("sec-adjuntos") ? (
+            <section id="sec-adjuntos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+              <div className="flex flex-wrap items-center gap-2 text-ink">
+                <FileText size={17} />
+                <h3 className="panelTitle">Adjuntos</h3>
               </div>
-            ) : null}
 
-            {documentos.length === 0 ? (
-              <p className="text-xs font-semibold text-muted">
-                {puedeAdjuntar
-                  ? "Sin adjuntos. Carga el requerimiento, TDR, ET, cotizaciones u otros sustentos."
-                  : "Sin adjuntos."}
-              </p>
-            ) : (
-              <ul className="m-0 grid list-none gap-2 p-0">
-                {documentos.map((doc) => (
-                  <li className="flex items-start gap-2.5 rounded-[14px] border border-line bg-panel px-3 py-2.5 shadow-card [&>svg]:mt-0.5 [&>svg]:text-brand" key={doc.id}>
-                    <FileText size={16} />
-                    <div className="grid flex-1 gap-0.5 [&_strong]:text-[13.5px] [&_strong]:text-ink [&_small]:text-[11.5px] [&_small]:text-muted">
-                      <strong>{doc.title}</strong>
-                      <small>{necesidadDocKindLabel(doc.kind)}</small>
+              {puedeAdjuntar ? (
+                <form className="flex flex-wrap items-center gap-2 rounded-[10px] border border-dashed border-line p-2.5 [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_select]:rounded-lg [&_select]:border [&_select]:border-line [&_select]:bg-panel [&_select]:px-[9px] [&_select]:py-[7px] [&_select]:text-[13px]" onSubmit={uploadDocumento}>
+                  <select onChange={(event) => setKind(event.target.value)} value={kind}>
+                    {NECESIDAD_DOC_KINDS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input accept="application/pdf,.pdf" ref={fileRef} type="file" />
+                  <Button variant="primary" disabled={uploading} type="submit">
+                    {uploading ? <Loader size={15} /> : <UploadCloud size={15} />}
+                    {uploading ? "Subiendo..." : "Adjuntar PDF"}
+                  </Button>
+                  {uploadingFile ? (
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-line">
+                      <div className="h-full bg-brand transition-[width] duration-200" style={{ width: `${uploadProgress}%` }} />
                     </div>
-                    {puedeAdjuntar ? (
-                      <button
-                        aria-label="Eliminar adjunto"
+                  ) : null}
+                </form>
+              ) : null}
+
+              {puedeAdjuntar ? (
+                <>
+                  <input
+                    ref={extractFileRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleExtract(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    className="mt-2"
+                    disabled={extracting}
+                    onClick={() => extractFileRef.current?.click()}
+                    type="button"
+                    title="Lee un PDF de Especificaciones Técnicas o TDR y autocompleta la ficha"
+                  >
+                    {extracting ? <Loader size={15} /> : <Sparkles size={15} />}
+                    {extracting ? "Leyendo con IA…" : "Autocompletar desde EETT/TDR (IA)"}
+                  </Button>
+                  <Button
+                    className="mt-2"
+                    disabled={completandoModelo || !necesidad?.tipo_proceso_seleccion}
+                    onClick={() => void completarConModelo()}
+                    type="button"
+                    title={
+                      necesidad?.tipo_proceso_seleccion
+                        ? `Analiza el requerimiento de «${necesidad.tipo_proceso_seleccion}» y propone valores para los campos`
+                        : "Elige y guarda primero el tipo de proceso de selección en la ficha"
+                    }
+                  >
+                    {completandoModelo ? <Loader size={15} /> : <WandSparkles size={15} />}
+                    {completandoModelo ? "Analizando el modelo…" : "Completar con el modelo del proceso (IA)"}
+                  </Button>
+                </>
+              ) : null}
+
+              {extractResult ? (
+                <div className="mt-2.5 rounded-[10px] border border-brand/30 bg-brand-soft px-3 py-2.5">
+                  <div className="flex items-center gap-[7px] text-[13px] text-ink [&_svg]:text-brand">
+                    {extractResult.origen === "modelo" ? <WandSparkles size={14} /> : <Sparkles size={14} />}
+                    <strong>
+                      {extractResult.origen === "modelo"
+                        ? "Propuesta desde el modelo del proceso"
+                        : "Datos detectados por IA"}
+                    </strong>
+                    <IconButton onClick={() => setExtractResult(null)} type="button" aria-label="Cerrar">
+                      <X size={14} />
+                    </IconButton>
+                  </div>
+                  {Object.keys(extractResult.campos).length === 0 ? (
+                    extractResult.origen === "modelo" ? (
+                      <div className="grid gap-1.5">
+                        <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>
+                          El modelo no permitió proponer campos automáticamente.
+                        </p>
+                        <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
+                          {extractResult.exigidos && extractResult.exigidos.length > 0
+                            ? "Se marcaron los campos que este proceso exige (en la ficha), pero su contenido depende de datos propios de la contratación que debes redactar."
+                            : "Redacta los campos con el copiloto o desde un EETT/TDR; el proceso no aportó texto reutilizable."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-1.5">
+                        <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>No se detectaron campos en el documento.</p>
+                        <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
+                          Lectura: {extractResult.extractionMethod === "pdf-text" ? "texto del PDF" : "OCR (escaneado)"} ·{" "}
+                          {extractResult.pageCount} pág · {extractResult.textLength} caracteres.
+                        </p>
+                        <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
+                          {(extractResult.textLength ?? 0) < 200
+                            ? "El documento devolvió muy poco texto: probablemente el escaneo es de baja calidad o el OCR no lo leyó bien. Prueba con un PDF de mejor resolución o con texto seleccionable."
+                            : "Se leyó texto pero la IA no reconoció datos del requerimiento en él. Revisa la vista previa para confirmar qué se leyó."}
+                        </p>
+                        {extractResult.textPreview ? (
+                          <details className="[&_summary]:cursor-pointer [&_summary]:text-[11.5px] [&_summary]:font-semibold [&_summary]:text-brand [&_pre]:mt-1.5 [&_pre]:max-h-[200px] [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-line [&_pre]:bg-surface [&_pre]:px-2.5 [&_pre]:py-2 [&_pre]:text-[11px] [&_pre]:leading-[1.45] [&_pre]:text-ink">
+                            <summary>Ver texto leído</summary>
+                            <pre>{extractResult.textPreview}</pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <p className="mx-0 mb-2 mt-1.5 text-[11.5px] leading-snug text-muted">
+                        Revisa y marca los campos a aplicar. Los que ya tienen valor vienen desmarcados para no sobrescribirlos.
+                      </p>
+                      <div className="grid max-h-[320px] gap-1.5 overflow-y-auto">
+                        {Object.entries(extractResult.campos).map(([key, val]) => {
+                          const col = API_TO_COL[key];
+                          const cur = col ? necesidad?.[col] : undefined;
+                          const yaTiene = cur !== null && cur !== undefined && String(cur).trim() !== "";
+                          return (
+                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-surface px-[9px] py-[7px] [&_input]:mt-0.5 [&_input]:flex-none" key={key}>
+                              <input checked={extractSelected.has(key)} onChange={() => toggleExtractSel(key)} type="checkbox" />
+                              <div className="grid min-w-0 gap-0.5">
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                                  {CAMPO_LABEL[key] ?? key}
+                                  {extractResult.exigidos?.includes(key) ? (
+                                    <em
+                                      className="ml-1.5 font-semibold not-italic text-accent"
+                                      style={{ color: "var(--accent, #7c3aed)", fontWeight: 600, marginLeft: 6 }}
+                                    >
+                                      exige este proceso
+                                    </em>
+                                  ) : null}
+                                  {yaTiene ? <em className="text-[10px] font-bold uppercase not-italic tracking-[0.03em] text-warning">ya tiene valor</em> : null}
+                                </span>
+                                <span className="break-words text-xs leading-snug text-muted">{String(val)}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2.5 flex justify-end gap-2">
+                        <Button onClick={() => setExtractResult(null)} type="button">
+                          Descartar
+                        </Button>
+                        <Button
+                          variant="primary"
+                          disabled={applyingExtract || extractSelected.size === 0}
+                          onClick={() => void applyExtract()}
+                          type="button"
+                        >
+                          {applyingExtract ? <Loader size={14} /> : <CheckCircle2 size={14} />}
+                          Aplicar {extractSelected.size} a la ficha
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
+              {documentos.length === 0 ? (
+                <p className="text-xs font-semibold text-muted">
+                  {puedeAdjuntar
+                    ? "Sin adjuntos. Carga el requerimiento, TDR, ET, cotizaciones u otros sustentos."
+                    : "Sin adjuntos."}
+                </p>
+              ) : (
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {documentos.map((doc) => (
+                    <li className="flex items-start gap-2.5 rounded-[14px] border border-line bg-panel px-3 py-2.5 shadow-card [&>svg]:mt-0.5 [&>svg]:text-brand" key={doc.id}>
+                      <FileText size={16} />
+                      <div className="grid flex-1 gap-0.5 [&_strong]:text-[13.5px] [&_strong]:text-ink [&_small]:text-[11.5px] [&_small]:text-muted">
+                        <strong>{doc.title}</strong>
+                        <small>{necesidadDocKindLabel(doc.kind)}</small>
+                      </div>
+                      {puedeAdjuntar ? (
+                        <button
+                          aria-label="Eliminar adjunto"
                         
-                        disabled={deletingId === doc.id}
-                        onClick={() => setConfirmDeleteDocId(doc.id)}
-                        type="button"
-                      >
-                        {deletingId === doc.id ? <Loader size={15} /> : <Trash2 size={15} />}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                          disabled={deletingId === doc.id}
+                          onClick={() => setConfirmDeleteDocId(doc.id)}
+                          type="button"
+                        >
+                          {deletingId === doc.id ? <Loader size={15} /> : <Trash2 size={15} />}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : null}
         </aside>
       </div>
 
       {/* ===== Matriz de riesgos de la contratación ===== */}
-      {riesgosAplica ? (
+      {riesgosAplica && panelesDelModo(modo).includes("sec-riesgos") ? (
       <section id="sec-riesgos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
         <div className="flex flex-wrap items-center gap-2 text-ink">
           <ShieldAlert size={17} />
@@ -4749,7 +4763,7 @@ Ej: ${field.ejemplo}` : ""}
           y al lado del trabajo que juzgan. */}
       {/* Checklist de admisibilidad de la DEC (P3): visible una vez remitida;
           editable por la DEC mientras revisa. Es un apoyo, no bloquea el conforme. */}
-      {necesidad.status !== "borrador" ? (
+      {necesidad.status !== "borrador" && panelesDelModo(modo).includes("sec-admisibilidad") ? (
         <div id="sec-admisibilidad">
           <AdmisibilidadDec
             necesidadId={necesidadId}
@@ -4759,89 +4773,93 @@ Ej: ${field.ejemplo}` : ""}
         </div>
       ) : null}
 
-      <section id="sec-derivacion" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-        <div className="flex flex-wrap items-center gap-2 text-ink">
-          <ArrowRightCircle size={17} />
-          <h3 className="panelTitle">Derivación a expediente</h3>
-        </div>
-        {necesidad.process_id ? (
-          <>
-            <p className="text-xs font-semibold text-muted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
-            {/* El avance REAL del expediente, sin tener que abrirlo: antes la
-                necesidad solo decía "derivada" y no contaba nada de la Fase 1. */}
-            {avanceFase1 ? (
-              <div className="fase1Avance">
-                <div className="h-1.5 overflow-hidden rounded-full bg-line [&>div]:h-full [&>div]:bg-success [&>div]:transition-[width] [&>div]:duration-200">
-                  <div style={{ width: `${avanceFase1.porcentaje}%` }} />
+      {panelesDelModo(modo).includes("sec-derivacion") ? (
+        <section id="sec-derivacion" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
+          <div className="flex flex-wrap items-center gap-2 text-ink">
+            <ArrowRightCircle size={17} />
+            <h3 className="panelTitle">Derivación a expediente</h3>
+          </div>
+          {necesidad.process_id ? (
+            <>
+              <p className="text-xs font-semibold text-muted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
+              {/* El avance REAL del expediente, sin tener que abrirlo: antes la
+                  necesidad solo decía "derivada" y no contaba nada de la Fase 1. */}
+              {avanceFase1 ? (
+                <div className="fase1Avance">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-line [&>div]:h-full [&>div]:bg-success [&>div]:transition-[width] [&>div]:duration-200">
+                    <div style={{ width: `${avanceFase1.porcentaje}%` }} />
+                  </div>
+                  <small>
+                    Actuaciones preparatorias: <strong>{avanceFase1.completados}</strong> de{" "}
+                    {avanceFase1.total} pasos
+                  </small>
+                  <div className="flex flex-wrap gap-1">
+                    {avanceFase1.pasos.map((paso) => (
+                      <span
+                        className="rounded border border-line px-[5px] py-px text-[10px] font-semibold text-muted"
+                        data-status={paso.status}
+                        key={paso.code}
+                        title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
+                      >
+                        {paso.code}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <small>
-                  Actuaciones preparatorias: <strong>{avanceFase1.completados}</strong> de{" "}
-                  {avanceFase1.total} pasos
-                </small>
-                <div className="flex flex-wrap gap-1">
-                  {avanceFase1.pasos.map((paso) => (
-                    <span
-                      className="rounded border border-line px-[5px] py-px text-[10px] font-semibold text-muted"
-                      data-status={paso.status}
-                      key={paso.code}
-                      title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
-                    >
-                      {paso.code}
-                    </span>
-                  ))}
+              ) : null}
+              <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${necesidad.process_id}`}>
+                <Briefcase size={15} />
+                Abrir expediente
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-semibold text-muted">
+                Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a “Incorporado al CMN”. Requiere que
+                el requerimiento esté <strong>conforme</strong>.
+              </p>
+              <Button
+                variant="primary"
+                disabled={!permisos.derivar || deriving || necesidad.status !== "conforme"}
+                onClick={derivar}
+                type="button"
+              >
+                {deriving ? <Loader size={15} /> : <ArrowRightCircle size={15} />}
+                Derivar a expediente
+              </Button>
+              {!permisos.derivar ? (
+                <small className="text-xs font-semibold text-muted">Derivar requiere rol con gestión de expedientes (DEC, AGA, Titular).</small>
+              ) : necesidad.status !== "conforme" ? (
+                <div className="mt-1 grid gap-1.5 rounded-lg border border-line bg-brand-soft px-2.5 py-2 [&_small]:leading-[1.45]">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                    Estado actual:{" "}
+                    <Badge tone={necesidadStatusTono(necesidad.status)}>
+                      {necesidadStatusLabel(necesidad.status)}
+                    </Badge>
+                  </span>
+                  <small className="text-xs font-semibold text-muted">
+                    El requerimiento debe estar <strong>Conforme</strong> para derivar.{" "}
+                    {siguienteAccion ? (
+                      <>
+                        Siguiente paso: pulsa <strong>«{siguienteAccion.label}»</strong> en el panel “Requerimiento ·
+                        flujo” de arriba y continúa hasta “Conforme”.
+                      </>
+                    ) : (
+                      <>Usa las acciones del panel “Requerimiento · flujo” de arriba para avanzar hasta “Conforme”.</>
+                    )}
+                  </small>
                 </div>
-              </div>
-            ) : null}
-            <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${necesidad.process_id}`}>
-              <Briefcase size={15} />
-              Abrir expediente
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="text-xs font-semibold text-muted">
-              Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a “Incorporado al CMN”. Requiere que
-              el requerimiento esté <strong>conforme</strong>.
-            </p>
-            <Button
-              variant="primary"
-              disabled={!permisos.derivar || deriving || necesidad.status !== "conforme"}
-              onClick={derivar}
-              type="button"
-            >
-              {deriving ? <Loader size={15} /> : <ArrowRightCircle size={15} />}
-              Derivar a expediente
-            </Button>
-            {!permisos.derivar ? (
-              <small className="text-xs font-semibold text-muted">Derivar requiere rol con gestión de expedientes (DEC, AGA, Titular).</small>
-            ) : necesidad.status !== "conforme" ? (
-              <div className="mt-1 grid gap-1.5 rounded-lg border border-line bg-brand-soft px-2.5 py-2 [&_small]:leading-[1.45]">
-                <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                  Estado actual:{" "}
-                  <Badge tone={necesidadStatusTono(necesidad.status)}>
-                    {necesidadStatusLabel(necesidad.status)}
-                  </Badge>
-                </span>
-                <small className="text-xs font-semibold text-muted">
-                  El requerimiento debe estar <strong>Conforme</strong> para derivar.{" "}
-                  {siguienteAccion ? (
-                    <>
-                      Siguiente paso: pulsa <strong>«{siguienteAccion.label}»</strong> en el panel “Requerimiento ·
-                      flujo” de arriba y continúa hasta “Conforme”.
-                    </>
-                  ) : (
-                    <>Usa las acciones del panel “Requerimiento · flujo” de arriba para avanzar hasta “Conforme”.</>
-                  )}
-                </small>
-              </div>
-            ) : null}
-          </>
-        )}
-      </section>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
 
-      <div id="sec-historial">
-        <HistorialNecesidad necesidadId={necesidadId} recarga={histRecarga} />
-      </div>
+      {panelesDelModo(modo).includes("sec-historial") ? (
+        <div id="sec-historial">
+          <HistorialNecesidad necesidadId={necesidadId} recarga={histRecarga} />
+        </div>
+      ) : null}
 
 
       <ConfirmDialog
