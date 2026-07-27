@@ -310,6 +310,7 @@ export function FichaEditable({
         key={field.api}
         modoSimple={modoSimple}
         montoEstimado={Number(fichaForm.montoEstimado) || null}
+        moneda={fichaForm.moneda ?? ""}
         necesidadId={necesidadId}
         obligatorio={campoEsObligatorio(field)}
         obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}

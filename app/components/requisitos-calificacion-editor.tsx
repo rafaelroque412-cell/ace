@@ -17,7 +17,9 @@ import {
   type TipoRequisitoArt72,
 } from "@/lib/requisitos-calificacion";
 import { avisosDeTopes } from "@/lib/requisitos-topes";
+import { componerExperienciaPostor, montoDeExperiencia } from "@/lib/requisitos-experiencia";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
+import { Sparkles } from "lucide-react";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
 // viven dentro de la tarjeta de cada tipo, que es bastante más angosta que un
 // campo ancho de la ficha, y con la estimación ancha un párrafo de 270
@@ -41,6 +43,7 @@ export function RequisitosCalificacionEditor({
   readOnly = false,
   objeto,
   montoEstimado,
+  moneda,
   tipoProceso,
   requisitosModelo,
 }: {
@@ -52,6 +55,8 @@ export function RequisitosCalificacionEditor({
   objeto?: string | null;
   /** Cuantía de la contratación: sin ella no se puede calcular el tope de 3x. */
   montoEstimado?: number | null;
+  /** Moneda de la convocatoria: la frase de experiencia se redacta en ella. */
+  moneda?: string | null;
   /** Procedimiento: decide si cabe la capacidad económica (Art. 72.3.e). */
   tipoProceso?: string | null;
   /**
@@ -79,9 +84,19 @@ export function RequisitosCalificacionEditor({
   // Última cadena que ESTE editor emitió: distingue un cambio propio (no
   // re-sincronizar, borraría el espacio recién tecleado) de uno externo.
   const emitidoRef = useRef<string>(value);
+  // El monto facturado que exige la experiencia del postor. No tiene columna
+  // propia: se compone dentro del detalle y se relee de él, como el resto de
+  // este módulo (texto canónico). Se guarda lo TECLEADO para no perder los
+  // decimales a medio escribir; se re-sincroniza solo cuando el valor cambia por
+  // fuera (traer datos de IA, recarga).
+  const [montoExp, setMontoExp] = useState<string>(() =>
+    montoDeExperiencia(repartirRequisitos(parseRequisitos(value)).porTipo.get("experiencia_postor")?.detalle ?? ""),
+  );
   useEffect(() => {
     if (value !== emitidoRef.current) {
-      setReparto(repartirRequisitos(parseRequisitos(value)));
+      const next = repartirRequisitos(parseRequisitos(value));
+      setReparto(next);
+      setMontoExp(montoDeExperiencia(next.porTipo.get("experiencia_postor")?.detalle ?? ""));
       emitidoRef.current = value;
     }
   }, [value]);
@@ -126,6 +141,14 @@ export function RequisitosCalificacionEditor({
     const actual = next.get(key) ?? { estado: "obligatorio" as EstadoRequisito, detalle: "", acreditacion: "", sustento: "" };
     next.set(key, { ...actual, [campo]: valor });
     emit(next);
+  }
+
+  // «Redactar con IA» de la experiencia del postor. Como la forma de pago o la
+  // recepción, se COMPONE con el texto del formato en vez de pedírselo al
+  // modelo: es texto reglamentario con un solo hueco, el monto. El monto y su
+  // versión en letras salen del número tecleado, en la moneda de la convocatoria.
+  function redactarExperiencia() {
+    editar("experiencia_postor", "detalle", componerExperienciaPostor({ monto: montoExp, moneda, objeto }));
   }
 
   const hayHeredados = otrosObligatorios.length > 0 || otrosFacultativos.length > 0;
@@ -176,6 +199,36 @@ export function RequisitosCalificacionEditor({
               </div>
               {/* El 72.3 fija el TIPO; el contenido concreto lo pone la
                   entidad. Sin detalle, el requisito no es acreditable. */}
+              {/* Experiencia del postor: el monto facturado es un NÚMERO con
+                  decimales, y de él sale la frase entera del formato —cifra y
+                  letras, en la moneda de la convocatoria—. Se registra aquí y
+                  «Redactar con IA» lo compone en el detalle de abajo. */}
+              {tipo.key === "experiencia_postor" && estado !== "no" ? (
+                <div className="reqCalExperiencia">
+                  <label className="reqCalCampo">
+                    <span>Monto facturado acumulado exigido</span>
+                    <input
+                      disabled={readOnly}
+                      inputMode="decimal"
+                      min={0}
+                      onChange={(ev) => setMontoExp(ev.target.value)}
+                      placeholder="Ej. 180000.00"
+                      step="0.01"
+                      type="number"
+                      value={montoExp}
+                    />
+                  </label>
+                  <button
+                    className="reqCalRedactar"
+                    disabled={readOnly}
+                    onClick={redactarExperiencia}
+                    title="Redactar el requisito con el texto del formato (Art. 72.3.c)"
+                    type="button"
+                  >
+                    <Sparkles size={12} /> Redactar con IA
+                  </button>
+                </div>
+              ) : null}
               {estado !== "no" ? (
                 <label className="reqCalCampo">
                   <span>¿Qué se exige exactamente?</span>
@@ -203,7 +256,9 @@ export function RequisitosCalificacionEditor({
                       Impedir escribir la cifra seria arrogarse esa decision. */}
                   {(tipo.key === "experiencia_postor" || tipo.key === "capacidad_tecnica")
                     ? avisosDeTopes(
-                        e?.detalle ?? "",
+                        // El monto tecleado se suma al detalle para que el tope
+                        // de 3x avise ya, antes de componer el texto.
+                        tipo.key === "experiencia_postor" ? `${e?.detalle ?? ""} ${montoExp}` : e?.detalle ?? "",
                         montoEstimado ?? null,
                         tipo.key,
                       ).map((aviso) => (

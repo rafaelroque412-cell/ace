@@ -65,6 +65,8 @@ export type CampoFichaProps = {
   geoValorEntidad: string;
   modoSimple: boolean;
   montoEstimado: number | null;
+  /** Moneda de la convocatoria, para redactar la experiencia del postor. */
+  moneda: string;
   necesidadId: string;
   obligatorio: boolean;
   /** Observaciones sin resolver sobre este campo, o `null`. */
@@ -107,6 +109,7 @@ export const CampoFicha = memo(function CampoFicha({
   geoValorEntidad,
   modoSimple,
   montoEstimado,
+  moneda,
   necesidadId,
   obligatorio,
   obsPendiente,
@@ -284,6 +287,7 @@ export const CampoFicha = memo(function CampoFicha({
           // Sin la cuantía no se puede comprobar el tope de 3x del modelo, y sin el
           // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
           montoEstimado={montoEstimado}
+          moneda={moneda}
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}
           objeto={tipoObjeto}
