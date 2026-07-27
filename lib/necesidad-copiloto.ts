@@ -311,7 +311,7 @@ export function filtrarModelosPorObjeto<T extends { metadata?: Record<string, un
  * Si varias entidades subieron el mismo modelo, prefiere los de la entidad del
  * usuario. Lista vacía si no hay modelo o no está indexado.
  */
-async function resolverModelosDocIds(
+export async function resolverModelosDocIds(
   tipoProceso: string,
   entity?: string | null,
   tipoObjeto?: string | null,
