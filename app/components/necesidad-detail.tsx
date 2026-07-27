@@ -6,14 +6,12 @@ import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   Briefcase,
-  Check,
   CheckCircle2,
   CircleDot,
   Download,
   FileText,
   Loader,
   Pencil,
-  Plus,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -23,20 +21,16 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { detectarMarca } from "@/lib/necesidad-denominacion";
 import {
-  OBJECT_TYPES,
   objectTypeLabel,
 } from "@/lib/legal-taxonomy";
 // Desde el modulo de topes, NO desde lib/necesidades: ese arrastra los 31
 // esquemas de zod al navegador para nada.
-import { NOMBRE_MAX } from "@/lib/necesidades-limites";
 import {
   type ObjetoFilter,
   PROCESO_SELECCION_OPCIONES,
 } from "@/lib/procesos-seleccion";
 import { resumenNecesidad } from "@/lib/necesidad-verificacion";
-import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
 import {
   BLOQUES_FICHA,
   MODO_POR_DEFECTO,
@@ -44,7 +38,6 @@ import {
   modoParaSeccion,
   panelesDelModo,
 } from "@/lib/necesidad-modos";
-import type { CopilotoCampo } from "./necesidad-copiloto";
 import type { Necesidad, NecesidadDocumento, ObservacionNecesidad, RiesgoNecesidad } from "@/lib/necesidades";
 import { VerificacionNecesidad } from "./necesidad-verificacion-panel";
 import { HistorialNecesidad } from "./historial-necesidad";
@@ -60,8 +53,6 @@ import { PORCENTAJE_LINEA_CORTE, soles } from "@/lib/segmentacion-parametros";
 import { useYear } from "@/lib/year-context";
 import { ConfirmDialog } from "./confirm-dialog";
 import type { NecesidadItem } from "@/lib/necesidad-items";
-import { NecesidadItemsEditor } from "./necesidad-items-editor";
-import { componerControversias, parseInstituciones } from "@/lib/instituciones-arbitrales";
 import type { EettPropuesta, EettRevision, EettTdrDoc } from "./necesidad-eett-tdr-modal";
 
 /**
@@ -77,10 +68,6 @@ const EettTdrModal = dynamic(
   () => import("./necesidad-eett-tdr-modal").then((m) => m.EettTdrModal),
   { ssr: false },
 );
-const NecesidadCopiloto = dynamic(
-  () => import("./necesidad-copiloto").then((m) => m.NecesidadCopiloto),
-  { ssr: false },
-);
 import {
   Alert,
   Badge,
@@ -92,22 +79,19 @@ import { cn } from "@/lib/utils";
 import {
   FICHA_CTRL,
   FICHA_CTRL_H,
-  FICHA_IA,
-  FICHA_LABEL,
 } from "./necesidad/ficha-estilos";
 import { AccionesFlujo } from "./necesidad/acciones-flujo";
 import { PanelDerivacion } from "./necesidad/panel-derivacion";
 import { toStr, useFichaForm } from "./necesidad/usar-ficha-form";
 import { CAMPO_LABEL } from "./necesidad/campos-etiquetas";
+import { FichaEditable } from "./necesidad/ficha-editable";
 import { FichaLectura } from "./necesidad/ficha-lectura";
 import { PanelAdjuntos } from "./necesidad/panel-adjuntos";
 import { PanelRiesgos } from "./necesidad/panel-riesgos";
-import { CampoFicha } from "./necesidad/campo-ficha";
 import { useCallbackEstable } from "./necesidad/usar-callback-estable";
 import {
   NO_OBJECION_LABEL,
   type NoObjecionEstado,
-  TIPO_AREA_OPCIONES,
   accionesDisponibles,
   estadoNecesidad,
   ladoDeRol,
@@ -132,34 +116,6 @@ import {
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
 
-function DenominacionAsistente({ form }: { form: Record<string, string> }) {
-  const marcas = useMemo(() => detectarMarca(form.nombre ?? ""), [form.nombre]);
-  const largo = (form.nombre ?? "").trim().length;
-
-  // Solo avisos: si el nombre no menciona marca (Art. 44.6) ni pasa del máximo,
-  // no hay nada que mostrar. (Va tras los hooks: no altera su orden.)
-  if (marcas.length === 0 && largo <= NOMBRE_MAX) return null;
-
-  return (
-    <div className="mt-2 flex flex-col gap-2">
-      {marcas.length > 0 ? (
-        <Alert tone="warning">
-          El nombre menciona <strong>{marcas.map((m) => m.termino).join(", ")}</strong>. El Art. 44.6 prohíbe
-          referir marca, fabricante u origen, o describir orientando hacia ellos, salvo compatibilización
-          aprobada por la AGA. Descríbelo por desempeño y funcionalidad.
-        </Alert>
-      ) : null}
-
-      {largo > NOMBRE_MAX ? (
-        <Alert tone="danger">
-          El nombre tiene <strong>{largo}</strong> caracteres y el máximo es {NOMBRE_MAX}. No se podrá guardar.
-          Suele pasar cuando la descripción de catálogo o la población beneficiaria arrastran texto de más:
-          acórtalas y recompón el nombre.
-        </Alert>
-      ) : null}
-    </div>
-  );
-}
 
 
 
@@ -211,74 +167,7 @@ function PanelHead({
   );
 }
 
-/** Color del punto de estado de una sección (índice de navegación de la ficha). */
-const NAV_DOT: Record<string, string> = {
-  completo: "bg-success",
-  pendiente: "bg-warning",
-  parcial: "bg-muted/60",
-  vacio: "bg-line",
-};
 
-/**
- * Pestaña del índice de secciones de la ficha.
- *
- * La tira es horizontal y desplazable, así que la sección en pantalla puede
- * quedar fuera de la vista: cuando esta pestaña pasa a ser la actual se
- * autocentra. Se mueve SOLO el scroll horizontal del contenedor —calculado a
- * mano en vez de `scrollIntoView`, que además arrastraría la página entera
- * mientras el usuario está leyendo.
- */
-function SectionNavItem({
-  actual,
-  estado,
-  label,
-  count,
-  onClick,
-}: {
-  actual: boolean;
-  estado: string;
-  label: string;
-  count?: string;
-  onClick: () => void;
-}) {
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!actual) return;
-    const el = ref.current;
-    const tira = el?.parentElement;
-    if (!el || !tira) return;
-    const destino = el.offsetLeft - tira.offsetLeft - (tira.clientWidth - el.clientWidth) / 2;
-    tira.scrollTo({ behavior: "smooth", left: Math.max(0, destino) });
-  }, [actual]);
-  return (
-    <button
-      ref={ref}
-      type="button"
-      title={label}
-      aria-current={actual ? "location" : undefined}
-      onClick={onClick}
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[12.5px] transition",
-        actual
-          ? "border-brand bg-brand font-semibold text-white"
-          : "border-line bg-surface text-muted hover:border-brand/40 hover:text-ink",
-      )}
-    >
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          actual ? "bg-white/70" : (NAV_DOT[estado] ?? "bg-line"),
-        )}
-      />
-      {label}
-      {count ? (
-        <span className={cn("text-[11px] font-semibold tabular-nums", actual ? "text-white/75" : "text-muted")}>
-          {count}
-        </span>
-      ) : null}
-    </button>
-  );
-}
 
 // Palabras que NO se capitalizan en un título (salvo al inicio). Para volver
 // legible un nombre en MAYÚSCULAS sin romper la lectura.
@@ -307,15 +196,6 @@ function tituloLegible(nombre: string | null | undefined): string {
   });
 }
 
-// Campos geográficos que se resuelven contra la ubicación configurada de la
-// entidad (Configuración → Municipalidad), en vez de escribirse a mano. Es la
-// raíz del problema de grafías divergentes (APURIMAC/Apurímac/Apurimac): la
-// entidad tiene UNA ubicación, así que el campo es un desplegable, no texto.
-const CAMPO_GEO_ENTIDAD: Record<string, "department" | "province" | "city"> = {
-  departamento: "department",
-  provincia: "province",
-  distrito: "city",
-};
 
 
 export function NecesidadDetail({
@@ -2035,686 +1915,72 @@ export function NecesidadDetail({
             </p>
           ) : null}
 
-          {fichaEditable ? (() => {
-            const seccionesVisibles = FICHA_SECCIONES.filter((s) => {
-              if (s.mostrarPara && !(tipoObj && s.mostrarPara.includes(tipoObj))) return false;
-              // Sección sin campos visibles (p. ej. 3.5.2 quedó vacía tras
-              // consolidar sus campos en el editor de requisitos): fuera en ambos
-              // modos, para no dejar una cabecera huérfana.
-              if (camposParaObjeto(s.fields).length === 0) return false;
-              // En "solo obligatorios" ocultamos las secciones que no aportan
-              // nada exigible: ni campos obligatorios ni contenido del Art. 44.2.
-              if (obligatoriosOnly) {
-                return camposParaObjeto(s.fields).some((f) => campoEsObligatorio(f) || f.recomendado);
-              }
-              return true;
-            });
-            const totalPasos = 1 + seccionesVisibles.length; // Datos principales + secciones
-
-            // Progreso de campos obligatorios (guía al usuario a completar lo mínimo).
-            // Antes se recontaba aqui sobre las secciones VISIBLES y solo con los
-            // obligatorios de la ficha: al filtrar por «Solo obligatorios» cambiaba el
-            // denominador y dejaba de cuadrar con la cabecera.
-            const { done: obligDone, total: obligTotal } = avanceRequerimiento("edicion");
-            const pasoActual = wizardMode ? Math.min(wizardStep, totalPasos - 1) : -1;
-
-            // Campos redactables por el copiloto: los de texto de las secciones
-            // visibles (sin ocultos ni casillas), con su valor actual como contexto.
-            const camposCopiloto: CopilotoCampo[] = [];
-            const faltantesCopiloto: string[] = [];
-            const vistosCopiloto = new Set<string>();
-            for (const s of seccionesVisibles) {
-              for (const f of camposParaObjeto(s.fields)) {
-                // Lo que el copiloto ve como «falta» es lo mismo que cuenta la cabecera: si
-                // el modelo exige un campo y esta vacio, tiene que saberlo.
-                if (campoExigible(f) && !tieneValor(f)) faltantesCopiloto.push(f.label);
-                if (f.oculto || f.checkbox || f.kind === "number" || f.kind === "date") continue;
-                if (vistosCopiloto.has(f.api)) continue;
-                vistosCopiloto.add(f.api);
-                camposCopiloto.push({ key: f.api, label: f.label, valor: fichaForm[f.api] ?? "", baseLegal: f.baseLegal ?? "", seccion: s.title });
-              }
-            }
-
-            // --- Navegación por secciones + completitud (Fase 4 UX/UI) ---
-            const DATOS_PRINCIPALES_ID = "ficha-datos-principales";
-            function seccionId(title: string) {
-              return `ficha-sec-${title
-                .toLowerCase()
-                .normalize("NFD")
-                .replace(/[̀-ͯ]/g, "")
-                .replace(/[^a-z0-9]+/g, "-")
-                .replace(/^-|-$/g, "")}`;
-            }
-            type Completitud = {
-              oblig: number;
-              obligDone: number;
-              llenos: number;
-              total: number;
-              estado: "completo" | "pendiente" | "parcial" | "vacio";
-            };
-            function completitudSeccion(section: FichaSection): Completitud {
-              const campos = camposParaObjeto(section.fields).filter((f) => !f.oculto && !f.checkbox);
-              let oblig = 0;
-              let obligDone = 0;
-              let llenos = 0;
-              for (const f of campos) {
-                const con = tieneValor(f);
-                if (con) llenos += 1;
-                // `campoExigible`, no `campoEsObligatorio`: si las partes cuentan con
-                // otro criterio que el total, los chips no suman lo que dice la cabecera.
-                if (campoExigible(f)) {
-                  oblig += 1;
-                  if (con) obligDone += 1;
-                }
-              }
-              const total = campos.length;
-              // Los obligatorios mandan: una sección está "lista" cuando no le
-              // falta ninguno. Sin obligatorios, se guía por lo relleno.
-              let estado: Completitud["estado"];
-              if (oblig > 0) {
-                estado = obligDone >= oblig ? "completo" : "pendiente";
-              } else if (total === 0 || llenos === 0) {
-                estado = llenos === 0 ? "vacio" : "parcial";
-              } else {
-                estado = llenos === total ? "completo" : "parcial";
-              }
-              return { oblig, obligDone, llenos, total, estado };
-            }
-            function badgeTexto(c: Completitud) {
-              if (c.oblig > 0) return `${c.obligDone}/${c.oblig} oblig.`;
-              if (c.total > 0) return `${c.llenos}/${c.total}`;
-              return "";
-            }
-            function scrollASeccion(id: string) {
-              document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-            const navSecciones = seccionesVisibles.map((s) => ({
-              id: seccionId(s.title),
-              title: s.title,
-              comp: completitudSeccion(s),
-            }));
-
-            function renderFichaField(field: FichaField) {
-              // El campo se pinta en su propio componente memoizado. Lo que se le
-              // pasa son VALORES de este campo, no las estructuras completas: el
-              // formulario y los mapas de avisos cambian de identidad en cada
-              // pulsacion y anularian la memo, que es justo lo que se buscaba.
-              const geoKey = CAMPO_GEO_ENTIDAD[field.api];
-              return (
-                <CampoFicha
-                  areasSugeridas={areasSugeridas}
-                  editable={fichaEdit}
-                  eettDocs={eettDocs}
-                  eettUploading={eettUploading}
-                  error={fieldErrors[field.api]}
-                  exigido={exigidosModelo.has(field.api)}
-                  fechaIA={camposDeIA.get(field.api) ?? null}
-                  field={field}
-                  geoValorEntidad={geoKey ? (configuredEntity?.[geoKey] ?? "").trim() : ""}
-                  key={field.api}
-                  modoSimple={modoSimple}
-                  montoEstimado={Number(fichaForm.montoEstimado) || null}
-                  necesidadId={necesidadId}
-                  obligatorio={campoEsObligatorio(field)}
-                  obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}
-                  onAbrirEett={abrirEettEstable}
-                  onCambio={cambiarCampo}
-                  onError={marcarError}
-                  onRedactarIA={redactarConIA}
-                  onSubirEett={subirEettEstable}
-                  onTocar={marcarTocado}
-                  puedeGestionar={permisos.manage}
-                  tipoObjeto={ejeObjeto}
-                  tipoProceso={ejeProceso || null}
-                  tocado={camposTocados.has(field.api)}
-                  valor={fichaForm[field.api] ?? ""}
-                />
-              );
-            }
-
-            function renderDatosPrincipales() {
-              return (
-                <div className="flex scroll-mt-16 flex-col gap-2.5" id={DATOS_PRINCIPALES_ID}>
-                  <h4 className="text-sm font-bold text-ink">Datos principales</h4>
-                  <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
-                    <div className="col-span-full min-w-0">
-                      <label className="flex flex-col">
-                        <span className={FICHA_LABEL}>Nombre de la contratación</span>
-                        <input
-                          className={cn(FICHA_CTRL, FICHA_CTRL_H)}
-                          onChange={(e) => setFichaField("nombre", e.target.value)}
-                          value={fichaForm.nombre ?? ""}
-                        />
-                      </label>
-                      <DenominacionAsistente form={fichaForm} />
-                    </div>
-                    <label className="flex min-w-0 flex-col">
-                      <span className={FICHA_LABEL}>Tipo de objeto</span>
-                      <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} onChange={(e) => setFichaField("tipoObjeto", e.target.value)} value={fichaForm.tipoObjeto ?? ""}>
-                        {OBJECT_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex min-w-0 flex-col" data-campo="tipoProcesoSeleccion">
-                      <span className={FICHA_LABEL}>
-                        Tipo de proceso de selección <em className="font-normal not-italic text-muted">· referencia inicial</em>
-                      </span>
-                      <select
-                        className={cn(FICHA_CTRL, FICHA_CTRL_H)}
-                        onChange={(e) => setFichaField("tipoProcesoSeleccion", e.target.value)}
-                        value={fichaForm.tipoProcesoSeleccion ?? ""}
-                      >
-                        {/* "— Por definir —" siempre primero */}
-                        <option value="">{PROCESO_SELECCION_OPCIONES[0].label}</option>
-                        {opcionesProcesoAgrupadas.realiza.length > 0 ? (
-                          <>
-                            <optgroup label="Procesos que realiza tu entidad">
-                              {opcionesProcesoAgrupadas.realiza.map((t) => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Otros procedimientos">
-                              {opcionesProcesoAgrupadas.otros.map((t) => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
-                              ))}
-                            </optgroup>
-                          </>
-                        ) : (
-                          // Sin procesos configurados (o ninguno empareja): lista
-                          // plana, en el orden original del catálogo.
-                          opcionesProcesoAgrupadas.otros.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))
-                        )}
-                      </select>
-                    </label>
-                    <label className="flex min-w-0 flex-col">
-                      <span className={FICHA_LABEL}>Tipo de área solicitante</span>
-                      <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} onChange={(e) => setFichaField("tipoArea", e.target.value)} value={fichaForm.tipoArea ?? ""}>
-                        {TIPO_AREA_OPCIONES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </div>
-              );
-            }
-
-            // Guía del requerimiento (advertencias rojas / notas azules del PDF)
-            // del tipo de proceso elegido, para la sección dada. Se agrupa por la
-            // sección canónica 3.x (ej. "3.5.1" → guía de "3.5").
-            const guiaTipo = fichaForm.tipoProcesoSeleccion
-              ? (REQUERIMIENTO_GUIA[fichaForm.tipoProcesoSeleccion] ?? [])
-              : [];
-            function dedupGuia(items: typeof guiaTipo) {
-              const vistos = new Set<string>();
-              return items.filter((g) => {
-                const k = `${g.tipo}|${g.etiqueta ?? ""}|${g.texto}`;
-                if (vistos.has(k)) return false;
-                vistos.add(k);
-                return true;
-              });
-            }
-            function guiaDeSeccion(title: string) {
-              const m = title.match(/^(\d+\.\d+)/);
-              const key = m ? m[1] : "";
-              return key ? dedupGuia(guiaTipo.filter((g) => g.seccion === key)) : [];
-            }
-            function renderGuiaItems(items: typeof guiaTipo) {
-              return (
-                <div className="flex flex-col gap-2">
-                  {items.map((g, i) => (
-                    <div
-                      className={cn(
-                        "rounded-[10px] border px-3.5 py-2.5 text-[13px] leading-relaxed",
-                        g.tipo === "advertencia" ? "border-danger/25 bg-danger-soft text-ink" : "border-brand/20 bg-brand-soft text-ink",
-                      )}
-                      key={i}
-                    >
-                      <strong className={cn("block font-semibold", g.tipo === "advertencia" ? "text-danger" : "text-brand")}>
-                        {g.tipo === "advertencia" ? "⚠ Advertencia" : "ℹ Importante para la entidad"}
-                        {g.etiqueta ? ` · ${g.etiqueta}` : ""}
-                      </strong>
-                      <span>{g.texto}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            }
-            function renderGuiaGeneral() {
-              const items = dedupGuia(guiaTipo.filter((g) => g.seccion === "general"));
-              if (items.length === 0) return null;
-              return (
-                <details className="group rounded-[10px] border border-line bg-surface p-3">
-                  <summary className="cursor-pointer list-none text-[13px] font-semibold text-muted marker:content-none hover:text-brand">
-                    ▸ Advertencias y notas generales del tipo de proceso ({items.length})
-                  </summary>
-                  <div className="mt-2.5">{renderGuiaItems(items)}</div>
-                </details>
-              );
-            }
-
-            function renderSeccion(section: FichaSection) {
-              const { visibles, ocultosOpcionales } = camposVisibles(section);
-              if (visibles.length === 0 && ocultosOpcionales === 0) return null;
-              const guia = guiaDeSeccion(section.title);
-              const comp = completitudSeccion(section);
-              const badge = badgeTexto(comp);
-              return (
-                <div
-                  className={cn(
-                    // scroll-mt: al saltar desde el índice, el título quedaba
-                    // debajo de la barra fija y parecía que no había pasado nada.
-                    // Medida en el navegador, la barra ocupa 57px; 64 deja holgura.
-                    "flex scroll-mt-16 flex-col gap-2.5 border-t border-line pt-4 first:border-t-0 first:pt-0",
-                    section.preliminar && "rounded-[12px] border border-dashed border-brand/30 bg-brand-soft/40 p-4",
-                  )}
-                  id={seccionId(section.title)}
-                  key={section.title}
-                >
-                  <h4 className="flex flex-wrap items-center gap-2 text-sm font-bold text-ink">
-                    {section.title}
-                    {section.preliminar ? (
-                      <span className="rounded-full bg-brand/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-brand">preliminar</span>
-                    ) : null}
-                    {badge ? (
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full px-2 py-px text-[11px] font-semibold",
-                          comp.estado === "completo" && "bg-success-soft text-success",
-                          comp.estado === "pendiente" && "bg-warning-soft text-warning",
-                          (comp.estado === "parcial" || comp.estado === "vacio") && "bg-ink/[0.06] text-muted",
-                        )}
-                      >
-                        {comp.estado === "completo" ? <Check size={11} /> : null}
-                        {badge}
-                      </span>
-                    ) : null}
-                  </h4>
-                  {section.resumenLlano ? (
-                    <p className="text-[13px] leading-relaxed text-ink">{section.resumenLlano}</p>
-                  ) : null}
-                  {!modoSimple && section.nota ? <p className="text-[12.5px] leading-relaxed text-muted">{section.nota}</p> : null}
-                  {!modoSimple && guia.length > 0 ? renderGuiaItems(guia) : null}
-                  <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
-                    {(() => {
-                      // Subtítulo del subgrupo (literal legal) una vez por grupo,
-                      // antes de su primer campo VISIBLE.
-                      let prevSub: string | undefined;
-                      const out: React.ReactNode[] = [];
-                      for (const f of visibles) {
-                        if (f.subgrupo && f.subgrupo !== prevSub) {
-                          out.push(
-                            <div className="col-span-full mt-1.5 text-[12px] font-bold uppercase tracking-wide text-muted" key={`sub-${f.subgrupo}`}>
-                              {f.subgrupo}
-                            </div>,
-                          );
-                        }
-                        prevSub = f.subgrupo;
-                        out.push(renderFichaField(f));
-                      }
-                      return out;
-                    })()}
-                  </div>
-                  {/* El cuadro de ítems no es un campo de `necesidades`: vive en
-                      su propia tabla, así que se inyecta en su sección en vez de
-                      declararse en FICHA_SECCIONES. */}
-                  {section.title.startsWith("3.2") ? (
-                    <NecesidadItemsEditor
-                      items={items}
-                      montoDeclarado={Number(fichaForm.montoEstimado) || null}
-                      objetoNecesidad={fichaForm.tipoObjeto || null}
-                      onChange={setItems}
-                      readOnly={!fichaEdit}
-                      tipoProceso={fichaForm.tipoProcesoSeleccion || null}
-                      uitValor={uitValor}
-                    />
-                  ) : null}
-                  {ocultosOpcionales > 0 ? (
-                    <button
-                      className="inline-flex w-fit items-center gap-1.5 rounded-lg px-1 text-[13px] font-semibold text-brand hover:underline"
-                      onClick={() => setOptionalExpanded((prev) => new Set(prev).add(section.title))}
-                      type="button"
-                    >
-                      <Plus size={13} /> Mostrar {ocultosOpcionales} campo{ocultosOpcionales > 1 ? "s" : ""} opcional{ocultosOpcionales > 1 ? "es" : ""}
-                    </button>
-                  ) : null}
-                </div>
-              );
-            }
-
-            return (
-              <div className="flex flex-col gap-4">
-                {/* Sin esto, el área usuaria ve menos campos que ayer y no sabe
-                    por qué: parece que la ficha perdió contenido. */}
-                {exigidosModelo.size > 0 && obligatoriosOnly ? (
-                  <Alert tone="info" icon={false}>
-                    <div className="flex items-start gap-2.5">
-                      <FileText size={15} className="mt-0.5 shrink-0" />
-                      <div>
-                        <strong>
-                          Se muestran los {exigidosModelo.size} campos que exige el modelo de{" "}
-                          {necesidad.tipo_proceso_seleccion}.
-                        </strong>{" "}
-                        Salen del PDF-modelo de requerimiento cargado en Configuración → Unidad de abastecimiento,
-                        ajustados al objeto <strong>{objectTypeLabel(necesidad.tipo_objeto)}</strong>. Los demás siguen
-                        ahí: usa <strong>«Ver todos»</strong> para abrirlos.
-                      </div>
-                    </div>
-                  </Alert>
-                ) : null}
-
-                {/* Origen del contenido. Tras el traslado, la ficha se ve igual
-                    la escriba quien la escriba: este aviso dice de un vistazo
-                    cuántos campos propuso el modelo y cuáles. */}
-                {camposDeIA.size > 0 ? (
-                  <Alert tone="info" icon={false}>
-                    <div className="flex items-start gap-2.5">
-                      <WandSparkles size={15} className="mt-0.5 shrink-0" />
-                      <div>
-                        <strong>
-                          {camposDeIA.size} campo{camposDeIA.size === 1 ? "" : "s"} de esta ficha{" "}
-                          {camposDeIA.size === 1 ? "proviene" : "provienen"} de la propuesta IA del EETT/TDR.
-                        </strong>{" "}
-                        Llevan la marca <span className={FICHA_IA}>✦ propuesto por IA</span> junto a su nombre.
-                        Revísalos antes de remitir: los redactó un modelo a partir del documento, no una persona.
-                        <ul className="mt-1.5 list-inside list-disc">
-                          {FICHA_SECCIONES.flatMap((s) => s.fields)
-                            .filter((f) => camposDeIA.has(f.api))
-                            .map((f) => (
-                              <li key={f.api}>{f.label}</li>
-                            ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </Alert>
-                ) : null}
-
-                {/* El formulario restaura el borrador de localStorage al abrirse.
-                    Sin este aviso, el trabajo sin guardar reaparece intacto y
-                    parece registrado. */}
-                {camposBorrador.length > 0 ? (
-                  <Alert tone="warning" icon={false}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <strong>Hay cambios sin guardar en este navegador.</strong>
-                        <p className="mt-0.5">
-                          Estos campos NO están en la base de datos todavía:{" "}
-                          {camposBorrador.map((k) => CAMPO_LABEL[k] ?? k).join(" · ")}. Pulsa{" "}
-                          <em>Guardar ficha</em> para registrarlos.
-                        </p>
-                      </div>
-                      <Button variant="secondary" size="sm" onClick={() => descartarBorrador()}>
-                        Descartar y volver a lo guardado
-                      </Button>
-                    </div>
-                  </Alert>
-                ) : null}
-
-                {renderPanelObligatorios("edicion")}
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex rounded-[10px] border border-line bg-surface p-0.5" role="group" aria-label="Campos a mostrar">
-                    <button
-                      className={cn("rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition", obligatoriosOnly ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand")}
-                      onClick={() => setObligatoriosOnly(true)}
-                      type="button"
-                    >
-                      Solo obligatorios
-                    </button>
-                    <button
-                      className={cn("rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition", !obligatoriosOnly ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand")}
-                      onClick={() => setObligatoriosOnly(false)}
-                      type="button"
-                    >
-                      Todos los campos
-                    </button>
-                  </div>
-
-                  {obligTotal > 0 ? (
-                    <div className="flex items-center gap-2" title={`${obligDone} de ${obligTotal} campos obligatorios completos`}>
-                      <div className="h-2 w-28 overflow-hidden rounded-full bg-line">
-                        <div
-                          className={cn("h-full rounded-full", obligDone >= obligTotal ? "bg-success" : "bg-brand")}
-                          style={{ width: `${Math.round((obligDone / obligTotal) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-[12px] font-semibold text-muted">{obligDone}/{obligTotal} obligatorios</span>
-                    </div>
-                  ) : null}
-
-                  <div className="ml-auto flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => { setWizardMode((w) => !w); setWizardStep(0); }}>
-                      {wizardMode ? "Formulario completo" : "Paso a paso"}
-                    </Button>
-                    {/* Interruptor de modo. Mismo patron de grupo de dos botones que
-                        «Solo obligatorios / Todos los campos», que ya se entiende. */}
-                    <div className="inline-flex rounded-[10px] border border-line bg-surface p-0.5" role="group" aria-label="Modo de trabajo">
-                      {([["redactar", "Redactar"], ["revisar", "Revisar"]] as const).map(([valor, etiqueta]) => (
-                        <button
-                          aria-pressed={modo === valor}
-                          className={cn(
-                            "rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition",
-                            modo === valor ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand",
-                          )}
-                          key={valor}
-                          onClick={() => cambiarModo(valor)}
-                          type="button"
-                        >
-                          {etiqueta}
-                        </button>
-                      ))}
-                    </div>
-                    <Button
-                      variant={modoSimple ? "subtle" : "secondary"}
-                      size="sm"
-                      onClick={toggleModoSimple}
-                      title={modoSimple
-                        ? "Volver a mostrar las referencias legales (artículos, notas)"
-                        : "Ocultar artículos y notas legales: deja solo el texto en lenguaje sencillo"}
-                    >
-                      {modoSimple ? "Mostrar detalle legal" : "Modo simple"}
-                    </Button>
-                    <Button variant={copilotoAbierto ? "primary" : "secondary"} size="sm" onClick={() => { setCopilotoAbierto((v) => !v); setCopilotoMontado(true); }}>
-                      <Sparkles size={13} /> Copiloto IA
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Indicador de pasos en modo wizard */}
-                {wizardMode ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { title: "Datos principales" },
-                      ...seccionesVisibles.map((s) => ({ title: s.title })),
-                    ].map((step, i) => {
-                      const activo = i === pasoActual;
-                      const hecho = i < pasoActual;
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => setWizardStep(i)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition",
-                            activo
-                              ? "border-brand bg-brand text-white"
-                              : hecho
-                                ? "border-success/30 bg-success-soft text-success"
-                                : "border-line bg-panel text-muted hover:border-brand/30",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "grid size-4 place-items-center rounded-full text-[10px] font-bold",
-                              activo ? "bg-white/25" : hecho ? "bg-success/15" : "bg-ink/[0.06]",
-                            )}
-                          >
-                            {hecho ? <Check size={10} /> : i + 1}
-                          </span>
-                          {step.title}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {/* Solo el paso actual en modo wizard; todo en modo completo */}
-                {wizardMode ? (
-                  pasoActual === 0 ? (
-                    <>
-                      {renderDatosPrincipales()}
-                      {renderGuiaGeneral()}
-                    </>
-                  ) : renderSeccion(seccionesVisibles[pasoActual - 1])
-                ) : (
-                  <div className="flex min-w-0 flex-col gap-5">
-                    {/* Índice de secciones, horizontal y fijo bajo la cabecera de la
-                        aplicación (56px = top-14). Es NAVEGACIÓN, no pestañas de verdad:
-                        al pulsar se salta a la sección y TODAS siguen montadas debajo,
-                        así que lleva aria-current="location" y no role="tab" —anunciarlo
-                        como pestañas prometería un panel que se sustituye, y no ocurre.
-                        Antes era una columna lateral con `hidden lg:flex`: en tablet y
-                        móvil, justo donde más falta hace saber por dónde vas, no había
-                        índice ninguno.
-
-                        `top-0` y no `top-14`: la aplicación NO tiene cabecera fija (no
-                        hay `sticky` ni `fixed` en app-shell), así que los 56px que
-                        reservaba la versión lateral solo dejaban pasar contenido por
-                        encima. Los márgenes negativos igualan el relleno de la tarjeta
-                        (`p-3.5`) para que la barra tape de borde a borde. */}
-                    <nav
-                      aria-label="Secciones del requerimiento"
-                      className="sticky top-0 z-20 -mx-3.5 border-b border-line bg-panel/95 px-3.5 py-2 backdrop-blur-sm"
-                    >
-                      <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        <SectionNavItem
-                          actual={seccionEnVista === DATOS_PRINCIPALES_ID}
-                          estado="parcial"
-                          label="Datos principales"
-                          onClick={() => scrollASeccion(DATOS_PRINCIPALES_ID)}
-                        />
-                        {navSecciones.map((n) => (
-                          <SectionNavItem
-                            key={n.id}
-                            actual={seccionEnVista === n.id}
-                            estado={n.comp.estado}
-                            label={n.title}
-                            count={
-                              badgeTexto(n.comp)
-                                ? n.comp.oblig > 0
-                                  ? `${n.comp.obligDone}/${n.comp.oblig}`
-                                  : `${n.comp.llenos}/${n.comp.total}`
-                                : undefined
-                            }
-                            onClick={() => scrollASeccion(n.id)}
-                          />
-                        ))}
-                      </div>
-                    </nav>
-                    {renderDatosPrincipales()}
-                    {renderGuiaGeneral()}
-                    {seccionesVisibles.map(renderSeccion)}
-                  </div>
-                )}
-
-                {/* Navegación del wizard */}
-                {wizardMode ? (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                    <Button variant="secondary" size="sm" disabled={pasoActual === 0} onClick={() => setWizardStep((s) => Math.max(0, s - 1))}>
-                      ← Anterior
-                    </Button>
-                    <Button variant="ghost" size="sm" disabled={savingFicha} onClick={() => setFichaEdit(false)}>
-                      Cancelar
-                    </Button>
-                    <span className="text-[12px] text-muted">Paso {pasoActual + 1} de {totalPasos}</span>
-                    {pasoActual < totalPasos - 1 ? (
-                      <Button variant="primary" size="sm" className="ml-auto" onClick={() => setWizardStep((s) => Math.min(totalPasos - 1, s + 1))}>
-                        Siguiente →
-                      </Button>
-                    ) : (
-                      <Button variant="primary" size="sm" className="ml-auto" loading={savingFicha} onClick={saveFicha}>
-                        {!savingFicha ? <CheckCircle2 size={15} /> : null}
-                        Guardar ficha
-                      </Button>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Botones de acción en modo completo */}
-                {!wizardMode ? (
-                  <>
-                    {conflictoGuardado ? (
-                      <Alert tone="warning">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <span>
-                            Otro usuario guardó cambios en esta necesidad. Recarga para ver su versión antes de
-                            volver a guardar (tu borrador se conserva).
-                          </span>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => { superarConflicto(); setError(""); void reload(); }}
-                          >
-                            Recargar
-                          </Button>
-                        </div>
-                      </Alert>
-                    ) : null}
-                    <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                      <Button variant="primary" disabled={conflictoGuardado} loading={savingFicha} onClick={saveFicha}>
-                        {!savingFicha ? <CheckCircle2 size={15} /> : null}
-                        Guardar ficha
-                      </Button>
-                      <Button variant="ghost" disabled={savingFicha} onClick={() => setFichaEdit(false)}>
-                        Cancelar
-                      </Button>
-                      {autoguardado ? (
-                        <span
-                          className={cn(
-                            "text-[12px] font-medium",
-                            autoguardado === "error" ? "text-danger" : autoguardado === "guardado" ? "text-success" : "text-muted",
-                          )}
-                        >
-                          {autoguardado === "guardando"
-                            ? "Guardando…"
-                            : autoguardado === "guardado"
-                              ? "Cambios guardados automáticamente"
-                              : "No se pudo autoguardar — pulsa Guardar ficha"}
-                        </span>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-
-                {copilotoMontado ? (
-                  <NecesidadCopiloto
-                    abierto={copilotoAbierto}
-                    campos={camposCopiloto}
-                    faltantes={faltantesCopiloto}
-                    // La solución de controversias se FUSIONA en vez de sustituirse: su valor
-                    // lleva el cuadro de instituciones designadas, y volcar encima el texto de
-                    // la IA las borraría. Se conservan y lo redactado pasa a ser el bloque de
-                    // condiciones adicionales.
-                    onAplicarCampo={(api, valor) =>
-                      setFichaField(
-                        api,
-                        api === "solucionControversias"
-                          ? componerControversias(parseInstituciones(fichaForm.solucionControversias ?? ""), valor)
-                          : valor,
-                      )
-                    }
-                    onCerrar={() => setCopilotoAbierto(false)}
-                    redactarSolicitud={copilotoRedactar}
-                    tipoObjeto={tipoObj ? objectTypeLabel(tipoObj) : ""}
-                    tipoProcesoSeleccion={fichaForm.tipoProcesoSeleccion ?? ""}
-                  />
-                ) : null}
-              </div>
-            );
-          })() : (
+          {fichaEditable ? (
+            <FichaEditable
+              campo={{ areasSugeridas, cambiarCampo, marcarError, marcarTocado, redactarConIA }}
+              catalogo={{
+                avanceRequerimiento,
+                campoEsObligatorio,
+                campoExigible,
+                camposDeIA,
+                camposParaObjeto,
+                camposVisibles,
+                ejeObjeto,
+                ejeProceso,
+                exigidosModelo,
+                obsPendientesPorCampo,
+                opcionesProcesoAgrupadas,
+                panelObligatorios: renderPanelObligatorios("edicion"),
+                tieneValor,
+                tipoObj,
+              }}
+              copiloto={{
+                abierto: copilotoAbierto,
+                montado: copilotoMontado,
+                redactar: copilotoRedactar,
+                setAbierto: setCopilotoAbierto,
+                setMontado: setCopilotoMontado,
+              }}
+              eett={{ abrir: abrirEettEstable, docs: eettDocs, subiendo: eettUploading, subir: subirEettEstable }}
+              ficha={{
+                autoguardado,
+                camposBorrador,
+                camposTocados,
+                conflictoGuardado,
+                descartarBorrador,
+                fichaEdit,
+                fichaForm,
+                fieldErrors,
+                guardar: saveFicha,
+                savingFicha,
+                setFichaEdit,
+                setFichaField,
+                superarConflicto,
+              }}
+              items={items}
+              necesidad={necesidad}
+              necesidadId={necesidadId}
+              onError={setError}
+              onRecargar={recargar}
+              permisos={permisos}
+              setItems={setItems}
+              uitValor={uitValor}
+              vista={{
+                cambiarModo,
+                modo,
+                modoSimple,
+                obligatoriosOnly,
+                seccionEnVista,
+                setObligatoriosOnly,
+                setOptionalExpanded,
+                setWizardMode,
+                setWizardStep,
+                toggleModoSimple,
+                wizardMode,
+                wizardStep,
+              }}
+            />
+          ) : (
             <FichaLectura
               camposDeIA={camposDeIA}
               necesidad={necesidad}
