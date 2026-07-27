@@ -82,11 +82,35 @@ export const SECCIONES_BASE: ReadonlyArray<{ apis: readonly string[]; titulo: st
   { apis: ["requisitosCalificacion"], titulo: "REQUISITOS DE CALIFICACIÓN" },
 ];
 
+/**
+ * La etiqueta del documento no es la de la ficha.
+ *
+ * En el formulario se lee «Propuesta de modalidad de pago» porque el área
+ * usuaria PROPONE y la DEC decide. En el requerimiento firmado esa frase sobra:
+ * el apartado ya se llama «MODALIDAD DE PAGO», y la coletilla convertía el
+ * documento en una copia de la pantalla. Igual con el «(días)», que es una ayuda
+ * para teclear.
+ */
+export function etiquetaDeDocumento(label: string): string {
+  return label
+    .replace(/^Propuesta de\s+/i, "")
+    .replace(/\s*\((?:días|dias)\)\s*$/i, "")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/**
+ * Campos que NO van sueltos al documento.
+ *
+ * La unidad del plazo viaja DENTRO del plazo («52 días calendario»), así que
+ * como campo aparte solo ponía una raya suelta debajo.
+ */
+const NO_VAN_SOLOS = new Set(["plazoEjecucionUnidad"]);
+
 function campo(api: string, ficha: Record<string, string>): CampoRequerimiento {
   return {
     api,
     formato: formatoDe(api),
-    label: CATALOGO.get(api)?.label ?? api,
+    label: etiquetaDeDocumento(CATALOGO.get(api)?.label ?? api),
     valor: (ficha[api] ?? "").trim(),
   };
 }
@@ -104,7 +128,7 @@ export function estructuraDelRequerimiento(
 ): SeccionRequerimiento[] {
   if (apartados.length === 0) {
     return SECCIONES_BASE.map((s) => ({
-      campos: s.apis.map((api) => campo(api, ficha)),
+      campos: s.apis.filter((api) => !NO_VAN_SOLOS.has(api)).map((api) => campo(api, ficha)),
       nota: CATALOGO.get(s.apis[0])?.baseLegal,
       titulo: s.titulo,
     }));
@@ -117,7 +141,7 @@ export function estructuraDelRequerimiento(
     // Dos apartados del modelo pueden mapear al mismo título (p. ej. «Fórmula de
     // reajuste» y «Fórmulas de reajustes»): se funden en uno.
     const ya = secciones.find((s) => s.titulo === titulo);
-    const campos = entrada.apis.map((api) => campo(api, ficha));
+    const campos = entrada.apis.filter((api) => !NO_VAN_SOLOS.has(api)).map((api) => campo(api, ficha));
     if (ya) {
       for (const c of campos) if (!ya.campos.some((x) => x.api === c.api)) ya.campos.push(c);
     } else {

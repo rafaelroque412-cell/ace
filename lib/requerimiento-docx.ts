@@ -226,7 +226,7 @@ function tablaPenalidades(filas: ReturnType<typeof parseOtrasPenalidades>): Tabl
  * guardan serializados en una columna de texto. Volcarlos tal cual metía JSON
  * crudo en un documento que se firma.
  */
-function pintarCampo(c: CampoRequerimiento): Array<Paragraph | Table> {
+function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Table> {
   if (!c.valor) return [contenido("")];
 
   if (c.formato === "tabla") {
@@ -256,7 +256,10 @@ function pintarCampo(c: CampoRequerimiento): Array<Paragraph | Table> {
   }
 
   if (c.formato === "linea") {
-    const l = linea(c.label, c.valor);
+    // Con un solo campo, el titulo del apartado YA dice que es: repetir la
+    // etiqueta daba «8. PLAZO DE PRESTACION» y debajo «Plazo de prestacion: 52
+    // dias», que es la pantalla copiada, no un documento.
+    const l = solo ? p([run(c.valor)]) : linea(c.label, c.valor);
     return l ? [l] : [contenido("")];
   }
 
@@ -313,7 +316,7 @@ export async function generarRequerimientoDocx(input: RequerimientoDocInput): Pr
       if (s.campos.length > 1 && c.formato !== "linea") {
         children.push(new Paragraph({ spacing: { before: 60, after: 40 }, children: [run(`${c.label}:`, { bold: true })] }));
       }
-      children.push(...pintarCampo(c));
+      children.push(...pintarCampo(c, s.campos.length === 1));
       // El desagregado del Art. 52 va donde va la descripcion, que es lo que
       // desagrega.
       if (c.api === "descripcionDetallada" && (input.items ?? []).length > 0) {
