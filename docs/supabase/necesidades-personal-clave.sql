@@ -1,5 +1,5 @@
 -- Experiencia del personal clave (Art. 72.3.b · capacidad técnica y profesional),
--- en la sección 3.5.2 «Requisitos de calificación adicionales» de la ficha.
+-- en la sección 3.5.1 de la ficha, junto a la experiencia del postor.
 --
 -- El texto lo fija el formato de las bases estándar y tiene tres huecos: el
 -- tiempo mínimo, los trabajos o prestaciones en la actividad requerida y el

@@ -543,6 +543,17 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // Art. 72.3 que gestiona el editor. Se mantiene la columna (oculta) como
       // respaldo del dato heredado; su contenido se migra al tipo
       // `experiencia_postor` del editor al abrir la ficha.
+
+      // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave. Va aquí,
+      // junto a la experiencia del postor, y no en el 3.5.2: la entidad lo pide
+      // en esta sección. El formato deja tres huecos —tiempo mínimo, trabajos o
+      // prestaciones, puesto— y la frase se compone con ellos
+      // (lib/personal-clave.ts), como la forma de pago. Los tres huecos van
+      // primero y el texto compuesto, «Redactar con IA», el último.
+      { col: "personal_clave_tiempo", api: "personalClaveTiempo", label: "Tiempo de experiencia mínimo", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", baseLegal: "Art. 72.3.b Reglamento · tiempo mínimo de experiencia del personal clave. Se acredita con el Anexo N° 19; no cuenta la antigüedad mayor a 25 años.", ejemplo: "tres (3) años" },
+      { col: "personal_clave_trabajos", api: "personalClaveTrabajos", label: "Trabajos o prestaciones en la actividad requerida", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · las prestaciones o trabajos en la actividad para la que se exige la experiencia del personal clave.", ejemplo: "supervisión de montaje de estructuras metálicas" },
+      { col: "personal_clave_puesto", api: "personalClavePuesto", label: "Puesto, cargo y/o posición del personal clave", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · el puesto respecto del cual se acredita la experiencia del personal clave para ejecutar la prestación.", ejemplo: "Ingeniero residente" },
+      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave (texto del requisito)", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 72.3.b Reglamento · es el texto que va al requerimiento. Se compone con «Redactar con IA» a partir de los tres campos de arriba.", ejemplo: "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente." },
     ],
   },
   {
@@ -561,17 +572,9 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // clave, y `seccionesVisibles` descarta las secciones vacías: el 3.5.2
       // desaparecía de la ficha aunque el requerimiento modelo lo trae. Los
       // adicionales no son solo personal clave: son los facultativos que la DEC
-      // decida en la estrategia.
-      // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave. El
-      // formato deja tres huecos —tiempo mínimo, trabajos o prestaciones, puesto—
-      // y la frase se compone con ellos (lib/personal-clave.ts), igual que la
-      // forma de pago. Los tres huecos van primero y el texto compuesto,
-      // «Redactar con IA», el último.
-      { col: "personal_clave_tiempo", api: "personalClaveTiempo", label: "Tiempo de experiencia mínimo", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", baseLegal: "Art. 72.3.b Reglamento · tiempo mínimo de experiencia del personal clave. Se acredita con el Anexo N° 19; no cuenta la antigüedad mayor a 25 años.", ejemplo: "tres (3) años" },
-      { col: "personal_clave_trabajos", api: "personalClaveTrabajos", label: "Trabajos o prestaciones en la actividad requerida", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · las prestaciones o trabajos en la actividad para la que se exige la experiencia del personal clave.", ejemplo: "supervisión de montaje de estructuras metálicas" },
-      { col: "personal_clave_puesto", api: "personalClavePuesto", label: "Puesto, cargo y/o posición del personal clave", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · el puesto respecto del cual se acredita la experiencia del personal clave para ejecutar la prestación.", ejemplo: "Ingeniero residente" },
-      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave (texto del requisito)", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 72.3.b Reglamento · es el texto que va al requerimiento. Se compone con «Redactar con IA» a partir de los tres campos de arriba.", ejemplo: "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente." },
-      { col: "requisitos_adicionales", api: "requisitosAdicionales", label: "Otros requisitos de calificación adicionales", subgrupo: "Otros requisitos adicionales", kind: "textarea", wide: true, baseLegal: "Art. 72.1 Reglamento · los requisitos de calificación se establecen en la estrategia de contratación; el área usuaria propone los adicionales que correspondan.", ejemplo: "Capacidad técnica y profesional: equipamiento estratégico mínimo." },
+      // decida en la estrategia. La experiencia del personal clave se registra
+      // en 3.5.1, junto a la del postor, donde la entidad la pide.
+      { col: "requisitos_adicionales", api: "requisitosAdicionales", label: "Requisitos de calificación adicionales", kind: "textarea", wide: true, baseLegal: "Art. 72.1 Reglamento · los requisitos de calificación se establecen en la estrategia de contratación; el área usuaria propone los adicionales que correspondan.", ejemplo: "Capacidad técnica y profesional: equipamiento estratégico mínimo." },
     ],
   },
   {

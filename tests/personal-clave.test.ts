@@ -49,8 +49,8 @@ describe("cuántos huecos faltan", () => {
   });
 });
 
-describe("está en la ficha, en 3.5.2, y se guarda", () => {
-  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.2 Requisitos de calificación adicionales")!;
+describe("está en la ficha, en 3.5.1 junto a la experiencia del postor, y se guarda", () => {
+  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!;
   const SUBGRUPO = "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)";
 
   it("los cuatro campos existen y comparten subgrupo", () => {
