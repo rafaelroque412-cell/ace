@@ -12,7 +12,6 @@
  * deciden que campos ve el area usuaria— pasan a poder probarse sin renderizar.
  */
 import type { Necesidad } from "./necesidades";
-import { NOMBRE_MAX } from "./necesidades-limites";
 import {
   etiquetas,
   OPCIONES_MODALIDAD_PAGO,
@@ -22,7 +21,6 @@ import {
 import {
   OBJETOS_POR_PROCEDIMIENTO,
   type ObjetoFilter,
-  PROCESOS_SELECCION,
 } from "./procesos-seleccion";
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,

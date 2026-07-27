@@ -1,3 +1,4 @@
+import { camposExigidosDeterministas } from "./modelo-apartados";
 import { z } from "zod";
 import { type LegalSource, searchLegalSources } from "./legal-chat";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
@@ -1460,25 +1461,6 @@ export type CamposExigidosResult = {
   cacheado: boolean;
 };
 
-const EXIGIDOS_SISTEMA = [
-  "Eres un especialista en contrataciones del Estado peruano (Ley N.° 32069 y su Reglamento).",
-  "Se te da el MODELO OFICIAL de requerimiento de un procedimiento concreto y la lista de campos",
-  "de la ficha. Di QUÉ CAMPOS EXIGE ese modelo, no cuáles podrían rellenarse.",
-  "",
-  "Criterio:",
-  "- Un campo se EXIGE si el modelo lo pide como apartado propio o como dato que ese apartado",
-  "  no puede omitir. Si el modelo lo marca «de corresponder», «según corresponda» u opcional,",
-  "  NO lo incluyas: la norma no lo hace obligatorio.",
-  "- OJO con los recuadros «Importante para la entidad contratante»: no son opcionales por",
-  "  estar en una nota. Si la nota dice que se incluye UNO de varios supuestos —como la",
-  "  subcontratación, donde hay que optar entre permitirla hasta el 40% o prohibirla— el",
-  "  apartado SÍ se exige: hay que declarar algo. Lo opcional es cuál, no si.",
-  "- Ajusta al OBJETO indicado: lo específico de obras no se exige en una compra de bienes.",
-  "- Usa SOLO las claves api de la lista. No inventes claves.",
-  "",
-  'Devuelve SOLO un objeto JSON: {"exigidos": ["<api>", ...]}',
-].join("\n");
-
 /**
  * Huella corta y estable del catálogo de campos que se le pasa al modelo.
  *
@@ -1523,40 +1505,23 @@ export async function camposExigidosDelModelo(
     /* sin caché se recalcula */
   }
 
-  // 2. Se pregunta al MODELO COMPLETO, no a un top-K: la lista de apartados
-  //    exigidos está repartida por todo el documento.
+  // 2. Se leen los APARTADOS del modelo, de forma DETERMINISTA.
+  //
+  //    Esto lo derivaba una IA leyendo el documento entero. Dentro de una misma
+  //    tanda respondia igual, pero entre tandas cambiaba mucho: para el mismo
+  //    modelo y el mismo objeto se vieron listas de 12, 14 y 21 campos. Una ficha
+  //    que enseña unos campos u otros segun el dia no es utilizable, y encima el
+  //    resultado quedaba cacheado sin que nadie pudiera revisarlo.
+  //
+  //    Ahora se detectan los titulos de los apartados y se traducen a campos con
+  //    una tabla legible y probada (lib/modelo-apartados.ts). Si falta un
+  //    apartado se ve y se corrige; antes solo cambiaba el resultado.
   const modelo = await modeloOeceCompleto(docId);
   if (!modelo.trim()) return { exigidos: [], usoModelo: false, cacheado: false };
 
-  const user = [
-    `Procedimiento: ${input.tipoProcesoSeleccion}`,
-    `Objeto de la contratación: ${input.tipoObjeto || "no especificado"}`,
-    "",
-    "CAMPOS DE LA FICHA (usa exactamente estas api):",
-    ...input.camposObjetivo.map(
-      (c) => `- api="${c.api}" · "${c.label}"${c.seccion ? ` [${c.seccion}]` : ""}`,
-    ),
-    "",
-    "MODELO OFICIAL DEL PROCEDIMIENTO:",
-    modelo.slice(0, 60000),
-  ].join("\n");
+  const disponibles = new Set(input.camposObjetivo.map((c) => c.api));
+  const exigidos = camposExigidosDeterministas(modelo, disponibles);
 
-  const client = getOpenAIClient();
-  const resp = await client.responses.create({
-    input: [
-      { role: "system", content: EXIGIDOS_SISTEMA },
-      { role: "user", content: user },
-    ],
-    max_output_tokens: 2000,
-    model: legalAnswerModel,
-    temperature: 0,
-  });
-
-  const parsed = parseJsonObjeto(resp.output_text ?? "");
-  const apiSet = new Set(input.camposObjetivo.map((c) => c.api));
-  const exigidos = Array.isArray(parsed.exigidos)
-    ? Array.from(new Set(parsed.exigidos.filter((k): k is string => typeof k === "string" && apiSet.has(k))))
-    : [];
 
   // 3. Persistir para las siguientes necesidades del mismo proceso.
   if (exigidos.length > 0) {
