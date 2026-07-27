@@ -52,6 +52,13 @@ import {
 } from "@/lib/procesos-seleccion";
 import { resumenNecesidad } from "@/lib/necesidad-verificacion";
 import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
+import {
+  BLOQUES_FICHA,
+  MODO_POR_DEFECTO,
+  type ModoFicha,
+  modoParaSeccion,
+  panelesDelModo,
+} from "@/lib/necesidad-modos";
 import type { CopilotoCampo } from "./necesidad-copiloto";
 import { cuiDeCadenaFuncional } from "@/lib/pedido-compra-import";
 import { HITO_STATUS_META, type HitosMap, hitosDeFase, progresoDeFase } from "@/lib/procurement-fases";
@@ -1146,6 +1153,23 @@ export function NecesidadDetail({
   // "Modo simple": oculta citas de artículos y notas legales, dejando solo el
   // texto en lenguaje llano. Pensado para el área usuaria no técnica. Se recuerda
   // por navegador.
+  // Modo de trabajo. Arranca en Redactar y recuerda el ultimo usado, por
+  // navegador. Eso reparte por rol SIN una tabla de roles: quien trabaja en la
+  // DEC acabara abriendo en Revisar porque es donde trabaja.
+  const [modo, setModo] = useState<ModoFicha>(MODO_POR_DEFECTO);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      const guardado = localStorage.getItem("ficha-modo-trabajo");
+      if (guardado === "redactar" || guardado === "revisar") setModo(guardado);
+    } catch { /* ignora */ }
+  }, []);
+  
+  function cambiarModo(siguiente: ModoFicha) {
+    setModo(siguiente);
+    try { localStorage.setItem("ficha-modo-trabajo", siguiente); } catch { /* ignora */ }
+  }
+  
   const [modoSimple, setModoSimple] = useState(false);
   useEffect(() => {
     try {
@@ -3969,6 +3993,24 @@ Ej: ${field.ejemplo}` : ""}
                     <Button variant="secondary" size="sm" onClick={() => { setWizardMode((w) => !w); setWizardStep(0); }}>
                       {wizardMode ? "Formulario completo" : "Paso a paso"}
                     </Button>
+                    {/* Interruptor de modo. Mismo patron de grupo de dos botones que
+                        «Solo obligatorios / Todos los campos», que ya se entiende. */}
+                    <div className="inline-flex rounded-[10px] border border-line bg-surface p-0.5" role="group" aria-label="Modo de trabajo">
+                      {([["redactar", "Redactar"], ["revisar", "Revisar"]] as const).map(([valor, etiqueta]) => (
+                        <button
+                          aria-pressed={modo === valor}
+                          className={cn(
+                            "rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition",
+                            modo === valor ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand",
+                          )}
+                          key={valor}
+                          onClick={() => cambiarModo(valor)}
+                          type="button"
+                        >
+                          {etiqueta}
+                        </button>
+                      ))}
+                    </div>
                     <Button
                       variant={modoSimple ? "subtle" : "secondary"}
                       size="sm"
