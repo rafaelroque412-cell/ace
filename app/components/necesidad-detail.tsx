@@ -137,6 +137,7 @@ import {
   type FichaSection,
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
+import { componerFormaPago } from "@/lib/forma-pago";
 
 
 
@@ -441,6 +442,25 @@ export function NecesidadDetail({
   // El nonce hace que pulsar el mismo campo dos veces vuelva a disparar.
   const [copilotoRedactar, setCopilotoRedactar] = useState<{ key: string; nonce: number } | null>(null);
   const pedirRedactarIA = (api: string) => {
+    // FORMA DE PAGO no pasa por el copiloto: su texto lo fija el Art. 67 de la
+    // Ley y solo tiene cinco huecos, asi que se COMPONE con los datos que el
+    // area usuaria ya registro. Pedirselo a un modelo de lenguaje seria
+    // arriesgarse a que parafrasee un articulo de la Ley en un documento que se
+    // firma, y ademas tardaria y costaria para dar una respuesta que ya
+    // conocemos exacta.
+    if (api === "formaPago") {
+      setFichaField(
+        "formaPago",
+        componerFormaPago({
+          areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+          direccion: fichaForm.formaPagoDireccion ?? "",
+          documentacionAdicional: fichaForm.formaPagoDocumentacion ?? "",
+          lugarPresentacion: fichaForm.formaPagoLugar ?? "",
+          tipoPago: fichaForm.formaPagoTipo ?? "",
+        }),
+      );
+      return;
+    }
     setCopilotoAbierto(true);
     setCopilotoMontado(true);
     setCopilotoRedactar((prev) => ({ key: api, nonce: (prev?.nonce ?? 0) + 1 }));

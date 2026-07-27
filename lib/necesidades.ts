@@ -88,6 +88,8 @@ export type Necesidad = {
   modalidad_pago: string | null;
   sistema_entrega: string | null;
   plazo_ejecucion: number | null;
+  /** Computo del plazo: 'calendario' (regla, Art. 105.3) o 'habiles' (excepcion). */
+  plazo_ejecucion_unidad: string | null;
   equipamiento_minimo: string | null;
   habilitaciones: string | null;
   formula_reajuste: string | null;
@@ -96,6 +98,14 @@ export type Necesidad = {
   penalidad_mora: string | null;
   garantias: string | null;
   recepcion_conformidad: string | null;
+  // FORMA DE PAGO (Art. 67 de la Ley). Los cinco huecos del formato + el texto
+  // ya compuesto, que es lo que viaja al Word y lo que se firma.
+  forma_pago: string | null;
+  forma_pago_tipo: string | null;
+  forma_pago_area_conformidad: string | null;
+  forma_pago_documentacion: string | null;
+  forma_pago_lugar: string | null;
+  forma_pago_direccion: string | null;
   subcontratacion: string | null;
   descripcion_general: string | null;
   ficha_tecnica_identificacion: string | null;
@@ -230,6 +240,9 @@ export const necesidadCreateSchema = z.object({
   modalidadPago: optionalText(500),
   sistemaEntrega: optionalText(100),
   plazoEjecucion: z.number().int().optional(),
+  // Lista cerrada: son los dos unicos computos que admite el Art. 105.3, y el
+  // numero de dias sin unidad no significa nada en un contrato.
+  plazoEjecucionUnidad: z.enum(["calendario", "habiles"]).optional(),
   equipamientoMinimo: optionalText(1000),
   habilitaciones: optionalText(1000),
   formulaReajuste: optionalText(2000),
@@ -238,6 +251,12 @@ export const necesidadCreateSchema = z.object({
   penalidadMora: optionalText(2000),
   garantias: optionalText(2000),
   recepcionConformidad: optionalText(2000),
+  formaPago: optionalText(6000),
+  formaPagoTipo: optionalText(1000),
+  formaPagoAreaConformidad: optionalText(300),
+  formaPagoDocumentacion: optionalText(1000),
+  formaPagoLugar: optionalText(300),
+  formaPagoDireccion: optionalText(300),
   subcontratacion: optionalText(1000),
   descripcionGeneral: optionalText(4000),
   fichaTecnicaIdentificacion: optionalText(300),
