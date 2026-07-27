@@ -138,7 +138,6 @@ import {
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
 import { componerFormaPago } from "@/lib/forma-pago";
-import { componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
 
 
 
@@ -462,25 +461,13 @@ export function NecesidadDetail({
       );
       return;
     }
-    // Recepcion y conformidad (Art. 144): mismo criterio, y ademas el texto NO
-    // es el mismo para bienes que para servicios —en bienes hay dos actos y en
-    // servicios solo conformidad—, asi que la plantilla la elige el objeto.
+    // Recepcion y conformidad (Art. 144) pasa por el copiloto, a diferencia de
+    // la forma de pago. Se probo componiendolo con plantilla y la entidad
+    // prefiere el copiloto, que lee el modelo del procedimiento: el apartado
+    // admite mas variacion de la que parece —el plazo cambia segun hagan falta
+    // pruebas, y en obras el regimen es otro— y un texto fijo se quedaba corto.
     //
-    // En OBRAS devuelve null: su recepcion tiene procedimiento propio y el
-    // formato facilitado no lo cubre. Se cae al copiloto en vez de escribir algo
-    // aproximado en un documento que se firma.
-    if (api === "recepcionConformidad") {
-      const texto = componerRecepcionConformidad(ejeObjeto, {
-        areaConformidad: fichaForm.conformidadArea ?? "",
-        areaRecepcion: fichaForm.recepcionArea ?? "",
-        plazoConformidad: fichaForm.conformidadPlazo ?? "",
-        plazoSubsanacion: fichaForm.conformidadPlazoSubsanacion ?? "",
-      });
-      if (texto !== null) {
-        setFichaField("recepcionConformidad", texto);
-        return;
-      }
-    }
+    // La plantilla sigue en lib/recepcion-conformidad.ts, sin usar por ahora.
     setCopilotoAbierto(true);
     setCopilotoMontado(true);
     setCopilotoRedactar((prev) => ({ key: api, nonce: (prev?.nonce ?? 0) + 1 }));
