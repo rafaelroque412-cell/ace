@@ -97,6 +97,8 @@ export function FichaEditable({
     opcionesProcesoAgrupadas: { otros: typeof PROCESO_SELECCION_OPCIONES; realiza: typeof PROCESO_SELECCION_OPCIONES };
     /** El panel de campos obligatorios, ya pintado por el padre. */
     panelObligatorios: React.ReactNode;
+    /** Tipos del Art. 72.3 que declara el modelo del procedimiento. */
+    requisitosModelo: ReadonlySet<string>;
     tieneValor: (field: FichaField) => boolean;
     tipoObj: ObjetoFilter | null | undefined;
   };
@@ -159,7 +161,7 @@ export function FichaEditable({
   const {
     avanceRequerimiento, campoEsObligatorio, campoExigible, camposDeIA, camposParaObjeto,
     camposVisibles, ejeObjeto, ejeProceso, exigidosModelo, obsPendientesPorCampo,
-    opcionesProcesoAgrupadas, panelObligatorios, tieneValor, tipoObj,
+    opcionesProcesoAgrupadas, panelObligatorios, requisitosModelo, tieneValor, tipoObj,
   } = catalogo;
   const {
     abierto: copilotoAbierto, montado: copilotoMontado, redactar: copilotoRedactar,
@@ -307,6 +309,7 @@ export function FichaEditable({
         onSubirEett={subirEettEstable}
         onTocar={marcarTocado}
         puedeGestionar={permisos.manage}
+        requisitosModelo={requisitosModelo}
         tipoObjeto={ejeObjeto}
         tipoProceso={ejeProceso || null}
         tocado={camposTocados.has(field.api)}

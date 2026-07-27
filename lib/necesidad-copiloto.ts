@@ -7,6 +7,8 @@ import { pdfsModeloDeProceso } from "./procesos-seleccion";
 import { GUIA_SECCION_NOMBRE, type GuiaItem, REQUERIMIENTO_GUIA } from "./requerimiento-guia";
 import { TIPOS_REQUISITO_ART72 } from "./requisitos-calificacion";
 import { supabaseRest, supabaseUserRest } from "./supabase-server";
+import { tiposDelModeloComoLista } from "@/lib/requisitos-del-modelo";
+import type { TipoRequisitoArt72 } from "@/lib/requisitos-calificacion";
 
 // Copiloto del Requerimiento (Módulo Necesidades).
 //
@@ -1459,6 +1461,14 @@ export type CamposExigidosResult = {
   usoModelo: boolean;
   /** true si se sirvió de la caché (no gastó tokens). */
   cacheado: boolean;
+  /**
+   * Tipos del Art. 72.3 que el modelo declara como apartado.
+   *
+   * NO se cachea con los campos: sale del mismo texto y sale gratis, mientras
+   * que la caché de `exigidos` viene de antes de que esto existiera. Recalcularlo
+   * evita tener que invalidar entradas ya guardadas.
+   */
+  requisitos: TipoRequisitoArt72[];
 };
 
 /**
@@ -1482,7 +1492,7 @@ export async function camposExigidosDelModelo(
   options?: { entity?: string | null },
 ): Promise<CamposExigidosResult> {
   const docId = await resolverModeloDocId(input.tipoProcesoSeleccion, options?.entity, input.tipoObjeto);
-  if (!docId) return { exigidos: [], usoModelo: false, cacheado: false };
+  if (!docId) return { cacheado: false, exigidos: [], requisitos: [], usoModelo: false };
 
   // La clave incluye una HUELLA del catálogo de campos, no solo el objeto. La
   // lista la deriva la IA leyendo el modelo contra los campos que existían ese
@@ -1499,7 +1509,16 @@ export async function camposExigidosDelModelo(
     const cache = (docs[0]?.metadata?.camposExigidos ?? {}) as Record<string, string[]>;
     const guardado = cache[claveObjeto];
     if (Array.isArray(guardado) && guardado.length > 0) {
-      return { exigidos: guardado, usoModelo: true, cacheado: true };
+      // Los requisitos se leen del texto aunque los campos vengan de la caché:
+      // cuesta un recorrido de expresiones regulares y evita invalidar las
+      // entradas guardadas antes de que este dato existiera.
+      const texto = await modeloOeceCompleto(docId, Number.MAX_SAFE_INTEGER);
+      return {
+        cacheado: true,
+        exigidos: guardado,
+        requisitos: tiposDelModeloComoLista(texto),
+        usoModelo: true,
+      };
     }
   } catch {
     /* sin caché se recalcula */
@@ -1522,7 +1541,7 @@ export async function camposExigidosDelModelo(
   //    Pública de Obras —110 172 caracteres— se leía al 15 % y perdía ocho
   //    apartados que viven en la segunda mitad del documento.
   const modelo = await modeloOeceCompleto(docId, Number.MAX_SAFE_INTEGER);
-  if (!modelo.trim()) return { exigidos: [], usoModelo: false, cacheado: false };
+  if (!modelo.trim()) return { cacheado: false, exigidos: [], requisitos: [], usoModelo: false };
 
   const disponibles = new Set(input.camposObjetivo.map((c) => c.api));
   const exigidos = camposExigidosDeterministas(modelo, disponibles);
@@ -1545,5 +1564,5 @@ export async function camposExigidosDelModelo(
     }
   }
 
-  return { exigidos, usoModelo: true, cacheado: false };
+  return { cacheado: false, exigidos, requisitos: tiposDelModeloComoLista(modelo), usoModelo: true };
 }

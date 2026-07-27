@@ -630,6 +630,8 @@ export function NecesidadDetail({
   // Campos que el requerimiento del proceso elegido EXIGE (derivado del modelo).
   // Es una marca de sesión (hint visual), no bloquea el guardado.
   const [exigidosModelo, setExigidosModelo] = useState<ReadonlySet<string>>(new Set());
+  // Tipos de requisito de calificacion que declara el modelo del procedimiento.
+  const [requisitosModelo, setRequisitosModelo] = useState<ReadonlySet<string>>(new Set());
   const extractFileRef = useRef<HTMLInputElement | null>(null);
 
 
@@ -689,7 +691,12 @@ export function NecesidadDetail({
         });
         if (!res.ok || cancelado) return;
         const payload = await res.json();
-        if (!cancelado && Array.isArray(payload.exigidos)) setExigidosModelo(new Set(payload.exigidos));
+        if (cancelado) return;
+        if (Array.isArray(payload.exigidos)) setExigidosModelo(new Set(payload.exigidos));
+        // Tipos del Art. 72.3 que el modelo declara. No se filtra por ellos: el
+        // articulo los permite todos y la entidad puede sustentar uno que su
+        // formato no liste. Solo se DICE cual pide el formato.
+        if (Array.isArray(payload.requisitos)) setRequisitosModelo(new Set(payload.requisitos));
       } catch {
         /* sin modelo la ficha sigue funcionando con su criterio por objeto */
       }
@@ -1984,6 +1991,7 @@ export function NecesidadDetail({
                 exigidosModelo,
                 obsPendientesPorCampo,
                 opcionesProcesoAgrupadas,
+                requisitosModelo,
                 panelObligatorios: renderPanelObligatorios("edicion"),
                 tieneValor,
                 tipoObj,

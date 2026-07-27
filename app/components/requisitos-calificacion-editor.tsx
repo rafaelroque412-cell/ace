@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
+  SUBTIPOS_CAPACIDAD_TECNICA,
   TIPOS_REQUISITO_ART72,
   ayudaPorObjeto,
   componerRequisitos,
@@ -15,6 +16,8 @@ import {
   type RequisitoFacultativo,
   type TipoRequisitoArt72,
 } from "@/lib/requisitos-calificacion";
+import { avisosDeTopes } from "@/lib/requisitos-topes";
+import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
 // viven dentro de la tarjeta de cada tipo, que es bastante más angosta que un
 // campo ancho de la ficha, y con la estimación ancha un párrafo de 270
@@ -37,6 +40,9 @@ export function RequisitosCalificacionEditor({
   onChange,
   readOnly = false,
   objeto,
+  montoEstimado,
+  tipoProceso,
+  requisitosModelo,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -44,6 +50,21 @@ export function RequisitosCalificacionEditor({
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
   // obras (Art. 72.3.b + Art. 157). undefined = ayuda genérica.
   objeto?: string | null;
+  /** Cuantía de la contratación: sin ella no se puede calcular el tope de 3x. */
+  montoEstimado?: number | null;
+  /** Procedimiento: decide si cabe la capacidad económica (Art. 72.3.e). */
+  tipoProceso?: string | null;
+  /**
+   * Tipos que el PDF-modelo del procedimiento declara como apartado.
+   *
+   * NO filtra: el Art. 72.3 permite los cinco y la entidad puede sustentar uno
+   * que su formato no liste. Solo DICE cual pide el formato, que es lo que hasta
+   * ahora habia que saberse de memoria: los modelos declaran entre cero y cuatro
+   * segun el objeto y el procedimiento —los de obras nunca traen capacidad
+   * legal, el no competitivo no trae ninguno— y la ficha ofrecia siempre los
+   * mismos.
+   */
+  requisitosModelo?: ReadonlySet<string>;
 }) {
   // Estado LOCAL del reparto. El valor se persiste como texto canónico y ese
   // round-trip (serializar → parsear) recorta los espacios al final de cada campo
@@ -109,6 +130,15 @@ export function RequisitosCalificacionEditor({
 
   const hayHeredados = otrosObligatorios.length > 0 || otrosFacultativos.length > 0;
 
+  // El Art. 72.3.e limita la capacidad económica a los procedimientos CON
+  // precalificación, y el 72.4 remite a las bases estándar de cada modalidad.
+  // Ofrecerla siempre invitaba a exigir en un Concurso Público de servicios algo
+  // que su modelo no contempla. Si ya viniera rellenada de antes se conserva:
+  // ocultar un dato escrito sería hacerlo desaparecer sin avisar.
+  const conPrecalificacion = tienePrecalificacion(tipoProceso);
+  const tiposAplicables = TIPOS_REQUISITO_ART72.filter(
+    (t) => t.key !== "capacidad_economica" || conPrecalificacion || porTipo.get("capacidad_economica")?.estado !== "no",
+  );
   return (
     <div className="reqCal">
       <p className="reqCalHint">
@@ -118,7 +148,7 @@ export function RequisitosCalificacionEditor({
       </p>
 
       <div className="reqCalTipos">
-        {TIPOS_REQUISITO_ART72.map((tipo) => {
+        {tiposAplicables.map((tipo) => {
           const e = porTipo.get(tipo.key);
           const estado: EstadoRequisito = e?.estado ?? "no";
           return (
@@ -126,6 +156,11 @@ export function RequisitosCalificacionEditor({
               <div className="reqCalTipoHead">
                 <div className="reqCalTipoNombre">
                   <strong>{tipo.label}</strong>
+                  {requisitosModelo?.has(tipo.key) ? (
+                    <span className="reqCalDelModelo" title="El modelo de requerimiento de este procedimiento trae este apartado">
+                      · lo pide el modelo
+                    </span>
+                  ) : null}
                   <small>{ayudaPorObjeto(tipo.key, tipo.ayuda, objeto)}</small>
                 </div>
                 <select
@@ -151,6 +186,32 @@ export function RequisitosCalificacionEditor({
                     rows={filasTextarea(e?.detalle ?? "")}
                     value={e?.detalle ?? ""}
                   />
+                  {/* El modelo parte la capacidad tecnica en cuatro literales con reglas
+                      propias. Se enseñan aqui, donde se escribe, en vez de dejarlas en el
+                      PDF: son las que se observan si se incumplen. */}
+                  {tipo.key === "capacidad_tecnica" ? (
+                    <ul className="reqCalSubtipos">
+                      {SUBTIPOS_CAPACIDAD_TECNICA.map((sub) => (
+                        <li key={sub.clave}>
+                          <strong>{sub.clave} {sub.label}.</strong> {sub.regla}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {/* Topes del modelo. Se avisa, no se bloquea: esto es una PROPUESTA del
+                      area usuaria y quien establece los requisitos es la DEC (Art. 72.1).
+                      Impedir escribir la cifra seria arrogarse esa decision. */}
+                  {(tipo.key === "experiencia_postor" || tipo.key === "capacidad_tecnica")
+                    ? avisosDeTopes(
+                        e?.detalle ?? "",
+                        montoEstimado ?? null,
+                        tipo.key,
+                      ).map((aviso) => (
+                        <span className="reqCalAvisoTope" key={aviso.clave} role="status">
+                          <AlertTriangle aria-hidden size={11} /> {aviso.mensaje}
+                        </span>
+                      ))
+                    : null}
                 </label>
               ) : null}
 

@@ -77,6 +77,8 @@ export type CampoFichaProps = {
   onSubirEett: (archivo: File, tipo: "eett" | "tdr") => void;
   onTocar: (api: string) => void;
   puedeGestionar: boolean;
+  /** Tipos del Art. 72.3 que declara el modelo del procedimiento. */
+  requisitosModelo: ReadonlySet<string>;
   tipoObjeto: string;
   tipoProceso: string | null;
   tocado: boolean;
@@ -105,6 +107,7 @@ export const CampoFicha = memo(function CampoFicha({
   onSubirEett,
   onTocar,
   puedeGestionar,
+  requisitosModelo,
   tipoObjeto,
   tipoProceso,
   tocado,
@@ -246,6 +249,7 @@ export const CampoFicha = memo(function CampoFicha({
           // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
           montoEstimado={montoEstimado}
           tipoProceso={tipoProceso}
+          requisitosModelo={requisitosModelo}
           objeto={tipoObjeto}
           onChange={(next) => onCambio(field.api, next)}
           value={val}
