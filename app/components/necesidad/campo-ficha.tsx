@@ -68,6 +68,17 @@ export type CampoFichaProps = {
   /** Moneda de la convocatoria, para redactar la experiencia del postor. */
   moneda: string;
   necesidadId: string;
+  /**
+   * Experiencia del personal clave (Art. 72.3.b), que el editor de requisitos
+   * pinta dentro de la tarjeta de experiencia del postor. Cadenas vacías salvo
+   * en el campo de requisitos, para no repintar el resto al cambiar.
+   */
+  personalClaveTiempo: string;
+  personalClaveTrabajos: string;
+  personalClavePuesto: string;
+  personalClaveExperiencia: string;
+  /** Escribe un campo suelto de la ficha; el editor lo usa para el personal clave. */
+  onCampoFicha: (api: string, valor: string) => void;
   obligatorio: boolean;
   /** Observaciones sin resolver sobre este campo, o `null`. */
   obsPendiente: ObservacionNecesidad[] | null;
@@ -111,6 +122,11 @@ export const CampoFicha = memo(function CampoFicha({
   montoEstimado,
   moneda,
   necesidadId,
+  personalClaveTiempo,
+  personalClaveTrabajos,
+  personalClavePuesto,
+  personalClaveExperiencia,
+  onCampoFicha,
   obligatorio,
   obsPendiente,
   onAbrirEett,
@@ -289,6 +305,13 @@ export const CampoFicha = memo(function CampoFicha({
           montoEstimado={montoEstimado}
           moneda={moneda}
           necesidadId={necesidadId}
+          personalClave={{
+            tiempo: personalClaveTiempo,
+            trabajos: personalClaveTrabajos,
+            puesto: personalClavePuesto,
+            experiencia: personalClaveExperiencia,
+          }}
+          onCampoFicha={onCampoFicha}
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}
           objeto={tipoObjeto}

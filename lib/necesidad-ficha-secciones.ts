@@ -544,16 +544,18 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // respaldo del dato heredado; su contenido se migra al tipo
       // `experiencia_postor` del editor al abrir la ficha.
 
-      // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave. Va aquí,
-      // junto a la experiencia del postor, y no en el 3.5.2: la entidad lo pide
-      // en esta sección. El formato deja tres huecos —tiempo mínimo, trabajos o
-      // prestaciones, puesto— y la frase se compone con ellos
-      // (lib/personal-clave.ts), como la forma de pago. Los tres huecos van
-      // primero y el texto compuesto, «Redactar con IA», el último.
-      { col: "personal_clave_tiempo", api: "personalClaveTiempo", label: "Tiempo de experiencia mínimo", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", baseLegal: "Art. 72.3.b Reglamento · tiempo mínimo de experiencia del personal clave. Se acredita con el Anexo N° 19; no cuenta la antigüedad mayor a 25 años.", ejemplo: "tres (3) años" },
-      { col: "personal_clave_trabajos", api: "personalClaveTrabajos", label: "Trabajos o prestaciones en la actividad requerida", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · las prestaciones o trabajos en la actividad para la que se exige la experiencia del personal clave.", ejemplo: "supervisión de montaje de estructuras metálicas" },
-      { col: "personal_clave_puesto", api: "personalClavePuesto", label: "Puesto, cargo y/o posición del personal clave", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, baseLegal: "Art. 72.3.b Reglamento · el puesto respecto del cual se acredita la experiencia del personal clave para ejecutar la prestación.", ejemplo: "Ingeniero residente" },
-      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave (texto del requisito)", subgrupo: "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 72.3.b Reglamento · es el texto que va al requerimiento. Se compone con «Redactar con IA» a partir de los tres campos de arriba.", ejemplo: "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente." },
+      // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave. La
+      // entidad la pide DENTRO de la «Experiencia del postor en la especialidad»,
+      // así que sus campos NO se pintan sueltos aquí: los renderiza el editor de
+      // requisitos, dentro de esa tarjeta (RequisitosCalificacionEditor). Se
+      // marcan `oculto` para que la sección no los muestre por su cuenta, pero
+      // siguen en FICHA_SECCIONES para que se carguen y se guarden como columnas.
+      // El texto se compone en el editor a partir de los tres huecos
+      // (lib/personal-clave.ts), igual que la forma de pago.
+      { col: "personal_clave_tiempo", api: "personalClaveTiempo", label: "Tiempo de experiencia mínimo", oculto: true, baseLegal: "Art. 72.3.b Reglamento · tiempo mínimo de experiencia del personal clave. Se acredita con el Anexo N° 19; no cuenta la antigüedad mayor a 25 años.", ejemplo: "tres (3) años" },
+      { col: "personal_clave_trabajos", api: "personalClaveTrabajos", label: "Trabajos o prestaciones en la actividad requerida", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · las prestaciones o trabajos en la actividad para la que se exige la experiencia del personal clave.", ejemplo: "supervisión de montaje de estructuras metálicas" },
+      { col: "personal_clave_puesto", api: "personalClavePuesto", label: "Puesto, cargo y/o posición del personal clave", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · el puesto respecto del cual se acredita la experiencia del personal clave para ejecutar la prestación.", ejemplo: "Ingeniero residente" },
+      { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave (texto del requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · es el texto que va al requerimiento. Se compone con «Redactar con IA» a partir de los tres huecos.", ejemplo: "tres (3) años en supervisión de montaje de estructuras metálicas del personal clave requerido desempeñándose como Ingeniero residente." },
     ],
   },
   {

@@ -49,23 +49,21 @@ describe("cuántos huecos faltan", () => {
   });
 });
 
-describe("está en la ficha, en 3.5.1 junto a la experiencia del postor, y se guarda", () => {
+describe("está en la ficha, en 3.5.1, y se guarda como columnas", () => {
   const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!;
-  const SUBGRUPO = "Capacidad técnica y profesional · Experiencia del personal clave (Art. 72.3.b)";
+  const APIS = ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto", "personalClaveExperiencia"];
 
-  it("los cuatro campos existen y comparten subgrupo", () => {
-    const delBloque = seccion.fields.filter((f) => f.subgrupo === SUBGRUPO).map((f) => f.api);
-    expect(delBloque).toEqual([
-      "personalClaveTiempo",
-      "personalClaveTrabajos",
-      "personalClavePuesto",
-      "personalClaveExperiencia",
-    ]);
+  it("los cuatro campos existen en 3.5.1", () => {
+    for (const api of APIS) expect(seccion.fields.map((f) => f.api), api).toContain(api);
   });
 
-  it("el texto compuesto va el último, tras sus huecos", () => {
-    const delBloque = seccion.fields.filter((f) => f.subgrupo === SUBGRUPO);
-    expect(delBloque.at(-1)!.api).toBe("personalClaveExperiencia");
+  it("son OCULTOS: no se pintan sueltos, los renderiza el editor de requisitos", () => {
+    // La entidad los pide DENTRO de la experiencia del postor; el editor los
+    // pinta ahí. Siguen en FICHA_SECCIONES para que se carguen y se guarden.
+    for (const api of APIS) {
+      const f = seccion.fields.find((x) => x.api === api)!;
+      expect(f.oculto, api).toBe(true);
+    }
   });
 
   it("el esquema los acepta: sin esto el guardado responde 400", () => {
@@ -84,21 +82,17 @@ describe("está en la ficha, en 3.5.1 junto a la experiencia del postor, y se gu
     expect(componerExperienciaPersonalClave({}).length).toBeLessThanOrEqual(LIMITES_TEXTO.personalClaveExperiencia);
   });
 
-  it("los tres huecos no ofrecen «Redactar con IA»; solo el texto compuesto", async () => {
-    const { CAMPOS_SIN_REDACCION_IA } = await import("@/app/components/necesidad/campos-sin-redaccion-ia");
-    for (const api of ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto"]) {
-      expect(CAMPOS_SIN_REDACCION_IA.has(api), api).toBe(true);
-    }
-    expect(CAMPOS_SIN_REDACCION_IA.has("personalClaveExperiencia")).toBe(false);
-  });
-
-  it("«Redactar con IA» compone el texto, no llama al copiloto", async () => {
+  it("el editor de requisitos lo compone dentro de la experiencia del postor", async () => {
+    // Se vigila el fuente porque el suite no monta React. El bloque va en la
+    // tarjeta de experiencia del postor y compone con «componerExperienciaPersonalClave».
     const { readFileSync } = await import("node:fs");
-    const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
-    const i = fuente.indexOf("const pedirRedactarIA");
-    const cuerpo = fuente.slice(i, fuente.indexOf("\n  };", i));
-    expect(cuerpo).toContain('api === "personalClaveExperiencia"');
-    expect(cuerpo).toContain("componerExperienciaPersonalClave");
-    expect(cuerpo.indexOf("componerExperienciaPersonalClave")).toBeLessThan(cuerpo.indexOf("setCopilotoAbierto"));
+    const fuente = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
+    expect(fuente).toContain("componerExperienciaPersonalClave");
+    expect(fuente).toContain('tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha');
+    expect(fuente).toContain('onCampoFicha("personalClaveExperiencia"');
+    // Y escribe los tres huecos por su api.
+    for (const api of ["personalClaveTiempo", "personalClaveTrabajos", "personalClavePuesto"]) {
+      expect(fuente, api).toContain(`onCampoFicha("${api}"`);
+    }
   });
 });

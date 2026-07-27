@@ -140,7 +140,6 @@ import {
 import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { componerFormaPago } from "@/lib/forma-pago";
 import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
-import { componerExperienciaPersonalClave } from "@/lib/personal-clave";
 import { areaQueOtorgaLaConformidad, componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
 
 
@@ -485,19 +484,6 @@ export function NecesidadDetail({
           lugarPresentacion: fichaForm.formaPagoLugar ?? "",
           proyectoInversion: fichaForm.proyectoInversion ?? "",
           tipoPago: fichaForm.formaPagoTipo ?? "",
-        }),
-      );
-      return;
-    }
-    // Experiencia del personal clave (Art. 72.3.b): texto del formato con tres
-    // huecos —tiempo, trabajos, puesto—. Se compone, como la forma de pago.
-    if (api === "personalClaveExperiencia") {
-      setFichaField(
-        "personalClaveExperiencia",
-        componerExperienciaPersonalClave({
-          tiempo: fichaForm.personalClaveTiempo ?? "",
-          trabajos: fichaForm.personalClaveTrabajos ?? "",
-          puesto: fichaForm.personalClavePuesto ?? "",
         }),
       );
       return;

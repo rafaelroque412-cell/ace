@@ -12281,6 +12281,38 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+/* Experiencia del personal clave, dentro de la tarjeta de experiencia del
+   postor. Un bloque con su borde y su título, para que se lea como un apartado
+   propio y no se confunda con los campos del postor. */
+.reqCalPersonalClave {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.reqCalPersonalClaveTitulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.reqCalPersonalClave input[type="text"] {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
 .reqCalSpin {
   animation: reqCalGiro 0.8s linear infinite;
 }

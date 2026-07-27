@@ -24,6 +24,7 @@ import {
   objetoConvocatoria,
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
+import { componerExperienciaPersonalClave } from "@/lib/personal-clave";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 import { Sparkles } from "lucide-react";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
@@ -51,6 +52,8 @@ export function RequisitosCalificacionEditor({
   montoEstimado,
   moneda,
   necesidadId,
+  personalClave,
+  onCampoFicha,
   tipoProceso,
   requisitosModelo,
 }: {
@@ -59,6 +62,15 @@ export function RequisitosCalificacionEditor({
   readOnly?: boolean;
   /** Para pedir a la IA la propuesta de servicios similares. */
   necesidadId?: string;
+  /**
+   * Experiencia del personal clave (Art. 72.3.b). Se registra DENTRO de la
+   * tarjeta de experiencia del postor, pero se guarda en columnas propias de la
+   * necesidad, no en el texto canónico de requisitos: por eso llega y se escribe
+   * por fuera del `value`/`onChange` del editor.
+   */
+  personalClave?: { tiempo: string; trabajos: string; puesto: string; experiencia: string };
+  /** Escribe un campo suelto de la ficha (los cuatro del personal clave). */
+  onCampoFicha?: (api: string, valor: string) => void;
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
   // obras (Art. 72.3.b + Art. 157). undefined = ayuda genérica.
   objeto?: string | null;
@@ -183,6 +195,14 @@ export function RequisitosCalificacionEditor({
     } finally {
       setProponiendo(false);
     }
+  }
+
+  const pc = personalClave ?? { tiempo: "", trabajos: "", puesto: "", experiencia: "" };
+  function redactarPersonalClave() {
+    onCampoFicha?.(
+      "personalClaveExperiencia",
+      componerExperienciaPersonalClave({ tiempo: pc.tiempo, trabajos: pc.trabajos, puesto: pc.puesto }),
+    );
   }
 
   // «Redactar con IA» de la experiencia del postor. Como la forma de pago o la
@@ -368,6 +388,69 @@ export function RequisitosCalificacionEditor({
                     value={e?.acreditacion ?? ""}
                   />
                 </label>
+              ) : null}
+
+              {/* CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave
+                  (Art. 72.3.b). La entidad la pide DENTRO de la experiencia del
+                  postor, así que va aquí, tras «¿Con qué se acredita?». El texto
+                  lo fija el formato y tiene tres huecos; «Redactar con IA» lo
+                  compone con ellos. Se guarda en columnas propias de la
+                  necesidad (personalClave*), por eso escribe con `onCampoFicha`. */}
+              {tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha ? (
+                <div className="reqCalPersonalClave">
+                  <p className="reqCalPersonalClaveTitulo">Capacidad técnica y profesional · Experiencia del personal clave</p>
+                  <label className="reqCalCampo">
+                    <span>Tiempo de experiencia mínimo</span>
+                    <input
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("personalClaveTiempo", ev.target.value)}
+                      placeholder="Ej. tres (3) años"
+                      type="text"
+                      value={pc.tiempo}
+                    />
+                  </label>
+                  <label className="reqCalCampo">
+                    <span>Trabajos o prestaciones en la actividad requerida</span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("personalClaveTrabajos", ev.target.value)}
+                      placeholder="Ej. supervisión de montaje de estructuras metálicas"
+                      rows={filasTextarea(pc.trabajos)}
+                      value={pc.trabajos}
+                    />
+                  </label>
+                  <label className="reqCalCampo">
+                    <span>Puesto, cargo y/o posición del personal clave</span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("personalClavePuesto", ev.target.value)}
+                      placeholder="Ej. Ingeniero residente"
+                      rows={filasTextarea(pc.puesto)}
+                      value={pc.puesto}
+                    />
+                  </label>
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      Experiencia del personal clave (texto del requisito)
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={redactarPersonalClave}
+                        title="Redactar el requisito con el texto del formato (Art. 72.3.b)"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("personalClaveExperiencia", ev.target.value)}
+                      placeholder="Se compone con «Redactar con IA» a partir de los tres campos de arriba."
+                      rows={filasTextarea(pc.experiencia)}
+                      value={pc.experiencia}
+                    />
+                  </label>
+                </div>
               ) : null}
 
               {/* Solo los facultativos se sustentan: son los únicos que la DEC
