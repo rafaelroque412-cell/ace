@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleDot,
-  ClipboardCheck,
   Download,
   FileText,
   Loader,
@@ -57,7 +56,7 @@ import { ObservacionesNecesidad } from "./observaciones-necesidad";
 import { AdmisibilidadDec } from "./admisibilidad-dec";
 import { CoherenciaNecesidad } from "./coherencia-necesidad";
 import { FlujoStepper } from "./flujo-stepper";
-import { contarAdmisibilidad, type AdmisibilidadEstado } from "@/lib/necesidad-admisibilidad";
+import type { AdmisibilidadEstado } from "@/lib/necesidad-admisibilidad";
 import { tarjetasCoherencia } from "@/lib/necesidad-coherencia";
 import { DiffNoObjecion } from "./diff-no-objecion";
 import { useSettingsCatalog } from "./use-settings-catalog";
@@ -101,12 +100,12 @@ import {
   FICHA_IA,
   FICHA_LABEL,
 } from "./necesidad/ficha-estilos";
+import { AccionesFlujo } from "./necesidad/acciones-flujo";
 import { PanelAdjuntos } from "./necesidad/panel-adjuntos";
 import { PanelRiesgos } from "./necesidad/panel-riesgos";
 import { CampoFicha } from "./necesidad/campo-ficha";
 import { useCallbackEstable } from "./necesidad/usar-callback-estable";
 import {
-  type AccionDef,
   NO_OBJECION_LABEL,
   type NoObjecionEstado,
   TIPO_AREA_OPCIONES,
@@ -417,10 +416,6 @@ export function NecesidadDetail({
   const [error, setError] = useState("");
   const [deriving, setDeriving] = useState(false);
 
-  // Workflow: acción pendiente de confirmar (cuando requiere sustento).
-  const [pendingAction, setPendingAction] = useState<AccionDef | null>(null);
-  const [sustento, setSustento] = useState("");
-  const [mecanismo, setMecanismo] = useState("");
   // Se incrementa tras cada transición para refrescar el historial (timeline).
   const [histRecarga, setHistRecarga] = useState(0);
   // Observaciones por campo (D2): la DEC comenta un campo, el área usuaria subsana.
@@ -457,7 +452,6 @@ export function NecesidadDetail({
       cancelado = true;
     };
   }, []);
-  const [runningAction, setRunningAction] = useState(false);
 
   /**
    * Campos de la ficha que se rellenaron desde la propuesta IA, con la fecha
@@ -602,7 +596,6 @@ export function NecesidadDetail({
   const [conflictoGuardado, setConflictoGuardado] = useState(false);
   // Aviso suave de admisibilidad: si la DEC da conforme con puntos sin marcar, se
   // pregunta antes de continuar (no bloquea; solo hace consciente el salto).
-  const [avisoAdmisibilidad, setAvisoAdmisibilidad] = useState<{ accion: AccionDef; faltan: number; total: number } | null>(null);
   const [savingFicha, setSavingFicha] = useState(false);
   // Enfocar el registro en los datos obligatorios (Ley 32069). Los opcionales
   // se revelan por sección o cambiando a "Todos los campos".
@@ -1205,6 +1198,12 @@ export function NecesidadDetail({
   // `reload` se declara de nuevo en cada render; los paneles memoizados
   // necesitan una identidad fija.
   const recargar = useCallbackEstable(reload);
+  // Tras una transición hay que recargar la necesidad Y refrescar la línea de
+  // tiempo: el historial es una petición aparte que no viaja en la recarga.
+  const trasTransicion = useCallbackEstable(async () => {
+    setHistRecarga((n) => n + 1);
+    await reload();
+  });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1585,62 +1584,6 @@ export function NecesidadDetail({
     }
   }
 
-  async function runAction(accion: AccionDef, conSustento: string, conMecanismo: string) {
-    setRunningAction(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/necesidades/${necesidadId}/transicion`, {
-        body: JSON.stringify({ action: accion.action, sustento: conSustento, mecanismo: conMecanismo }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        setError(payload.error ?? "No se pudo ejecutar la acción.");
-        return;
-      }
-      setPendingAction(null);
-      setSustento("");
-      setMecanismo("");
-      setHistRecarga((n) => n + 1); // pone al día la línea de tiempo
-      await reload();
-    } catch {
-      setError("No se pudo conectar con el servidor.");
-    } finally {
-      setRunningAction(false);
-    }
-  }
-
-  // Lanza la acción por su vía normal (con o sin sustento).
-  function ejecutarAccion(accion: AccionDef) {
-    if (accion.requiereSustento) {
-      setPendingAction(accion);
-      setSustento("");
-      setMecanismo("");
-    } else {
-      void runAction(accion, "", "");
-    }
-  }
-
-  async function onClickAccion(accion: AccionDef) {
-    // Aviso suave antes del conforme: si quedan puntos de admisibilidad sin
-    // marcar, se pregunta. El conforme NO los exige, pero conviene ser
-    // consciente. Si el checklist está completo (o el fetch falla), no estorba.
-    if (accion.action === "aprobar_conforme") {
-      try {
-        const r = await fetch(`/api/necesidades/${necesidadId}/admisibilidad`, { cache: "no-store" });
-        if (r.ok) {
-          const d = await r.json();
-          const { done, total } = contarAdmisibilidad(d?.items ?? {});
-          if (total - done > 0) {
-            setAvisoAdmisibilidad({ accion, faltan: total - done, total });
-            return;
-          }
-        }
-      } catch { /* sin checklist accesible: no se estorba el conforme */ }
-    }
-    ejecutarAccion(accion);
-  }
 
   // ===== Observaciones por campo (D2) =====
   async function cargarObservaciones() {
@@ -2001,6 +1944,10 @@ export function NecesidadDetail({
   // Mismo calculo que el panel y que la barra de edicion. En edicion se mide
   // sobre el formulario, para que el numero avance mientras se escribe.
   const avanceOblig = avanceRequerimiento(fichaEdit ? "edicion" : "lectura");
+  // La lista se calcula tambien dentro de <AccionesFlujo>. Es la misma funcion
+  // pura con las mismas entradas, y aqui solo se usa para NOMBRAR el siguiente
+  // paso; pasarsela como prop le habria dado un array nuevo por render y habria
+  // anulado su memoizacion, que es lo que evita repintar el flujo al teclear.
   const acciones = permisos.manage
     ? accionesDisponibles(necesidad.status, lado, { tieneExpediente: Boolean(necesidad.process_id) })
     : [];
@@ -2347,101 +2294,18 @@ export function NecesidadDetail({
         {/* Diff de la no objeción: qué cambió la DEC, para decidir informado. */}
         {mostrarDiffNoObjecion ? <DiffNoObjecion cambios={cambiosNoObjecion} /> : null}
 
-        {/* Remitir a la DEC es una AFIRMACIÓN: dice que el requerimiento está
-            formulado. Por eso es lo único que se condiciona — escribir y guardar
-            a medias sigue siendo trabajo legítimo. */}
-        {permisos.manage && acciones.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {acciones.map((accion) => {
-              const frenado = accion.action === "remitir" && !verificacion.lista;
-              return (
-                <Button
-                  variant={accion.variante === "primary" ? "primary" : "secondary"}
-                  destructive={accion.variante === "danger"}
-                  disabled={runningAction || frenado}
-                  key={accion.action}
-                  onClick={() => onClickAccion(accion)}
-                  title={
-                    frenado
-                      ? `Antes de remitir hay ${verificacion.bloquean === 1 ? "una cosa" : `${verificacion.bloquean} cosas`} que resolver. Míralas en «¿Está lista para el expediente?».`
-                      : accion.ayuda
-                  }
-                  type="button"
-                >
-                  {runningAction ? <Loader size={14} /> : <ArrowRightCircle size={14} />}
-                  {accion.label}
-                </Button>
-              );
-            })}
-          </div>
-        ) : permisos.manage ? (
-          <p className="text-xs font-semibold text-muted">
-            No hay acciones disponibles para tu rol en este estado (
-            {estado?.actor === "dec" ? "corresponde a la DEC" : "corresponde al área usuaria"}).
-          </p>
-        ) : null}
-
-        {pendingAction ? (
-          <div className="grid gap-2 rounded-[10px] border border-dashed border-brand/30 bg-surface p-3 [&_label]:grid [&_label]:gap-1 [&_label]:text-[12.5px] [&_label]:text-muted [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_textarea]:rounded-lg [&_textarea]:border [&_textarea]:border-line [&_textarea]:bg-panel [&_textarea]:px-[9px] [&_textarea]:py-[7px] [&_textarea]:text-[13px]">
-            <label>
-              <span>Sustento de “{pendingAction.label}”</span>
-              <textarea onChange={(e) => setSustento(e.target.value)} rows={3} value={sustento} />
-            </label>
-            <label>
-              <span>Mecanismo (memorando / correo / proveído)</span>
-              <input onChange={(e) => setMecanismo(e.target.value)} placeholder="Memorando N°…" value={mecanismo} />
-            </label>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                disabled={runningAction || sustento.trim().length < 3}
-                onClick={() => void runAction(pendingAction, sustento, mecanismo)}
-                type="button"
-              >
-                {runningAction ? <Loader size={14} /> : <CheckCircle2 size={14} />}
-                Confirmar
-              </Button>
-              <Button onClick={() => setPendingAction(null)} type="button">
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Aviso suave de admisibilidad al dar conforme (no bloquea). Por eso es
-            `role="alert"` y no `alertdialog`: informa sin atrapar el foco ni
-            exigir respuesta, y el conforme sigue disponible. */}
-        {avisoAdmisibilidad ? (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-[1.45] text-ink" role="alert">
-            <p className="m-0 flex items-start gap-2 text-[13px] leading-[1.45] text-ink [&_svg]:mt-0.5 [&_svg]:flex-none [&_svg]:text-warning">
-              <ClipboardCheck size={15} aria-hidden />
-              <span>
-                Quedan <strong>{avisoAdmisibilidad.faltan} de {avisoAdmisibilidad.total}</strong> puntos de
-                admisibilidad sin marcar. El conforme no los exige, pero conviene revisarlos antes de aprobar.
-              </span>
-            </p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <Button
-                onClick={() => {
-                  setAvisoAdmisibilidad(null);
-                  document.querySelector(".admisPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
-                type="button"
-              >
-                Revisar checklist
-              </Button>
-              <Button
-                variant="primary"
-                disabled={runningAction}
-                onClick={() => { const a = avisoAdmisibilidad.accion; setAvisoAdmisibilidad(null); ejecutarAccion(a); }}
-                type="button"
-              >
-                {runningAction ? <Loader size={14} /> : <CheckCircle2 size={14} />}
-                Dar conforme igual
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        <AccionesFlujo
+          estadoActor={estado?.actor}
+          listaParaRemitir={verificacion.lista}
+          necesidadId={necesidadId}
+          onCambio={trasTransicion}
+          onError={setError}
+          pendientesParaRemitir={verificacion.bloquean}
+          puedeGestionar={permisos.manage}
+          role={role}
+          status={necesidad.status}
+          tieneExpediente={Boolean(necesidad.process_id)}
+        />
 
       </Panel>
 
