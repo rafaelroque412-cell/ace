@@ -5,7 +5,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   AlertTriangle,
-  ArrowRightCircle,
   Briefcase,
   Check,
   CheckCircle2,
@@ -48,7 +47,6 @@ import {
 } from "@/lib/necesidad-modos";
 import type { CopilotoCampo } from "./necesidad-copiloto";
 import { cuiDeCadenaFuncional } from "@/lib/pedido-compra-import";
-import { HITO_STATUS_META, type HitosMap, hitosDeFase, progresoDeFase } from "@/lib/procurement-fases";
 import type { Necesidad, NecesidadDocumento, ObservacionNecesidad, RiesgoNecesidad } from "@/lib/necesidades";
 import { VerificacionNecesidad } from "./necesidad-verificacion-panel";
 import { HistorialNecesidad } from "./historial-necesidad";
@@ -91,7 +89,6 @@ import {
   Button,
   EmptyState,
   IconButton,
-  buttonClasses,
 } from "./ui";
 import { cn } from "@/lib/utils";
 import {
@@ -101,6 +98,7 @@ import {
   FICHA_LABEL,
 } from "./necesidad/ficha-estilos";
 import { AccionesFlujo } from "./necesidad/acciones-flujo";
+import { PanelDerivacion } from "./necesidad/panel-derivacion";
 import { PanelAdjuntos } from "./necesidad/panel-adjuntos";
 import { PanelRiesgos } from "./necesidad/panel-riesgos";
 import { CampoFicha } from "./necesidad/campo-ficha";
@@ -372,13 +370,6 @@ export function NecesidadDetail({
   role: string;
 }) {
   const [necesidad, setNecesidad] = useState<NecesidadExt | null>(null);
-  // Avance de la Fase 1 del expediente derivado, para verlo sin abrirlo.
-  const [avanceFase1, setAvanceFase1] = useState<{
-    completados: number;
-    total: number;
-    porcentaje: number;
-    pasos: Array<{ code: string; label: string; status: string; statusLabel: string }>;
-  } | null>(null);
   const [documentos, setDocumentos] = useState<NecesidadDocumento[]>([]);
   const [riesgos, setRiesgos] = useState<RiesgoNecesidad[]>([]);
 
@@ -414,7 +405,6 @@ export function NecesidadDetail({
   const eettFileRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [deriving, setDeriving] = useState(false);
 
   // Se incrementa tras cada transición para refrescar el historial (timeline).
   const [histRecarga, setHistRecarga] = useState(0);
@@ -817,42 +807,6 @@ export function NecesidadDetail({
   // objeción del área usuaria (Art. 44.7), pero ya no impide guardar.
   const necesidadVinculada = Boolean(necesidad?.process_id);
 
-  // Cargar el avance de la Fase 1 cuando la necesidad está derivada. Si el
-  // fetch falla se queda en null y el panel simplemente no muestra la barra:
-  // el enlace al expediente sigue funcionando igual.
-  useEffect(() => {
-    const pid = necesidad?.process_id;
-    let cancelado = false;
-    if (!pid) {
-      // Limpieza diferida: evita el setState síncrono dentro del efecto (la
-      // regla react-hooks/set-state-in-effect) sin cambiar el comportamiento.
-      queueMicrotask(() => {
-        if (!cancelado) setAvanceFase1(null);
-      });
-      return () => {
-        cancelado = true;
-      };
-    }
-    void (async () => {
-      try {
-        const res = await fetch(`/api/processes/${pid}/hitos`);
-        if (!res.ok) return;
-        const payload = (await res.json()) as { hitos?: HitosMap };
-        if (cancelado || !payload.hitos) return;
-        const progreso = progresoDeFase("F1", payload.hitos);
-        const pasos = hitosDeFase("F1").map((h) => {
-          const st = payload.hitos?.[h.code]?.status ?? "pendiente";
-          return { code: h.code, label: h.label, status: st, statusLabel: HITO_STATUS_META[st].label };
-        });
-        setAvanceFase1({ completados: progreso.completados, pasos, porcentaje: progreso.porcentaje, total: progreso.total });
-      } catch {
-        /* sin barra; el enlace sigue */
-      }
-    })();
-    return () => {
-      cancelado = true;
-    };
-  }, [necesidad?.process_id]);
   const puedeAdjuntar = permisos.manage;
   const tipoObj = necesidad?.tipo_objeto;
 
@@ -1613,24 +1567,6 @@ export function NecesidadDetail({
       method: "PATCH",
     });
     if (r.ok) await cargarObservaciones();
-  }
-
-  async function derivar() {
-    setDeriving(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/necesidades/${necesidadId}/derivar`, { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok) {
-        setError(payload.error ?? "No se pudo derivar a expediente.");
-        return;
-      }
-      await reload();
-    } catch {
-      setError("No se pudo conectar con el servidor.");
-    } finally {
-      setDeriving(false);
-    }
   }
 
 
@@ -3425,85 +3361,15 @@ export function NecesidadDetail({
       ) : null}
 
       {panelesDelModo(modo).includes("sec-derivacion") ? (
-        <section id="sec-derivacion" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-          <div className="flex flex-wrap items-center gap-2 text-ink">
-            <ArrowRightCircle size={17} />
-            <h3 className="panelTitle">Derivación a expediente</h3>
-          </div>
-          {necesidad.process_id ? (
-            <>
-              <p className="text-xs font-semibold text-muted">Esta necesidad ya fue derivada e incorporada al CMN.</p>
-              {/* El avance REAL del expediente, sin tener que abrirlo: antes la
-                  necesidad solo decía "derivada" y no contaba nada de la Fase 1. */}
-              {avanceFase1 ? (
-                <div className="fase1Avance">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-line [&>div]:h-full [&>div]:bg-success [&>div]:transition-[width] [&>div]:duration-200">
-                    <div style={{ width: `${avanceFase1.porcentaje}%` }} />
-                  </div>
-                  <small>
-                    Actuaciones preparatorias: <strong>{avanceFase1.completados}</strong> de{" "}
-                    {avanceFase1.total} pasos
-                  </small>
-                  <div className="flex flex-wrap gap-1">
-                    {avanceFase1.pasos.map((paso) => (
-                      <span
-                        className="rounded border border-line px-[5px] py-px text-[10px] font-semibold text-muted"
-                        data-status={paso.status}
-                        key={paso.code}
-                        title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
-                      >
-                        {paso.code}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${necesidad.process_id}`}>
-                <Briefcase size={15} />
-                Abrir expediente
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="text-xs font-semibold text-muted">
-                Al derivar, la DEC crea el Expediente de Contratación y la necesidad pasa a “Incorporado al CMN”. Requiere que
-                el requerimiento esté <strong>conforme</strong>.
-              </p>
-              <Button
-                variant="primary"
-                disabled={!permisos.derivar || deriving || necesidad.status !== "conforme"}
-                onClick={derivar}
-                type="button"
-              >
-                {deriving ? <Loader size={15} /> : <ArrowRightCircle size={15} />}
-                Derivar a expediente
-              </Button>
-              {!permisos.derivar ? (
-                <small className="text-xs font-semibold text-muted">Derivar requiere rol con gestión de expedientes (DEC, AGA, Titular).</small>
-              ) : necesidad.status !== "conforme" ? (
-                <div className="mt-1 grid gap-1.5 rounded-lg border border-line bg-brand-soft px-2.5 py-2 [&_small]:leading-[1.45]">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                    Estado actual:{" "}
-                    <Badge tone={necesidadStatusTono(necesidad.status)}>
-                      {necesidadStatusLabel(necesidad.status)}
-                    </Badge>
-                  </span>
-                  <small className="text-xs font-semibold text-muted">
-                    El requerimiento debe estar <strong>Conforme</strong> para derivar.{" "}
-                    {siguienteAccion ? (
-                      <>
-                        Siguiente paso: pulsa <strong>«{siguienteAccion.label}»</strong> en el panel “Requerimiento ·
-                        flujo” de arriba y continúa hasta “Conforme”.
-                      </>
-                    ) : (
-                      <>Usa las acciones del panel “Requerimiento · flujo” de arriba para avanzar hasta “Conforme”.</>
-                    )}
-                  </small>
-                </div>
-              ) : null}
-            </>
-          )}
-        </section>
+        <PanelDerivacion
+          necesidadId={necesidadId}
+          onCambio={recargar}
+          onError={setError}
+          processId={necesidad.process_id ?? null}
+          puedeDerivar={permisos.derivar}
+          siguienteAccionLabel={siguienteAccion?.label ?? null}
+          status={necesidad.status}
+        />
       ) : null}
 
       {panelesDelModo(modo).includes("sec-historial") ? (
