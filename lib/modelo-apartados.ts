@@ -136,7 +136,9 @@ export const APARTADOS_MODELO: ReadonlyArray<{
 export function titulosDelModelo(texto: string): string[] {
   const patrones = [
     /(?:^|\n|\s)([a-j])\.\s{0,4}([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ \t/]{4,60})/g,
-    /(?:^|\n|\s)(3\.\d)\.?\s{0,4}([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ \t/]{4,60})/g,
+    // Hasta tres niveles. Los modelos de OBRAS numeran «3.5.14. PENALIDADES
+    // POR MORA»; con solo «3.\d» no casaba ni un titulo en esos documentos.
+    /(?:^|\n|\s)(3(?:\.\d{1,2}){1,2})\.?\s{0,4}([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ \t/]{4,60})/g,
   ];
   const salida: string[] = [];
   for (const re of patrones) {

@@ -42,6 +42,17 @@ describe("deteccion de apartados", () => {
     expect(camposExigidosDeterministas(soloMencion, TODOS)).toEqual([]);
   });
 
+  it("lee la numeracion a tres niveles de los modelos de obras", () => {
+    // Los modelos de obras no usan las letras a)-j): numeran «3.5.14.». Con un
+    // patron de dos niveles no casaba NI UN titulo en esos cuatro documentos, y
+    // el sintoma era engañoso —parecian usar otro vocabulario—.
+    const obras = "3.5.6. SUBCONTRATACIÓN\n3.5.7. MODALIDAD DE PAGO\n3.5.14. PENALIDADES POR MORA";
+    const r = camposExigidosDeterministas(obras, TODOS);
+    expect(r).toContain("subcontratacion");
+    expect(r).toContain("modalidadPago");
+    expect(r).toContain("penalidadMora");
+  });
+
   it("el plazo arrastra su unidad de computo", () => {
     // Un numero de dias sin unidad no significa nada en un contrato (Art. 105.3).
     const r = camposExigidosDeterministas("c. PLAZO DE PRESTACIÓN DEL SERVICIO", TODOS);

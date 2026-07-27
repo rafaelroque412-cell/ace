@@ -1516,7 +1516,12 @@ export async function camposExigidosDelModelo(
   //    Ahora se detectan los titulos de los apartados y se traducen a campos con
   //    una tabla legible y probada (lib/modelo-apartados.ts). Si falta un
   //    apartado se ve y se corrige; antes solo cambiaba el resultado.
-  const modelo = await modeloOeceCompleto(docId);
+  //    Se lee el modelo ENTERO. El tope de 16 000 caracteres existe porque el
+  //    texto iba a la IA, que cobra por contexto; un escaneo con expresiones
+  //    regulares no tiene ese coste. Con el tope puesto, el modelo de Licitación
+  //    Pública de Obras —110 172 caracteres— se leía al 15 % y perdía ocho
+  //    apartados que viven en la segunda mitad del documento.
+  const modelo = await modeloOeceCompleto(docId, Number.MAX_SAFE_INTEGER);
   if (!modelo.trim()) return { exigidos: [], usoModelo: false, cacheado: false };
 
   const disponibles = new Set(input.camposObjetivo.map((c) => c.api));
