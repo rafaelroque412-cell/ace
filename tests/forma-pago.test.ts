@@ -123,3 +123,45 @@ describe("el apartado está en la ficha y se guarda", () => {
     expect(cuerpo.indexOf("componerFormaPago")).toBeLessThan(cuerpo.indexOf("setCopilotoAbierto"));
   });
 });
+
+describe("el tipo de pago se elige, no se escribe", () => {
+  it("son exactamente dos opciones", async () => {
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "formaPagoTipo")!;
+    expect(campo.kind).toBe("select");
+    expect(campo.opciones?.map((o) => o.label)).toEqual(["Pago único", "Pagos a cuenta"]);
+  });
+
+  it("el valor guardado encaja en la frase del formato", async () => {
+    // La frase es «...a favor del contratista en ___.», así que el valor se
+    // guarda ya redactado —«un pago único»— y no como etiqueta suelta.
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "formaPagoTipo")!;
+    for (const opcion of campo.opciones ?? []) {
+      const texto = componerFormaPago({ ...COMPLETO, tipoPago: opcion.value });
+      expect(texto).toContain(`a favor del contratista en ${opcion.value}.`);
+    }
+  });
+
+  it("y el esquema acepta los dos valores", async () => {
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    const { FICHA_SECCIONES } = await import("@/lib/necesidad-ficha-secciones");
+    const campo = FICHA_SECCIONES.flatMap((s) => s.fields).find((f) => f.api === "formaPagoTipo")!;
+    for (const o of campo.opciones ?? []) {
+      expect(necesidadUpdateSchema.safeParse({ formaPagoTipo: o.value }).success, o.value).toBe(true);
+    }
+  });
+});
+
+describe("«Redactar con IA» solo donde hay prosa", () => {
+  it("no sale en desplegables, fechas ni números", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad/campo-ficha.tsx", "utf-8");
+    // El botón se calcula UNA vez y se reparte; la condición vive ahí.
+    const i = fuente.indexOf("const botonRedactarIA");
+    const decl = fuente.slice(i - 400, i + 120);
+    expect(decl).toContain("esProsa");
+    expect(decl).toMatch(/kind === "text"/);
+    expect(decl).toMatch(/kind === "textarea"/);
+  });
+});

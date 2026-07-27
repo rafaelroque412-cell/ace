@@ -144,7 +144,11 @@ export const CampoFicha = memo(function CampoFicha({
     "aria-describedby": hasError ? errorId : undefined,
     "aria-invalid": hasError || undefined,
   } as const;
-  const botonRedactarIA = puedeGestionar && !CAMPOS_SIN_REDACCION_IA.has(field.api) ? (
+  // Solo en campos de PROSA. En un desplegable, una fecha o un numero no hay
+  // nada que redactar: el boton invitaba a pedirle al copiloto que eligiera una
+  // opcion de una lista cerrada, y salia en siete de ellos.
+  const esProsa = !field.kind || field.kind === "text" || field.kind === "textarea";
+  const botonRedactarIA = puedeGestionar && esProsa && !CAMPOS_SIN_REDACCION_IA.has(field.api) ? (
     <button
       className="mb-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-accent/10 px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/20"
       onClick={(e) => { e.preventDefault(); onRedactarIA(field.api); }}
