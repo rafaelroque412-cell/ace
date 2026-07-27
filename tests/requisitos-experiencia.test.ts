@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   HUECO_MONTO_EXPERIENCIA,
+  HUECO_SIMILARES,
   componerExperienciaPostor,
   importeConLetras,
   montoDeExperiencia,
+  similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
 import { numeroALetras, nombreMoneda } from "@/lib/numero-a-letras";
 
@@ -81,6 +83,39 @@ describe("el requisito completo es el del formato", () => {
     const vacio = componerExperienciaPostor({ moneda: "PEN", objeto: "servicios" });
     expect(vacio).toContain(`[${HUECO_MONTO_EXPERIENCIA}]`);
     expect(vacio).toContain("por la contratación de servicios iguales o similares");
+  });
+});
+
+describe("la segunda frase: qué se considera similar", () => {
+  it("acompaña siempre al requisito, con lo registrado dentro", () => {
+    const t = componerExperienciaPostor({
+      monto: "180000",
+      moneda: "PEN",
+      objeto: "servicios",
+      similares: "mantenimiento de áreas verdes y jardinería",
+    });
+    expect(t).toContain(
+      "Se consideran servicios similares a los siguientes: mantenimiento de áreas verdes y jardinería.",
+    );
+  });
+
+  it("sin registrar, conserva el corchete del formato", () => {
+    const t = componerExperienciaPostor({ monto: "180000", objeto: "servicios" });
+    expect(t).toContain(`Se consideran servicios similares a los siguientes: [${HUECO_SIMILARES}].`);
+  });
+
+  it("la palabra del objeto es la misma en las dos frases", () => {
+    const t = componerExperienciaPostor({ monto: "1", objeto: "bienes", similares: "equipos de cómputo" });
+    expect(t).toContain("por la contratación de bienes iguales o similares");
+    expect(t).toContain("Se consideran bienes similares a los siguientes: equipos de cómputo.");
+  });
+
+  it("se relee del detalle, y el corchete no cuenta como valor", () => {
+    const conValor = componerExperienciaPostor({ monto: "1", objeto: "servicios", similares: "jardinería y afines" });
+    expect(similaresDeExperiencia(conValor)).toBe("jardinería y afines");
+    const sinValor = componerExperienciaPostor({ monto: "1", objeto: "servicios" });
+    expect(similaresDeExperiencia(sinValor)).toBe("");
+    expect(similaresDeExperiencia("texto sin la frase")).toBe("");
   });
 });
 

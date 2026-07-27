@@ -22,6 +22,9 @@ export const HUECO_MONTO_EXPERIENCIA =
   "CONSIGNAR EL MONTO DE FACTURACIÓN EXPRESADO EN NÚMEROS Y LETRAS EN LA MONEDA DE LA " +
   "CONVOCATORIA, MONTO QUE NO PODRÁ SER MAYOR A TRES VECES LA CUANTÍA DE LA CONTRATACIÓN O DEL ÍTEM";
 
+/** El corchete de la segunda frase: qué se considera similar al objeto. */
+export const HUECO_SIMILARES = "CONSIGNAR LOS SERVICIOS SIMILARES AL OBJETO CONVOCADO";
+
 /** Símbolo con el que se escribe la cifra: «S/» o «US$». */
 function simboloMoneda(moneda?: string | null): string {
   return nombreMoneda(moneda) === "DÓLARES AMERICANOS" ? "US$" : "S/";
@@ -35,7 +38,7 @@ function simboloMoneda(moneda?: string | null): string {
  * base difiere; se deja «obras»/«consultoría de obras» para no inventar la
  * redacción de un formato que ese objeto no usa igual.
  */
-function objetoConvocatoria(objeto?: string | null): string {
+export function objetoConvocatoria(objeto?: string | null): string {
   switch ((objeto ?? "").toLowerCase()) {
     case "bienes":
       return "bienes";
@@ -75,13 +78,34 @@ export function componerExperienciaPostor(args: {
   monto?: string | number | null;
   moneda?: string | null;
   objeto?: string | null;
+  /** Qué se considera similar al objeto convocado. Vacío conserva el corchete. */
+  similares?: string | null;
 }): string {
+  const palabra = objetoConvocatoria(args.objeto);
+  const similar = (args.similares ?? "").trim();
+  // La segunda frase acompaña SIEMPRE a la primera: es parte del mismo requisito
+  // del formato. Sin registrar lo similar, se ve su corchete —lo que falta en un
+  // documento que se firma tiene que verse—.
+  const segunda = `Se consideran ${palabra} similares a los siguientes: ${similar || `[${HUECO_SIMILARES}]`}.`;
   return (
     `El postor debe acreditar un monto facturado acumulado equivalente a ${importeConLetras(args.monto, args.moneda)}, ` +
-    `por la contratación de ${objetoConvocatoria(args.objeto)} iguales o similares al objeto de la convocatoria, ` +
+    `por la contratación de ${palabra} iguales o similares al objeto de la convocatoria, ` +
     "durante los quince (15) años anteriores a la fecha de la presentación de ofertas que se computa desde la fecha " +
-    "de la conformidad o emisión del comprobante de pago, según corresponda."
+    `de la conformidad o emisión del comprobante de pago, según corresponda. ${segunda}`
   );
+}
+
+/**
+ * Rescata lo que se consideró similar, de un detalle ya redactado.
+ *
+ * Como el monto, no tiene columna: se relee del propio texto. El corchete sin
+ * rellenar no es un valor, así que devuelve vacío.
+ */
+export function similaresDeExperiencia(detalle: string | null | undefined): string {
+  const m = (detalle ?? "").match(/similares a los siguientes:\s*([\s\S]*)$/i);
+  if (!m) return "";
+  const v = m[1].trim().replace(/\.\s*$/, "").trim();
+  return v.startsWith("[") ? "" : v;
 }
 
 /**

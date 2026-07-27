@@ -17,7 +17,12 @@ import {
   type TipoRequisitoArt72,
 } from "@/lib/requisitos-calificacion";
 import { avisosDeTopes } from "@/lib/requisitos-topes";
-import { componerExperienciaPostor, montoDeExperiencia } from "@/lib/requisitos-experiencia";
+import {
+  componerExperienciaPostor,
+  montoDeExperiencia,
+  objetoConvocatoria,
+  similaresDeExperiencia,
+} from "@/lib/requisitos-experiencia";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 import { Sparkles } from "lucide-react";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
@@ -92,11 +97,18 @@ export function RequisitosCalificacionEditor({
   const [montoExp, setMontoExp] = useState<string>(() =>
     montoDeExperiencia(repartirRequisitos(parseRequisitos(value)).porTipo.get("experiencia_postor")?.detalle ?? ""),
   );
+  // Qué se considera similar al objeto convocado: la segunda frase del requisito.
+  // Tampoco tiene columna; se relee del detalle, igual que el monto.
+  const [similaresExp, setSimilaresExp] = useState<string>(() =>
+    similaresDeExperiencia(repartirRequisitos(parseRequisitos(value)).porTipo.get("experiencia_postor")?.detalle ?? ""),
+  );
   useEffect(() => {
     if (value !== emitidoRef.current) {
       const next = repartirRequisitos(parseRequisitos(value));
       setReparto(next);
-      setMontoExp(montoDeExperiencia(next.porTipo.get("experiencia_postor")?.detalle ?? ""));
+      const detExp = next.porTipo.get("experiencia_postor")?.detalle ?? "";
+      setMontoExp(montoDeExperiencia(detExp));
+      setSimilaresExp(similaresDeExperiencia(detExp));
       emitidoRef.current = value;
     }
   }, [value]);
@@ -148,7 +160,11 @@ export function RequisitosCalificacionEditor({
   // modelo: es texto reglamentario con un solo hueco, el monto. El monto y su
   // versión en letras salen del número tecleado, en la moneda de la convocatoria.
   function redactarExperiencia() {
-    editar("experiencia_postor", "detalle", componerExperienciaPostor({ monto: montoExp, moneda, objeto }));
+    editar(
+      "experiencia_postor",
+      "detalle",
+      componerExperienciaPostor({ monto: montoExp, moneda, objeto, similares: similaresExp }),
+    );
   }
 
   const hayHeredados = otrosObligatorios.length > 0 || otrosFacultativos.length > 0;
@@ -204,30 +220,42 @@ export function RequisitosCalificacionEditor({
                   letras, en la moneda de la convocatoria—. Se registra aquí y
                   «Redactar con IA» lo compone en el detalle de abajo. */}
               {tipo.key === "experiencia_postor" && estado !== "no" ? (
-                <div className="reqCalExperiencia">
+                <>
                   <label className="reqCalCampo">
-                    <span>Monto facturado acumulado exigido</span>
-                    <input
+                    <span>{`¿Qué se considera ${objetoConvocatoria(objeto)} similar al objeto convocado?`}</span>
+                    <textarea
                       disabled={readOnly}
-                      inputMode="decimal"
-                      min={0}
-                      onChange={(ev) => setMontoExp(ev.target.value)}
-                      placeholder="Ej. 180000.00"
-                      step="0.01"
-                      type="number"
-                      value={montoExp}
+                      onChange={(ev) => setSimilaresExp(ev.target.value)}
+                      placeholder="Ej. mantenimiento de áreas verdes, jardinería y afines."
+                      rows={filasTextarea(similaresExp)}
+                      value={similaresExp}
                     />
                   </label>
-                  <button
-                    className="reqCalRedactar"
-                    disabled={readOnly}
-                    onClick={redactarExperiencia}
-                    title="Redactar el requisito con el texto del formato (Art. 72.3.c)"
-                    type="button"
-                  >
-                    <Sparkles size={12} /> Redactar con IA
-                  </button>
-                </div>
+                  <div className="reqCalExperiencia">
+                    <label className="reqCalCampo">
+                      <span>Monto facturado acumulado exigido</span>
+                      <input
+                        disabled={readOnly}
+                        inputMode="decimal"
+                        min={0}
+                        onChange={(ev) => setMontoExp(ev.target.value)}
+                        placeholder="Ej. 180000.00"
+                        step="0.01"
+                        type="number"
+                        value={montoExp}
+                      />
+                    </label>
+                    <button
+                      className="reqCalRedactar"
+                      disabled={readOnly}
+                      onClick={redactarExperiencia}
+                      title="Redactar el requisito con el texto del formato (Art. 72.3.c)"
+                      type="button"
+                    >
+                      <Sparkles size={12} /> Redactar con IA
+                    </button>
+                  </div>
+                </>
               ) : null}
               {estado !== "no" ? (
                 <label className="reqCalCampo">
