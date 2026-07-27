@@ -58,6 +58,15 @@ export type FichaField = {
    */
   juntoA?: string;
   wide?: boolean;
+  /**
+   * Rango de un campo numerico, tal como lo acota el esquema.
+   *
+   * Se declaran para que el navegador los aplique en la propia casilla. Sin
+   * ellos, el unico sitio donde se nota el tope es el 400 del guardado, que
+   * llega despues y no dice donde mirar sin abrir el aviso.
+   */
+  min?: number;
+  max?: number;
   /** Campo booleano (checkbox) */
   checkbox?: boolean;
   /**
@@ -445,7 +454,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // se enseña donde no aplica y el plazo de subsanacion solo donde es hueco
       // (en bienes el 30% va fijo en el texto). El apartado se compone con
       // «Redactar con IA» en `recepcionConformidad` (lib/recepcion-conformidad.ts).
-      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Otras condiciones del contrato", mostrarPara: ["bienes"], baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas.", ejemplo: "Unidad de Almacén Central" },
+      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Recepción y conformidad (Art. 144)", mostrarPara: ["bienes"], baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas.", ejemplo: "Unidad de Almacén Central" },
       // Espejo de «Área que otorga la conformidad» de la forma de pago, igual
       // que centro de costo lo es del área usuaria. Es el MISMO dato —quién
       // firma la conformidad del Art. 144 es quién la firma para el pago del
@@ -453,10 +462,16 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // sección: se veían los dos juntos y nada garantizaba que dijeran lo
       // mismo. Se conserva la columna porque el apartado del Art. 144 la usa;
       // lo que desaparece es la segunda casilla.
-      { col: "conformidad_area", api: "conformidadArea", label: "Área que otorga la conformidad", subgrupo: "Otras condiciones del contrato", oculto: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad.", ejemplo: "Sub Gerencia de Desarrollo Económico" },
-      { col: "conformidad_plazo", api: "conformidadPlazo", label: "Plazo máximo para la conformidad", subgrupo: "Otras condiciones del contrato", baseLegal: "Art. 144 Reglamento · siete (7) días, o hasta veinte (20) si hacen falta pruebas que verifiquen el cumplimiento.", ejemplo: "siete (7)" },
-      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones", subgrupo: "Otras condiciones del contrato", mostrarPara: ["servicios", "consultoria_obra"], baseLegal: "No mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. En bienes esa cifra va fija en el texto.", ejemplo: "cinco (5) días hábiles" },
-      { subgrupo: "Otras condiciones del contrato", col: "recepcion_conformidad", api: "recepcionConformidad", label: "Recepción y conformidad de la prestación", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad de bienes y servicios.", ejemplo: "Conformidad otorgada por el área usuaria en 10 días hábiles" },
+      { col: "conformidad_area", api: "conformidadArea", label: "Área que otorga la conformidad", subgrupo: "Recepción y conformidad (Art. 144)", oculto: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad.", ejemplo: "Sub Gerencia de Desarrollo Económico" },
+      // Los dos plazos son NÚMEROS de días, no prosa. Se pedían como texto y se
+      // escribían «siete (7)», «cinco (5) días hábiles», «7 dias», cada ficha a
+      // su manera: con eso no se puede contar ni comparar contra el tope del
+      // Art. 144, y el apartado lo redacta luego el copiloto a partir de ellos.
+      // El tope de 999 son los tres dígitos: un plazo de conformidad de cuatro
+      // cifras es un error de tecleo, no un plazo.
+      { col: "conformidad_plazo", api: "conformidadPlazo", label: "Plazo máximo para la conformidad (días)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, baseLegal: "Art. 144 Reglamento · siete (7) días, o hasta veinte (20) si hacen falta pruebas que verifiquen el cumplimiento.", ejemplo: "7" },
+      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones (días hábiles)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, mostrarPara: ["servicios", "consultoria_obra"], baseLegal: "No mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. En bienes esa cifra va fija en el texto.", ejemplo: "5" },
+      { subgrupo: "Recepción y conformidad (Art. 144)", col: "recepcion_conformidad", api: "recepcionConformidad", label: "Recepción y conformidad de la prestación", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad de bienes y servicios.", ejemplo: "Conformidad otorgada por el área usuaria en 10 días hábiles" },
       { subgrupo: "Otras condiciones del contrato", col: "gestion_riesgos", api: "gestionRiesgos", label: "Gestión de riesgos", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.3 Reglamento · al elaborar el requerimiento se inicia la identificación y evaluación de riesgos y su asignación a alguna de las partes, que es insumo de la estrategia de contratación.", ejemplo: "Matriz de riesgos y asignación entre las partes" },
       { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "metas_fisicas", api: "metasFisicas", label: "Metas físicas / objetivos funcionales", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154 Reglamento · requerimiento de obras y consultoría de obras; las metas físicas concretan el alcance del Art. 44.2.a.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Construcción de 1,200 m² de pavimento rígido" },
       { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "disponibilidad_terreno", api: "disponibilidadTerreno", label: "Disponibilidad física del terreno", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154.1.e Reglamento · Sustento de la disponibilidad del terreno, según corresponda", mostrarPara: ["obras"], ejemplo: "Terreno saneado, libre de interferencias (acta adjunta)" },

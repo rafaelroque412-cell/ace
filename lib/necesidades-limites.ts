@@ -101,8 +101,9 @@ export const LIMITES_TEXTO: Record<string, number> = {
   formaPagoDireccion: 300,
   recepcionArea: 300,
   conformidadArea: 300,
-  conformidadPlazo: 200,
-  conformidadPlazoSubsanacion: 300,
+  // conformidadPlazo y conformidadPlazoSubsanacion ya no estan aqui: son
+  // numeros de dias y este mapa es de topes de TEXTO. Dejarlos capaba «100» a
+  // sus primeros caracteres sin motivo.
   requisitosAdicionales: 4000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,

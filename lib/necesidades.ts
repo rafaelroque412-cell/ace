@@ -109,8 +109,8 @@ export type Necesidad = {
   // Huecos del apartado del Art. 144 (recepción y conformidad).
   recepcion_area: string | null;
   conformidad_area: string | null;
-  conformidad_plazo: string | null;
-  conformidad_plazo_subsanacion: string | null;
+  conformidad_plazo: number | null;
+  conformidad_plazo_subsanacion: number | null;
   subcontratacion: string | null;
   descripcion_general: string | null;
   ficha_tecnica_identificacion: string | null;
@@ -267,8 +267,12 @@ export const necesidadCreateSchema = z.object({
   formaPagoDireccion: optionalText(300),
   recepcionArea: optionalText(300),
   conformidadArea: optionalText(300),
-  conformidadPlazo: optionalText(200),
-  conformidadPlazoSubsanacion: optionalText(300),
+  // Numeros de dias, no prosa. `max(999)` son los tres digitos que caben: un
+  // plazo de conformidad de cuatro cifras es un error de tecleo. El tipo TIENE
+  // que cuadrar con el `kind: "number"` de la ficha —que envia un numero— o
+  // cada guardado responde 400; hay una prueba que recorre el catalogo entero.
+  conformidadPlazo: z.number().int().min(1).max(999).optional(),
+  conformidadPlazoSubsanacion: z.number().int().min(1).max(999).optional(),
   subcontratacion: optionalText(1000),
   descripcionGeneral: optionalText(4000),
   fichaTecnicaIdentificacion: optionalText(300),

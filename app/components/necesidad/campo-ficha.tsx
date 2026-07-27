@@ -479,6 +479,8 @@ export const CampoFicha = memo(function CampoFicha({
         <input
           className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
           {...marcasError}
+          max={field.max}
+          min={field.min}
           onBlur={validarAlSalir}
           onChange={(e) => { onCambio(field.api, e.target.value); alEscribir(); }}
           type={field.kind === "number" ? "number" : "date"}
