@@ -158,9 +158,15 @@ describe("la sección 3.3 sigue el orden y las letras del requerimiento modelo",
     }
   });
 
-  it("el 3.5.2 vuelve a tener campo: el modelo trae esa sección", () => {
+  it("el 3.5.2 tiene campos visibles: el modelo trae esa sección", () => {
+    // Se guardó vacía al consolidar el personal clave en el editor del 72.3, y
+    // `seccionesVisibles` descarta las vacías, así que el 3.5.2 desaparecía. Hoy
+    // trae la experiencia del personal clave (cuatro campos) y los adicionales.
     const s = FICHA_SECCIONES.find((x) => x.title.startsWith("3.5.2"));
-    expect(s?.fields.filter((f) => !f.oculto).map((f) => f.api)).toEqual(["requisitosAdicionales"]);
+    const visibles = s?.fields.filter((f) => !f.oculto).map((f) => f.api) ?? [];
+    expect(visibles).toContain("requisitosAdicionales");
+    expect(visibles).toContain("personalClaveExperiencia");
+    expect(visibles.length).toBeGreaterThan(0);
   });
 });
 
