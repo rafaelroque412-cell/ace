@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  areaQueOtorgaLaConformidad,
   componerRecepcionConformidad,
   huecosDePlantilla,
   plantillaPara,
@@ -200,6 +201,59 @@ describe("el apartado entero cabe en su tope", () => {
       const t = componerRecepcionConformidad(objeto, {})!;
       expect(t.length, objeto).toBeLessThanOrEqual(LIMITES_TEXTO.recepcionConformidad);
     }
+  });
+});
+
+describe("en servicios, el área de recepción dice quién otorga la conformidad", () => {
+  // En una inversión ejecutada por administración directa la conformidad la
+  // firma el RESIDENTE, no la sub gerencia que tramita el pago. Como en
+  // servicios el formato no tiene recepción, ese campo queda libre para decirlo.
+  const AREAS = { areaConformidad: "SUB GERENCIA DE EJECUCIÓN", areaRecepcion: "RESIDENTE" };
+
+  it("en servicios manda el residente", () => {
+    expect(areaQueOtorgaLaConformidad("servicios", AREAS)).toBe("RESIDENTE");
+    expect(areaQueOtorgaLaConformidad("consultoria_obra", AREAS)).toBe("RESIDENTE");
+  });
+
+  it("en bienes NO se sustituye: son dos actos y dos áreas", () => {
+    // Almacén recibe y el área usuaria conforma. Cambiar una por otra haría que
+    // el apartado dijera dos veces el mismo nombre.
+    expect(areaQueOtorgaLaConformidad("bienes", AREAS)).toBe("SUB GERENCIA DE EJECUCIÓN");
+  });
+
+  it("en obras tampoco: su recepción la hace una comisión", () => {
+    expect(areaQueOtorgaLaConformidad("obras", AREAS)).toBe("SUB GERENCIA DE EJECUCIÓN");
+  });
+
+  it("sin residente registrado, manda el área de siempre", () => {
+    // Es lo que había y lo que sigue valiendo para todo lo ya escrito.
+    expect(areaQueOtorgaLaConformidad("servicios", { ...AREAS, areaRecepcion: "" })).toBe(
+      "SUB GERENCIA DE EJECUCIÓN",
+    );
+    expect(areaQueOtorgaLaConformidad("servicios", { ...AREAS, areaRecepcion: "  " })).toBe(
+      "SUB GERENCIA DE EJECUCIÓN",
+    );
+  });
+
+  it("y así queda el apartado", () => {
+    const t = componerRecepcionConformidad("servicios", {
+      areaConformidad: areaQueOtorgaLaConformidad("servicios", AREAS),
+      plazoConformidad: "7",
+      plazoSubsanacion: "de 15 días hábiles",
+    })!;
+    expect(t).toContain("La conformidad es otorgada por RESIDENTE en el plazo máximo de 7 días");
+    expect(t).not.toContain("SUB GERENCIA");
+  });
+
+  it("los dos apartados lo aplican con la MISMA regla", async () => {
+    // Se vigila el fuente porque el suite no monta React. Si solo lo aplicara
+    // uno, el requerimiento diría que la conformidad la firma el residente y
+    // que el pago exige la de la sub gerencia: dos firmantes para un solo acto.
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+    const i = fuente.indexOf("const pedirRedactarIA");
+    const cuerpo = fuente.slice(i, fuente.indexOf("\n  };", i));
+    expect(cuerpo.match(/areaQueOtorgaLaConformidad\(fichaForm\.tipoObjeto/g)).toHaveLength(2);
   });
 });
 

@@ -140,7 +140,7 @@ import {
 import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { componerFormaPago } from "@/lib/forma-pago";
 import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
-import { componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
+import { areaQueOtorgaLaConformidad, componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
 
 
 
@@ -466,7 +466,12 @@ export function NecesidadDetail({
       setFichaField(
         "formaPago",
         componerFormaPago({
-          areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+          // Quien firma la conformidad que el pago exige es el mismo que la
+          // otorga en el Art. 144: si hay un residente registrado, es el.
+          areaConformidad: areaQueOtorgaLaConformidad(fichaForm.tipoObjeto, {
+            areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+            areaRecepcion: fichaForm.recepcionArea ?? "",
+          }),
           // El proyecto de inversion y su CUI no son huecos del formato: se
           // traen de «b) Inversion a la que se imputa» para decir contra que
           // inversion firma la conformidad esa area, que otorga varias.
@@ -508,9 +513,14 @@ export function NecesidadDetail({
     if (api === "recepcionConformidad") {
       const subsanacion = (fichaForm.conformidadPlazoSubsanacion ?? "").trim();
       const texto = componerRecepcionConformidad(fichaForm.tipoObjeto, {
-        // El area que otorga la conformidad se pide una sola vez, en la forma
-        // de pago; aqui se lee de alli.
-        areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+        // En SERVICIOS no hay recepcion que dar, asi que «Area que efectua la
+        // recepcion» dice quien firma de verdad la conformidad —el residente de
+        // la inversion, no la sub gerencia que tramita el pago—. En bienes no se
+        // sustituye: alli son dos actos y dos areas.
+        areaConformidad: areaQueOtorgaLaConformidad(fichaForm.tipoObjeto, {
+          areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+          areaRecepcion: fichaForm.recepcionArea ?? "",
+        }),
         areaRecepcion: fichaForm.recepcionArea ?? "",
         plazoConformidad: (fichaForm.conformidadPlazo ?? "").trim(),
         // El campo es un NUMERO de dias y el hueco pide una frase: el texto dice

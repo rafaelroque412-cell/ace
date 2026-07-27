@@ -49,6 +49,31 @@ export function plantillaPara(objeto: string | null | undefined): "bienes" | "se
   return null;
 }
 
+/**
+ * Quién otorga la conformidad, cuando el área de recepción hace sus veces.
+ *
+ * En SERVICIOS no hay recepción que dar —el formato ni siquiera la nombra—, así
+ * que «Área que efectúa la recepción» queda libre para decir quién firma de
+ * verdad la conformidad. En una inversión ejecutada por administración directa
+ * eso es el RESIDENTE, no la sub gerencia que tramita el pago, y así se registra.
+ *
+ * En BIENES no se sustituye: ahí la recepción y la conformidad son dos actos y
+ * dos áreas —almacén recibe, el área usuaria conforma— y cambiar una por otra
+ * haría que el apartado dijera dos veces el mismo nombre. En OBRAS tampoco: su
+ * recepción la hace una comisión, con un régimen que este formato no cubre.
+ *
+ * Sin área de recepción registrada, manda la de conformidad: es lo que había y
+ * lo que sigue valiendo para todo lo ya escrito.
+ */
+export function areaQueOtorgaLaConformidad(
+  objeto: ObjetoFilter | string | null | undefined,
+  d: { areaConformidad?: string; areaRecepcion?: string },
+): string {
+  const conformidad = (d.areaConformidad ?? "").trim();
+  if (plantillaPara(objeto) !== "servicios") return conformidad;
+  return (d.areaRecepcion ?? "").trim() || conformidad;
+}
+
 /** Los huecos que pide cada plantilla, para no enseñar los que no aplican. */
 export function huecosDePlantilla(objeto: ObjetoFilter | string | null | undefined): Array<keyof HuecosRecepcion> {
   const p = plantillaPara(objeto);

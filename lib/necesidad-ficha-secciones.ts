@@ -484,7 +484,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // Lo que sigue dependiendo del objeto es la PLANTILLA del apartado
       // (lib/recepcion-conformidad.ts): ahí cada formato usa los suyos, y la
       // base legal de cada campo dice cuándo llega al texto y cuándo no.
-      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Recepción y conformidad (Art. 144)", baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas. En servicios no hay recepción que dar, así que este dato no entra en el texto del apartado.", ejemplo: "Unidad de Almacén Central" },
+      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Recepción y conformidad (Art. 144)", baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas. En servicios no hay recepción que dar, así que lo que se registre aquí pasa a ser quien OTORGA la conformidad —el residente de la inversión, por ejemplo— y sustituye al área en los dos apartados, el del Art. 144 y el de la forma de pago.", ejemplo: "RESIDENTE" },
       // Espejo de «Área que otorga la conformidad» de la forma de pago, igual
       // que centro de costo lo es del área usuaria. Es el MISMO dato —quién
       // firma la conformidad del Art. 144 es quién la firma para el pago del
