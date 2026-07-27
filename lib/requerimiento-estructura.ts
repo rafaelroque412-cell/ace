@@ -125,11 +125,18 @@ export function estructuraDelRequerimiento(
     const campos: CampoRequerimiento[] = [];
     for (const field of seccion.fields) {
       if (field.oculto || NO_VAN_SOLOS.has(field.api)) continue;
-      // Lo que no aplica a este objeto o procedimiento no entra, aunque haya
-      // quedado un valor: el documento describe ESTA contratación.
-      if (efectivos.length > 0 && !campoAplica(field, efectivos, proceso)) continue;
       const valor = (ficha[field.api] ?? "").trim();
       const exigido = exigidos.has(field.api);
+      // Lo que no aplica a este objeto o procedimiento no entra, aunque haya
+      // quedado un valor: el documento describe ESTA contratación.
+      //
+      // Salvo que el MODELO lo declare. Los dos discrepan de verdad: el
+      // PDF-modelo de Licitación Pública abreviada PARA BIENES trae los
+      // apartados de sistema de entrega y subcontratación, y el catálogo de la
+      // ficha los limita a servicios, obras y consultoría de obra. Manda el
+      // modelo, que es el formato que la entidad tiene que presentar; omitirlo
+      // dejaría el documento sin un apartado que el formato exige.
+      if (!exigido && efectivos.length > 0 && !campoAplica(field, efectivos, proceso)) continue;
       if (!tieneValor(valor) && !exigido) continue;
       campos.push({
         api: field.api,

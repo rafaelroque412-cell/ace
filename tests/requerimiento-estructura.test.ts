@@ -88,6 +88,18 @@ describe("lo que no aplica a esta contratación no entra", () => {
       .flatMap((s) => s.campos.map((c) => c.api));
     expect(apis).not.toContain(soloObras.api);
   });
+
+  it("pero si el MODELO lo exige, sale igual", () => {
+    // Discrepancia real, encontrada con datos: el PDF-modelo de Licitación
+    // Pública abreviada PARA BIENES trae los apartados de sistema de entrega y
+    // subcontratación, y el catálogo de la ficha los limita a servicios y obras.
+    // Manda el modelo: es el formato que la entidad presenta.
+    const apis = estructuraDelRequerimiento(["Sistema de entrega", "Subcontratación"], {}, {
+      objeto: "bienes",
+    }).flatMap((s) => s.campos.map((c) => c.api));
+    expect(apis).toContain("sistemaEntrega");
+    expect(apis).toContain("subcontratacion");
+  });
 });
 
 describe("cada campo sabe cómo se pinta", () => {
