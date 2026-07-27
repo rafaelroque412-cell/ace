@@ -459,7 +459,14 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // se enseña donde no aplica y el plazo de subsanacion solo donde es hueco
       // (en bienes el 30% va fijo en el texto). El apartado se compone con
       // «Redactar con IA» en `recepcionConformidad` (lib/recepcion-conformidad.ts).
-      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Recepción y conformidad (Art. 144)", mostrarPara: ["bienes"], baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas.", ejemplo: "Unidad de Almacén Central" },
+      // Sin `mostrarPara`: el bloque entero se enseña en los cuatro objetos. Los
+      // dos campos de abajo estaban acotados a su objeto —almacén solo en
+      // bienes, subsanación solo en servicios— y el bloque salía distinto según
+      // qué se estuviera registrando, sin decir por qué faltaba lo que faltaba.
+      // Lo que sigue dependiendo del objeto es la PLANTILLA del apartado
+      // (lib/recepcion-conformidad.ts): ahí cada formato usa los suyos, y la
+      // base legal de cada campo dice cuándo llega al texto y cuándo no.
+      { col: "recepcion_area", api: "recepcionArea", label: "Área que efectúa la recepción (almacén)", subgrupo: "Recepción y conformidad (Art. 144)", baseLegal: "Art. 144 Reglamento · en bienes la recepción la da almacén y la conformidad el área usuaria: son dos actos y dos áreas. En servicios no hay recepción que dar, así que este dato no entra en el texto del apartado.", ejemplo: "Unidad de Almacén Central" },
       // Espejo de «Área que otorga la conformidad» de la forma de pago, igual
       // que centro de costo lo es del área usuaria. Es el MISMO dato —quién
       // firma la conformidad del Art. 144 es quién la firma para el pago del
@@ -475,7 +482,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // El tope de 999 son los tres dígitos: un plazo de conformidad de cuatro
       // cifras es un error de tecleo, no un plazo.
       { col: "conformidad_plazo", api: "conformidadPlazo", label: "Plazo máximo para la conformidad (días)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, porDefecto: "7", baseLegal: "Art. 144 Reglamento · siete (7) días, o hasta veinte (20) si hacen falta pruebas que verifiquen el cumplimiento. Arranca en 7, que es la regla; los veinte son la excepción y hay que elegirlos.", ejemplo: "7" },
-      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones (días hábiles)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, mostrarPara: ["servicios", "consultoria_obra"], baseLegal: "Art. 144 Reglamento · no mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. El tope se calcula sobre el «Plazo de ejecución o prestación» registrado más arriba. En bienes esa cifra va fija en el texto.", ejemplo: "5" },
+      { col: "conformidad_plazo_subsanacion", api: "conformidadPlazoSubsanacion", label: "Plazo para subsanar observaciones (días hábiles)", subgrupo: "Recepción y conformidad (Art. 144)", kind: "number", min: 1, max: 999, baseLegal: "Art. 144 Reglamento · no mayor al 30% del plazo del entregable, según la complejidad de las subsanaciones. El tope se calcula sobre el «Plazo de ejecución o prestación» registrado más arriba. En bienes el 30% va fijo en el texto del apartado, así que ahí este número no lo cambia.", ejemplo: "5" },
       { subgrupo: "Recepción y conformidad (Art. 144)", col: "recepcion_conformidad", api: "recepcionConformidad", label: "Recepción y conformidad de la prestación", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad de bienes y servicios.", ejemplo: "Conformidad otorgada por el área usuaria en 10 días hábiles" },
       { subgrupo: "Otras condiciones del contrato", col: "gestion_riesgos", api: "gestionRiesgos", label: "Gestión de riesgos", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.3 Reglamento · al elaborar el requerimiento se inicia la identificación y evaluación de riesgos y su asignación a alguna de las partes, que es insumo de la estrategia de contratación.", ejemplo: "Matriz de riesgos y asignación entre las partes" },
       { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "metas_fisicas", api: "metasFisicas", label: "Metas físicas / objetivos funcionales", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154 Reglamento · requerimiento de obras y consultoría de obras; las metas físicas concretan el alcance del Art. 44.2.a.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Construcción de 1,200 m² de pavimento rígido" },

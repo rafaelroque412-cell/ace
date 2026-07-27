@@ -33,6 +33,23 @@ describe("el bloque del Art. 144 está junto", () => {
   it("nada más se coló en el subgrupo", () => {
     expect(campos.filter((f) => f.subgrupo === SUBGRUPO).length).toBe(5);
   });
+
+  it("ninguno se esconde según el objeto", () => {
+    // El almacén salía solo en bienes y la subsanación solo en servicios, así
+    // que el bloque cambiaba de forma sin decir por qué faltaba lo que faltaba.
+    // Lo que sí depende del objeto es la PLANTILLA del apartado.
+    const conFiltro = campos
+      .filter((f) => f.subgrupo === SUBGRUPO && f.mostrarPara)
+      .map((f) => f.api);
+    expect(conFiltro).toEqual([]);
+  });
+
+  it("y solo sigue oculto el espejo del área, que no es una casilla", () => {
+    // Enseñarlo devolvería las DOS «Área que otorga la conformidad» que se
+    // quitaron: es la misma columna, no un campo más.
+    const ocultos = campos.filter((f) => f.subgrupo === SUBGRUPO && f.oculto).map((f) => f.api);
+    expect(ocultos).toEqual(["conformidadArea"]);
+  });
 });
 
 describe("los dos plazos son numéricos de tres dígitos", () => {
