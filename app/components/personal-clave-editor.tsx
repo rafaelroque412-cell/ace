@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import {
+  FILA_PERSONAL_CLAVE_VACIA,
   type FilaPersonalClave,
   formatPersonalClave,
   parsePersonalClave,
@@ -62,6 +63,8 @@ export function PersonalClaveEditor({
             <thead>
               <tr>
                 <th scope="col">N.º</th>
+                <th scope="col">Actividad</th>
+                <th scope="col">Cantidad</th>
                 <th scope="col">Tiempo de experiencia mínimo</th>
                 <th scope="col">Trabajos o prestaciones en la actividad requerida</th>
                 <th scope="col">Puesto, cargo y/o posición</th>
@@ -72,6 +75,30 @@ export function PersonalClaveEditor({
               {filas.map((fila, i) => (
                 <tr key={i}>
                   <td className="text-muted tabular-nums">{i + 1}</td>
+                  <td className="min-w-[150px]">
+                    <textarea
+                      aria-label={`Actividad del personal clave ${i + 1}`}
+                      className={celda}
+                      disabled={readOnly}
+                      onChange={(e) => editar(i, { actividad: e.target.value })}
+                      placeholder="Estructuras metálicas"
+                      rows={2}
+                      value={fila.actividad}
+                    />
+                  </td>
+                  <td className="min-w-[70px]">
+                    <input
+                      aria-label={`Cantidad de personal clave ${i + 1}`}
+                      className={celda}
+                      disabled={readOnly}
+                      inputMode="numeric"
+                      min={1}
+                      onChange={(e) => editar(i, { cantidad: e.target.value })}
+                      placeholder="1"
+                      type="number"
+                      value={fila.cantidad}
+                    />
+                  </td>
                   <td className="min-w-[130px]">
                     <input
                       aria-label={`Tiempo de experiencia mínimo del personal clave ${i + 1}`}
@@ -138,7 +165,7 @@ export function PersonalClaveEditor({
       {readOnly ? null : (
         <button
           className="inline-flex w-fit items-center gap-1.5 rounded-lg px-1 text-[12.5px] font-semibold text-brand hover:underline"
-          onClick={() => propagar([...filas, { tiempo: "", trabajos: "", puesto: "" }])}
+          onClick={() => propagar([...filas, { ...FILA_PERSONAL_CLAVE_VACIA }])}
           type="button"
         >
           <Plus size={13} /> Agregar personal clave

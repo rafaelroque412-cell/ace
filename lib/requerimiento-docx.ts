@@ -256,10 +256,12 @@ function nota(texto_: string): Paragraph {
 function tablaPersonalClave(filas: ReturnType<typeof parsePersonalClave>): Table {
   const cabecera = new TableRow({
     children: [
-      celda("N°", { ancho: 6, bold: true }),
-      celda("Tiempo de experiencia mínimo", { ancho: 24, bold: true }),
-      celda("Trabajos o prestaciones en la actividad requerida", { ancho: 44, bold: true }),
-      celda("Puesto, cargo y/o posición", { ancho: 26, bold: true }),
+      celda("N°", { ancho: 5, bold: true }),
+      celda("Actividad", { ancho: 17, bold: true }),
+      celda("Cantidad", { ancho: 8, bold: true, derecha: true }),
+      celda("Tiempo de experiencia mínimo", { ancho: 18, bold: true }),
+      celda("Trabajos o prestaciones en la actividad requerida", { ancho: 33, bold: true }),
+      celda("Puesto, cargo y/o posición", { ancho: 19, bold: true }),
     ],
     tableHeader: true,
   });
@@ -270,6 +272,8 @@ function tablaPersonalClave(filas: ReturnType<typeof parsePersonalClave>): Table
         new TableRow({
           children: [
             celda(String(i + 1)),
+            celda(f.actividad ?? ""),
+            celda(f.cantidad ?? "", { derecha: true }),
             celda(f.tiempo ?? ""),
             celda(f.trabajos ?? ""),
             celda(f.puesto ?? ""),

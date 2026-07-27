@@ -13,31 +13,36 @@ import { LIMITES_TEXTO, necesidadUpdateSchema } from "@/lib/necesidades";
  * y pintada como cuadro, igual que «otras penalidades».
  */
 const FILAS = [
-  { tiempo: "tres (3) años", trabajos: "supervisión de montaje de estructuras metálicas", puesto: "Ingeniero residente" },
-  { tiempo: "dos (2) años", trabajos: "control de calidad de soldadura", puesto: "Supervisor de calidad" },
+  { actividad: "Estructuras metálicas", cantidad: "1", tiempo: "tres (3) años", trabajos: "supervisión de montaje de estructuras metálicas", puesto: "Ingeniero residente" },
+  { actividad: "Control de calidad", cantidad: "2", tiempo: "dos (2) años", trabajos: "control de calidad de soldadura", puesto: "Supervisor de calidad" },
 ];
+const vacia = { actividad: "", cantidad: "", tiempo: "", trabajos: "", puesto: "" };
 
 describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
   it("el par parse/format es reversible", () => {
     expect(parsePersonalClave(formatPersonalClave(FILAS))).toEqual(FILAS);
   });
 
-  it("numera las filas y etiqueta cada campo", () => {
+  it("numera las filas y etiqueta cada campo, con actividad y cantidad delante", () => {
     const t = formatPersonalClave(FILAS);
-    expect(t).toContain("1. Tiempo: tres (3) años · Actividad: supervisión de montaje de estructuras metálicas · Puesto: Ingeniero residente");
-    expect(t).toContain("2. Tiempo: dos (2) años ·");
+    expect(t).toContain("1. Actividad: Estructuras metálicas · Cantidad: 1 · Tiempo: tres (3) años · Prestaciones: supervisión de montaje de estructuras metálicas · Puesto: Ingeniero residente");
+    expect(t).toContain("2. Actividad: Control de calidad · Cantidad: 2 ·");
   });
 
   it("sin filas útiles no compone nada: el requisito puede no aplicar", () => {
     expect(formatPersonalClave([])).toBe("");
-    expect(formatPersonalClave([{ tiempo: "", trabajos: "", puesto: "" }])).toBe("");
+    expect(formatPersonalClave([{ ...vacia }])).toBe("");
     expect(parsePersonalClave("")).toEqual([]);
     expect(parsePersonalClave(null)).toEqual([]);
   });
 
   it("una fila con algo escrito se conserva, con corchete donde falta", () => {
-    const t = formatPersonalClave([{ tiempo: "un (1) año", trabajos: "", puesto: "" }]);
-    expect(t).toContain("Tiempo: un (1) año · Actividad: [POR DEFINIR] · Puesto: [POR DEFINIR]");
+    const t = formatPersonalClave([{ ...vacia, tiempo: "un (1) año" }]);
+    expect(t).toContain("Actividad: [POR DEFINIR] · Cantidad: [POR DEFINIR] · Tiempo: un (1) año · Prestaciones: [POR DEFINIR] · Puesto: [POR DEFINIR]");
+  });
+
+  it("una fila con solo la actividad también es una fila", () => {
+    expect(formatPersonalClave([{ ...vacia, actividad: "Estructuras" }])).toContain("Actividad: Estructuras ·");
   });
 
   it("un texto que no es del formato no aporta filas", () => {
@@ -48,8 +53,9 @@ describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
 describe("filas a medio declarar", () => {
   it("se cuentan para avisar, sin bloquear", () => {
     expect(personalClaveIncompletas(FILAS)).toEqual([]);
-    expect(personalClaveIncompletas([{ tiempo: "3 años", trabajos: "", puesto: "Residente" }])).toEqual([1]);
-    expect(personalClaveIncompletas([{ tiempo: "", trabajos: "", puesto: "" }])).toEqual([]);
+    // Falta prestaciones: el núcleo del requisito. La actividad/cantidad no cuentan.
+    expect(personalClaveIncompletas([{ ...vacia, tiempo: "3 años", puesto: "Residente" }])).toEqual([1]);
+    expect(personalClaveIncompletas([{ ...vacia }])).toEqual([]);
   });
 });
 

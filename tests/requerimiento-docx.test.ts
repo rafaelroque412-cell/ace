@@ -113,18 +113,20 @@ describe("formato del documento", () => {
         apartados: ["3.5.1 Requisitos de calificación obligatorios"],
         ficha: {
           personalClaveExperiencia: formatPersonalClave([
-            { tiempo: "tres (3) años", trabajos: "supervisión de montaje", puesto: "Ingeniero residente" },
-            { tiempo: "dos (2) años", trabajos: "control de calidad", puesto: "Supervisor de obra" },
+            { actividad: "Estructuras", cantidad: "1", tiempo: "tres (3) años", trabajos: "supervisión de montaje", puesto: "Ingeniero residente" },
+            { actividad: "Calidad", cantidad: "2", tiempo: "dos (2) años", trabajos: "control de calidad", puesto: "Supervisor de obra" },
           ]),
         },
       }),
     );
     expect(xml).toContain("<w:tbl>");
+    expect(xml).toContain("Actividad");
+    expect(xml).toContain("Cantidad");
     expect(xml).toContain("Tiempo de experiencia mínimo");
     expect(xml).toContain("Ingeniero residente");
     expect(xml).toContain("Supervisor de obra");
     // El campo está `oculto` en la ficha pero SÍ va al documento (kind personalClave).
-    expect(xml).not.toContain("1. Tiempo:"); // no vuelca la serialización cruda
+    expect(xml).not.toContain("1. Actividad:"); // no vuelca la serialización cruda
   });
 
   it("las penalidades adicionales salen en TABLA", async () => {
