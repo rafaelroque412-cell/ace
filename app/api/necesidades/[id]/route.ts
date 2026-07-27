@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCapability, requireUser } from "@/lib/auth";
 import { construirColumnas } from "@/lib/necesidad-columnas";
 import { nomenclaturaExpediente } from "@/lib/necesidad-denominacion";
+import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
 import { hitosEstadoDesdeAuditoria } from "@/lib/necesidad-flujo";
 import {
   type Necesidad,
@@ -22,7 +23,7 @@ function aNumero(valor: number | string | null): number | null {
 }
 
 const SELECT =
-  "id,codigo,anio_fiscal,periodo_programacion,version_cmn,entidad,unidad_ejecutora,area_usuaria,centro_costo,responsable,nombre,finalidad_publica,pei_objetivo,pei_accion,poi_actividad,meta_presupuestal,proyecto_inversion,cui,ioarr,tipo_objeto,tipo_proceso_seleccion,especialidad,subespecialidad,codigo_catalogo,descripcion_catalogo,descripcion_general,descripcion_detallada,ficha_tecnica_identificacion,compatibilizacion,normas_tecnicas,prestaciones_accesorias,cantidad,unidad_medida,frecuencia,fecha_requerida,trimestre,mes_programado,fuente_financiamiento,rubro,cadena_funcional,clasificador_gasto,monto_estimado,costo_unitario,costo_total,moneda,anio_referencia,departamento,provincia,distrito,lugar_entrega,alcance,condiciones_ejecucion,modalidad_pago,sistema_entrega,plazo_ejecucion,equipamiento_minimo,habilitaciones,formula_reajuste,adelanto_directo,penalidad_mora,garantias,recepcion_conformidad,subcontratacion,otras_penalidades,solucion_controversias,plazo_respuestas,requisitos_adicionales,gestion_riesgos,metas_fisicas,disponibilidad_terreno,seguros,metodologia_bim,gestion_calidad,anexos_tecnicos,requisitos_calificacion,verificacion_ficha_tecnica,verificacion_almacen,certificacion_presupuestal,fecha_remision_dec,fecha_version_dos,fecha_version_n,status,tipo_area,cmn_verificado,no_objecion,no_objecion_sustento,no_objecion_mecanismo,summary,process_id,owner_id,created_at,updated_at";
+  "id,codigo,anio_fiscal,periodo_programacion,version_cmn,entidad,unidad_ejecutora,area_usuaria,centro_costo,responsable,nombre,finalidad_publica,pei_objetivo,pei_accion,poi_actividad,meta_presupuestal,proyecto_inversion,cui,ioarr,tipo_objeto,tipo_proceso_seleccion,especialidad,subespecialidad,codigo_catalogo,descripcion_catalogo,descripcion_general,descripcion_detallada,ficha_tecnica_identificacion,compatibilizacion,normas_tecnicas,prestaciones_accesorias,cantidad,unidad_medida,frecuencia,fecha_requerida,trimestre,mes_programado,fuente_financiamiento,rubro,cadena_funcional,clasificador_gasto,monto_estimado,costo_unitario,costo_total,moneda,anio_referencia,departamento,provincia,distrito,lugar_entrega,alcance,condiciones_ejecucion,modalidad_pago,sistema_entrega,plazo_ejecucion,plazo_ejecucion_unidad,equipamiento_minimo,habilitaciones,formula_reajuste,adelanto_directo,penalidad_mora,garantias,recepcion_conformidad,subcontratacion,otras_penalidades,solucion_controversias,plazo_respuestas,requisitos_adicionales,gestion_riesgos,metas_fisicas,disponibilidad_terreno,seguros,metodologia_bim,gestion_calidad,anexos_tecnicos,requisitos_calificacion,verificacion_ficha_tecnica,verificacion_almacen,certificacion_presupuestal,fecha_remision_dec,fecha_version_dos,fecha_version_n,status,tipo_area,cmn_verificado,no_objecion,no_objecion_sustento,no_objecion_mecanismo,summary,process_id,owner_id,created_at,updated_at";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
@@ -241,9 +242,34 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
         { status: 409 },
       );
     }
+    // Los ficheros hay que recogerlos ANTES de borrar: las filas de
+    // `necesidad_documentos` se van solas por `on delete cascade`, y con ellas
+    // la única referencia a su PDF. Así se quedaban en el almacén para siempre
+    // —se encontró uno de 1,6 MB de una necesidad borrada en julio—.
+    const adjuntos = await supabaseRest<DocumentoConFichero[]>(
+      `necesidad_documentos?necesidad_id=eq.${id}&select=storage_bucket,storage_path`,
+    );
+    // Los EETT/TDR viven en `documents`, que NO tiene clave foránea a
+    // `necesidades`: el vínculo es `metadata->>necesidadId`, JSON puro. Sin
+    // borrarlos aquí, la FILA tambien sobrevivía a su necesidad.
+    const eettTdr = await supabaseRest<Array<DocumentoConFichero & { id: string }>>(
+      `documents?metadata->>necesidadId=eq.${id}&select=id,storage_bucket,storage_path`,
+    );
+    const fallos = await borrarFicherosDe([...adjuntos, ...eettTdr]);
+    for (const doc of eettTdr) {
+      await supabaseRest(`documents?id=eq.${doc.id}`, { method: "DELETE" });
+    }
+
     await supabaseUserRest(auth.user.accessToken, `necesidades?id=eq.${id}`, { method: "DELETE" });
     await writeAuditLog({
       action: "necesidad.delete",
+      details: {
+        adjuntos: adjuntos.length,
+        eettTdr: eettTdr.length,
+        // Si el almacén falló queda constancia: la necesidad SÍ se borró, y el
+        // fichero huérfano se puede limpiar después sabiendo cuál es.
+        ...(fallos.length > 0 ? { ficherosNoBorrados: fallos } : {}),
+      },
       actorReference: auth.user.email ?? auth.user.id,
       entityId: id,
       entityType: "necesidad",

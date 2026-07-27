@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireCapability, requireUser } from "@/lib/auth";
+import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
 import { type NecesidadDocumento, necesidadDocKinds } from "@/lib/necesidades";
 import {
   getSupabaseServerConfig,
@@ -117,6 +118,13 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   }
 
   try {
+    // El fichero, antes que la fila: al revés se pierde la ruta y el PDF se
+    // queda en el almacén sin nadie que lo referencie.
+    const [doc] = await supabaseUserRest<DocumentoConFichero[]>(
+      auth.user.accessToken,
+      `necesidad_documentos?id=eq.${documentoId}&necesidad_id=eq.${id}&select=storage_bucket,storage_path`,
+    );
+    if (doc) await borrarFicherosDe([doc]);
     await supabaseUserRest(
       auth.user.accessToken,
       `necesidad_documentos?id=eq.${documentoId}&necesidad_id=eq.${id}`,
