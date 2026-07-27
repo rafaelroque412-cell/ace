@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Info, Trash2 } from "lucide-react";
+import { AlertTriangle, Info, Loader, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
   SUBTIPOS_CAPACIDAD_TECNICA,
@@ -50,12 +50,15 @@ export function RequisitosCalificacionEditor({
   objeto,
   montoEstimado,
   moneda,
+  necesidadId,
   tipoProceso,
   requisitosModelo,
 }: {
   value: string;
   onChange: (next: string) => void;
   readOnly?: boolean;
+  /** Para pedir a la IA la propuesta de servicios similares. */
+  necesidadId?: string;
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
   // obras (Art. 72.3.b + Art. 157). undefined = ayuda genérica.
   objeto?: string | null;
@@ -156,6 +159,32 @@ export function RequisitosCalificacionEditor({
     emit(next);
   }
 
+  // Propuesta de la IA para «servicios similares». A diferencia del resto de la
+  // experiencia —que es texto fijo y se compone—, qué se considera similar es un
+  // juicio abierto sobre el objeto, así que SÍ se le pide al modelo. Es una
+  // propuesta: rellena el campo, que el usuario revisa. Si falla, se conserva lo
+  // que hubiera y se avisa; nunca se borra con una respuesta en blanco.
+  const [proponiendo, setProponiendo] = useState(false);
+  const [errorSimilares, setErrorSimilares] = useState("");
+  async function proponerSimilares() {
+    if (!necesidadId || readOnly) return;
+    setProponiendo(true);
+    setErrorSimilares("");
+    try {
+      const res = await fetch(`/api/necesidades/${necesidadId}/servicios-similares`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.texto) {
+        setErrorSimilares(data?.error ?? "No se pudo proponer. Escríbelo a mano.");
+        return;
+      }
+      setSimilaresExp(data.texto);
+    } catch {
+      setErrorSimilares("No se pudo conectar. Escríbelo a mano.");
+    } finally {
+      setProponiendo(false);
+    }
+  }
+
   // «Redactar con IA» de la experiencia del postor. Como la forma de pago o la
   // recepción, se COMPONE con el texto del formato en vez de pedírselo al
   // modelo: es texto reglamentario con un solo hueco, el monto. El monto y su
@@ -234,7 +263,21 @@ export function RequisitosCalificacionEditor({
               {tipo.key === "experiencia_postor" && estado !== "no" ? (
                 <>
                   <label className="reqCalCampo">
-                    <span>{`¿Qué se considera ${objetoConvocatoria(objeto)} similar al objeto convocado?`}</span>
+                    <span className="reqCalSpanConBoton">
+                      {`¿Qué se considera ${objetoConvocatoria(objeto)} similar al objeto convocado?`}
+                      {necesidadId ? (
+                        <button
+                          className="reqCalRedactar"
+                          disabled={readOnly || proponiendo}
+                          onClick={proponerSimilares}
+                          title="Que la IA proponga qué se considera similar, a partir del objeto de la contratación"
+                          type="button"
+                        >
+                          {proponiendo ? <Loader className="reqCalSpin" size={12} /> : <Sparkles size={12} />}
+                          {proponiendo ? "Proponiendo…" : "Proponer con IA"}
+                        </button>
+                      ) : null}
+                    </span>
                     <textarea
                       disabled={readOnly}
                       onChange={(ev) => setSimilaresExp(ev.target.value)}
@@ -242,6 +285,7 @@ export function RequisitosCalificacionEditor({
                       rows={filasTextarea(similaresExp)}
                       value={similaresExp}
                     />
+                    {errorSimilares ? <span className="reqCalAvisoTope" role="status">{errorSimilares}</span> : null}
                   </label>
                   <div className="reqCalExperiencia">
                     <label className="reqCalCampo">

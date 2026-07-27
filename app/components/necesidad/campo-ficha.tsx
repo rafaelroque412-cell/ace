@@ -288,6 +288,7 @@ export const CampoFicha = memo(function CampoFicha({
           // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
           montoEstimado={montoEstimado}
           moneda={moneda}
+          necesidadId={necesidadId}
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}
           objeto={tipoObjeto}

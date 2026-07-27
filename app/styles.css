@@ -12272,6 +12272,23 @@ textarea:focus,
   cursor: default;
 }
 
+/* Etiqueta con su botón de propuesta a la derecha, en la misma línea. */
+.reqCalSpanConBoton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reqCalSpin {
+  animation: reqCalGiro 0.8s linear infinite;
+}
+
+@keyframes reqCalGiro {
+  to { transform: rotate(360deg); }
+}
+
 /* Requisitos heredados del texto libre anterior que no son del 72.3. */
 .reqCalHeredados {
   border: 1px solid color-mix(in srgb, var(--warning, #d97706) 35%, transparent);
