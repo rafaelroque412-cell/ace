@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BLOQUES_FICHA,
@@ -50,7 +50,16 @@ describe("reparto de bloques por modo", () => {
 });
 
 describe("el catalogo no se queda atras del componente", () => {
-  const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+  // Se miran el detalle Y los paneles extraidos. Cuando la matriz de riesgos
+  // salio a su propio fichero esta prueba fallo —hizo su trabajo—, y la leccion
+  // es que el guardian no puede vigilar UN fichero: los bloques ya viven en
+  // varios y seguiran repartiendose.
+  const fuente = [
+    readFileSync("app/components/necesidad-detail.tsx", "utf-8"),
+    ...readdirSync("app/components/necesidad")
+      .filter((f) => f.endsWith(".tsx"))
+      .map((f) => readFileSync(`app/components/necesidad/${f}`, "utf-8")),
+  ].join("\n");
   const enElDom = [...new Set([...fuente.matchAll(/id="(sec-[a-z]+)"/g)].map((m) => m[1]))];
 
   it("todo sec-* del componente esta en el catalogo", () => {

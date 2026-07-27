@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -18,7 +18,6 @@ import {
   MessageSquare,
   Pencil,
   Plus,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -40,14 +39,7 @@ import {
 import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
 import { filasTextarea } from "@/lib/textarea-alto";
 import {
-  etiquetas,
-  OPCIONES_MODALIDAD_PAGO,
-  OPCIONES_MONEDA,
-  OPCIONES_SISTEMA_ENTREGA,
-} from "@/lib/opciones-contratacion";
-import {
   type ObjetoFilter,
-  OBJETOS_POR_PROCEDIMIENTO,
   PROCESO_SELECCION_OPCIONES,
 } from "@/lib/procesos-seleccion";
 import { resumenNecesidad } from "@/lib/necesidad-verificacion";
@@ -113,6 +105,17 @@ import {
   buttonClasses,
 } from "./ui";
 import { cn } from "@/lib/utils";
+import {
+  FICHA_CTRL,
+  FICHA_CTRL_AREA,
+  FICHA_CTRL_ERR,
+  FICHA_CTRL_H,
+  FICHA_IA,
+  FICHA_LABEL,
+  FICHA_OPT,
+  FICHA_REQ,
+} from "./necesidad/ficha-estilos";
+import { PanelRiesgos } from "./necesidad/panel-riesgos";
 import {
   type AccionDef,
   NO_OBJECION_LABEL,
@@ -392,32 +395,6 @@ const CAMPO_GEO_ENTIDAD: Record<string, "department" | "province" | "city"> = {
   distrito: "city",
 };
 
-// Clases compartidas de los controles del formulario de la ficha (misma identidad
-// que los primitivos de UI). `FICHA_CTRL_ERR` se añade cuando el campo tiene error.
-const FICHA_CTRL =
-  "w-full rounded-[10px] border border-line bg-panel px-3 text-sm text-ink outline-none " +
-  "transition-[border-color,box-shadow] duration-150 placeholder:text-muted/55 " +
-  "focus:border-brand focus:shadow-[var(--shadow-focus)] disabled:bg-surface disabled:opacity-70";
-const FICHA_CTRL_H = "h-10";
-// El alto lo fija `rows` con filasTextarea, que cuenta cuanto envuelve cada
-// linea. Se probo `field-sizing:content` —que en teoria ajusta al contenido sin
-// estimar— y MEDIDO en Chrome daba 40px y cortaba el texto, mientras que las
-// filas calculadas daban 349px sin cortar. Descartado por eso, no por gusto.
-const FICHA_CTRL_AREA = "min-h-[80px] resize-y py-2.5 leading-relaxed";
-const FICHA_CTRL_ERR = "!border-danger focus:!border-danger focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_20%,transparent)]";
-const FICHA_LABEL = "mb-1.5 flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-ink";
-const FICHA_REQ = "rounded-full bg-brand-soft px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-brand";
-const FICHA_OPT = "rounded-full bg-ink/[0.06] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-muted";
-const FICHA_IA = "inline-flex items-center gap-0.5 rounded-full bg-accent/10 px-1.5 py-px text-[10px] font-bold text-accent";
-
-/** Nivel de un riesgo → tono de la insignia. Antes vivía en `.riesgo-*` sueltas. */
-function tonoRiesgo(nivel: string): "exito" | "atencion" | "peligro" | "neutral" {
-  const v = nivel.toLowerCase();
-  if (v.startsWith("baj")) return "exito";
-  if (v.startsWith("med")) return "atencion";
-  if (v.startsWith("alt")) return "peligro";
-  return "neutral";
-}
 
 export function NecesidadDetail({
   necesidadId,
@@ -555,16 +532,7 @@ export function NecesidadDetail({
    */
   const riesgosAplica = Boolean(necesidad);
 
-  // Matriz de riesgos: formulario de alta y borrado por fila.
-  const [riesgoTexto, setRiesgoTexto] = useState("");
-  const [riesgoProb, setRiesgoProb] = useState("");
-  const [riesgoImpacto, setRiesgoImpacto] = useState("");
-  const [riesgoMitigacion, setRiesgoMitigacion] = useState("");
-  const [riesgoResponsable, setRiesgoResponsable] = useState("");
-  const [savingRiesgo, setSavingRiesgo] = useState(false);
-  const [deletingRiesgoId, setDeletingRiesgoId] = useState<string | null>(null);
   const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null);
-  const [confirmDeleteRiesgoId, setConfirmDeleteRiesgoId] = useState<string | null>(null);
   const [confirmDeleteNecesidad, setConfirmDeleteNecesidad] = useState(false);
   const [deletingNecesidad, setDeletingNecesidad] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -590,12 +558,6 @@ export function NecesidadDetail({
   // crear una variante nueva (mismo criterio que la geografía por catálogo).
   const [areasSugeridas, setAreasSugeridas] = useState<string[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [riesgoEditId, setRiesgoEditId] = useState<string | null>(null);
-  const [riesgoEditTexto, setRiesgoEditTexto] = useState("");
-  const [riesgoEditProb, setRiesgoEditProb] = useState("");
-  const [riesgoEditImpacto, setRiesgoEditImpacto] = useState("");
-  const [riesgoEditMitigacion, setRiesgoEditMitigacion] = useState("");
-  const [riesgoEditResponsable, setRiesgoEditResponsable] = useState("");
 
   // Edición de la Ficha de Necesidad (todos los campos del PATCH).
   const [fichaEdit, setFichaEdit] = useState(false);
@@ -1241,47 +1203,14 @@ export function NecesidadDetail({
     }
   }
 
-  async function addRiesgo(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (riesgoTexto.trim().length < 3) {
-      setError("Describe el riesgo con más detalle.");
-      return;
-    }
-    if (riesgos.some((r) => r.riesgo.toLowerCase() === riesgoTexto.trim().toLowerCase())) {
-      setError("Ya existe un riesgo con ese nombre.");
-      return;
-    }
-    setSavingRiesgo(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/necesidades/${necesidadId}/riesgos`, {
-        body: JSON.stringify({
-          riesgo: riesgoTexto,
-          probabilidad: riesgoProb || undefined,
-          impacto: riesgoImpacto || undefined,
-          mitigacion: riesgoMitigacion || undefined,
-          responsable: riesgoResponsable || undefined,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        setError(payload.error ?? "No se pudo registrar el riesgo.");
-        return;
-      }
-      setRiesgoTexto("");
-      setRiesgoProb("");
-      setRiesgoImpacto("");
-      setRiesgoMitigacion("");
-      setRiesgoResponsable("");
-      await reload();
-    } catch {
-      setError("No se pudo conectar con el servidor.");
-    } finally {
-      setSavingRiesgo(false);
-    }
-  }
+  // `reload` se declara de nuevo en cada render, asi que pasarlo tal cual a un
+  // panel memoizado le daria una prop distinta cada vez y anularia la memo. El
+  // ref guarda la ultima version y `recargar` mantiene una identidad fija.
+  const reloadRef = useRef(reload);
+  useEffect(() => {
+    reloadRef.current = reload;
+  });
+  const recargar = useCallback(() => reloadRef.current(), []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -2065,27 +1994,6 @@ export function NecesidadDetail({
     } finally {
       setDeletingId(null);
       setConfirmDeleteDocId(null);
-    }
-  }
-
-  async function deleteRiesgoWithConfirm(riesgoId: string) {
-    setDeletingRiesgoId(riesgoId);
-    try {
-      const response = await fetch(`/api/necesidades/${necesidadId}/riesgos?riesgoId=${riesgoId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setError(payload.error ?? "No se pudo eliminar el riesgo.");
-        return;
-      }
-      await reload();
-    } catch {
-      setError("No se pudo conectar con el servidor.");
-    } finally {
-      setDeletingRiesgoId(null);
-      setConfirmDeleteRiesgoId(null);
-      setRiesgoEditId((prev) => prev === riesgoId ? null : prev);
     }
   }
 
@@ -4096,198 +4004,13 @@ Ej: ${field.ejemplo}` : ""}
 
       {/* ===== Matriz de riesgos de la contratación ===== */}
       {riesgosAplica && panelesDelModo(modo).includes("sec-riesgos") ? (
-      <section id="sec-riesgos" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-        <div className="flex flex-wrap items-center gap-2 text-ink">
-          <ShieldAlert size={17} />
-          <h3 className="panelTitle">Matriz de riesgos</h3>
-          <span className="text-xs font-semibold text-muted">{riesgos.length} registrado{riesgos.length === 1 ? "" : "s"}</span>
-        </div>
-
-        {riesgos.length === 0 ? (
-          <p className="text-xs font-semibold text-muted">
-            Sin riesgos registrados. {puedeAdjuntar ? "Identifica riesgos de la contratación y su mitigación." : ""}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[12.5px] [&_th]:whitespace-nowrap [&_th]:border-b [&_th]:border-line [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:text-muted [&_td]:border-b [&_td]:border-line [&_td]:px-2.5 [&_td]:py-2 [&_td]:align-top [&_td]:text-ink [&_tr:last-child_td]:border-b-0">
-              <thead>
-                <tr>
-                  <th>Riesgo</th>
-                  <th>Prob.</th>
-                  <th>Impacto</th>
-                  <th>Mitigación</th>
-                  <th>Responsable</th>
-                  {puedeAdjuntar ? <th aria-label="Acciones" /> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {riesgos.map((r) => {
-                  const editing = riesgoEditId === r.id;
-                  const isDuplicate = riesgoTexto.trim().length >= 3 && !editing &&
-                    riesgos.some((other) => other.id !== r.id && other.riesgo.toLowerCase() === r.riesgo.toLowerCase());
-                  return (
-                    <tr key={r.id} className={isDuplicate ? "riesgoDuplicate" : undefined}>
-                      {editing ? (
-                        <>
-                          <td>
-                            <input className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={riesgoEditTexto} onChange={(e) => setRiesgoEditTexto(e.target.value)} />
-                          </td>
-                          <td>
-                            <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={riesgoEditProb} onChange={(e) => setRiesgoEditProb(e.target.value)}>
-                              <option value="">—</option>
-                              <option value="baja">Baja</option>
-                              <option value="media">Media</option>
-                              <option value="alta">Alta</option>
-                            </select>
-                          </td>
-                          <td>
-                            <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={riesgoEditImpacto} onChange={(e) => setRiesgoEditImpacto(e.target.value)}>
-                              <option value="">—</option>
-                              <option value="bajo">Bajo</option>
-                              <option value="medio">Medio</option>
-                              <option value="alto">Alto</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={riesgoEditMitigacion} onChange={(e) => setRiesgoEditMitigacion(e.target.value)} />
-                          </td>
-                          <td>
-                            <input value={riesgoEditResponsable} onChange={(e) => setRiesgoEditResponsable(e.target.value)} />
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-1.5 [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_select]:rounded-lg [&_select]:border [&_select]:border-line [&_select]:bg-panel [&_select]:px-[9px] [&_select]:py-[7px] [&_select]:text-[13px]">
-                              <Button variant="primary"
-                                onClick={async () => {
-                                  setSavingRiesgo(true);
-                                  try {
-                                    const res = await fetch(`/api/necesidades/${necesidadId}/riesgos?riesgoId=${r.id}`, {
-                                      method: "PATCH",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({
-                                        riesgo: riesgoEditTexto,
-                                        probabilidad: riesgoEditProb || undefined,
-                                        impacto: riesgoEditImpacto || undefined,
-                                        mitigacion: riesgoEditMitigacion || undefined,
-                                        responsable: riesgoEditResponsable || undefined,
-                                      }),
-                                    });
-                                    if (res.ok) {
-                                      setRiesgoEditId(null);
-                                      await reload();
-                                    } else {
-                                      const p = await res.json();
-                                      setError(p.error ?? "No se pudo actualizar.");
-                                    }
-                                  } catch {
-                                    setError("Error de conexión.");
-                                  } finally {
-                                    setSavingRiesgo(false);
-                                  }
-                                }}
-                                type="button">Guardar</Button>
-                              <Button
-                                onClick={() => setRiesgoEditId(null)} type="button">Cancelar</Button>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td>{r.riesgo}</td>
-                          <td>
-                            {r.probabilidad ? (
-                              <Badge tone={tonoRiesgo(r.probabilidad)} className="capitalize">{r.probabilidad}</Badge>
-                            ) : "—"}
-                          </td>
-                          <td>
-                            {r.impacto ? (
-                              <Badge tone={tonoRiesgo(r.impacto)} className="capitalize">{r.impacto}</Badge>
-                            ) : "—"}
-                          </td>
-                          <td>{r.mitigacion ?? "—"}</td>
-                          <td>{r.responsable ?? "—"}</td>
-                          {puedeAdjuntar ? (
-                            <td>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <button aria-label="Editar riesgo" 
-                                  onClick={() => {
-                                    setRiesgoEditId(r.id);
-                                    setRiesgoEditTexto(r.riesgo);
-                                    setRiesgoEditProb(r.probabilidad ?? "");
-                                    setRiesgoEditImpacto(r.impacto ?? "");
-                                    setRiesgoEditMitigacion(r.mitigacion ?? "");
-                                    setRiesgoEditResponsable(r.responsable ?? "");
-                                  }} type="button"><Pencil size={13} /></button>
-                                <button aria-label="Eliminar riesgo" 
-                                  disabled={deletingRiesgoId === r.id}
-                                  onClick={() => setConfirmDeleteRiesgoId(r.id)} type="button">
-                                  {deletingRiesgoId === r.id ? <Loader size={15} /> : <Trash2 size={15} />}
-                                </button>
-                              </div>
-                            </td>
-                          ) : null}
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {puedeAdjuntar ? (
-          <form className="grid grid-cols-4 gap-2.5 rounded-[10px] border border-dashed border-brand/30 bg-surface p-3 [&_label]:grid [&_label]:gap-1 [&_label]:text-[12.5px] [&_label]:text-muted [&_input]:rounded-lg [&_input]:border [&_input]:border-line [&_input]:bg-panel [&_input]:px-[9px] [&_input]:py-[7px] [&_input]:text-[13px] [&_select]:rounded-lg [&_select]:border [&_select]:border-line [&_select]:bg-panel [&_select]:px-[9px] [&_select]:py-[7px] [&_select]:text-[13px]" onSubmit={addRiesgo}>
-            <label className="col-span-2">
-              <span>Riesgo identificado</span>
-              <input
-                onChange={(e) => setRiesgoTexto(e.target.value)}
-                placeholder="Ej. Demora en la entrega por escasez del bien"
-                value={riesgoTexto}
-              />
-            </label>
-            <label>
-              <span>Probabilidad</span>
-              <select onChange={(e) => setRiesgoProb(e.target.value)} value={riesgoProb}>
-                <option value="">—</option>
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-              </select>
-            </label>
-            <label>
-              <span>Impacto</span>
-              <select onChange={(e) => setRiesgoImpacto(e.target.value)} value={riesgoImpacto}>
-                <option value="">—</option>
-                <option value="bajo">Bajo</option>
-                <option value="medio">Medio</option>
-                <option value="alto">Alto</option>
-              </select>
-            </label>
-            <label className="col-span-2">
-              <span>Mitigación</span>
-              <input
-                onChange={(e) => setRiesgoMitigacion(e.target.value)}
-                placeholder="Medida para reducir el riesgo"
-                value={riesgoMitigacion}
-              />
-            </label>
-            <label>
-              <span>Responsable</span>
-              <input
-                onChange={(e) => setRiesgoResponsable(e.target.value)}
-                placeholder="Área / cargo"
-                value={riesgoResponsable}
-              />
-            </label>
-            <div className="col-span-full flex justify-end">
-              <Button variant="primary" disabled={savingRiesgo || riesgoTexto.trim().length < 3} type="submit">
-                {savingRiesgo ? <Loader size={15} /> : <Plus size={15} />}
-                Agregar riesgo
-              </Button>
-            </div>
-          </form>
-        ) : null}
-      </section>
+        <PanelRiesgos
+          necesidadId={necesidadId}
+          onCambio={recargar}
+          onError={setError}
+          puedeEditar={puedeAdjuntar}
+          riesgos={riesgos}
+        />
       ) : null}
 
       {/* Cierre del ciclo: los dos actos de la DEC sobre algo ya redactado.
@@ -4402,15 +4125,6 @@ Ej: ${field.ejemplo}` : ""}
         confirmLabel="Eliminar"
         onConfirm={() => { if (confirmDeleteDocId) void deleteDocumento(confirmDeleteDocId); }}
         onCancel={() => setConfirmDeleteDocId(null)}
-      />
-      <ConfirmDialog
-        open={confirmDeleteRiesgoId !== null}
-        title="Eliminar riesgo"
-        message="¿Estás seguro de eliminar este riesgo de la matriz?"
-        tone="warning"
-        confirmLabel="Eliminar"
-        onConfirm={() => { if (confirmDeleteRiesgoId) void deleteRiesgoWithConfirm(confirmDeleteRiesgoId); }}
-        onCancel={() => setConfirmDeleteRiesgoId(null)}
       />
       <ConfirmDialog
         open={confirmDeleteNecesidad}
