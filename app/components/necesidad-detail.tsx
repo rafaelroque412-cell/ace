@@ -522,6 +522,10 @@ export function NecesidadDetail({
           areaRecepcion: fichaForm.recepcionArea ?? "",
         }),
         areaRecepcion: fichaForm.recepcionArea ?? "",
+        // El proyecto y su CUI acompañan al area que firma, como en la forma de
+        // pago: se traen de «b) Inversion a la que se imputa».
+        cui: fichaForm.cui ?? "",
+        proyectoInversion: fichaForm.proyectoInversion ?? "",
         plazoConformidad: (fichaForm.conformidadPlazo ?? "").trim(),
         // El campo es un NUMERO de dias y el hueco pide una frase: el texto dice
         // «otorgandole un plazo para subsanar, ___», y un «5» suelto ahi no se

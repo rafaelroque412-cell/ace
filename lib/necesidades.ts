@@ -259,7 +259,7 @@ export const necesidadCreateSchema = z.object({
   garantias: optionalText(2000),
   // Cabe el texto literal del Art. 144 con sus huecos al maximo. Ver el tope en
   // lib/necesidades-limites.ts.
-  recepcionConformidad: optionalText(5000),
+  recepcionConformidad: optionalText(7000),
   // Cabe el peor caso: todos los huecos al maximo mas el nombre del proyecto de
   // inversion. Ver el tope en lib/necesidades-limites.ts.
   formaPago: optionalText(11000),

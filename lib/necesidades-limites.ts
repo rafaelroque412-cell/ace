@@ -74,12 +74,13 @@ export const LIMITES_TEXTO: Record<string, number> = {
   adelantoDirecto: 1000,
   penalidadMora: 2000,
   garantias: 2000,
-  // 5000: el apartado se compone con el texto literal del formato
+  // 7000: el apartado se compone con el texto literal del formato
   // (lib/recepcion-conformidad.ts), que en bienes ya mide 1791 con los huecos
-  // SIN rellenar, y encima lleva las DOS areas. Cuando se quedo corto, el
-  // ultimo parrafo se cortaba sin avisar. Una prueba compone el peor caso desde
-  // estos mismos topes: da 4189.
-  recepcionConformidad: 5000,
+  // SIN rellenar, y encima lleva las DOS areas MAS el nombre del proyecto de
+  // inversion (2000 por si solo). Cuando se quedo corto, el ultimo parrafo se
+  // cortaba sin avisar. Una prueba compone el peor caso desde estos mismos
+  // topes: da 6269.
+  recepcionConformidad: 7000,
   subcontratacion: 1000,
   descripcionGeneral: 4000,
   fichaTecnicaIdentificacion: 300,

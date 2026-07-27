@@ -1,3 +1,4 @@
+import { componerAreaConformidad } from "./forma-pago";
 import type { ObjetoFilter } from "./procesos-seleccion";
 
 /**
@@ -28,6 +29,14 @@ export type HuecosRecepcion = {
   plazoConformidad: string;
   /** Plazo para subsanar observaciones. Solo servicios: en bienes es el 30% fijo. */
   plazoSubsanacion: string;
+  /**
+   * Nombre del proyecto de inversión y su CUI, de «b) Inversión a la que se
+   * imputa». No son huecos del formato: acompañan al área que otorga la
+   * conformidad, igual que en la forma de pago, para decir a qué inversión
+   * pertenece quien firma. Vacíos, el apartado sale sin ellos.
+   */
+  proyectoInversion: string;
+  cui: string;
 };
 
 function hueco(valor: string, textoOriginal: string): string {
@@ -112,7 +121,14 @@ export function componerRecepcionConformidad(
   const plantilla = plantillaPara(objeto);
   if (!plantilla) return null;
 
-  const area = hueco(h.areaConformidad ?? "", "CONSIGNAR EL ÁREA O UNIDAD ORGÁNICA QUE OTORGA LA CONFORMIDAD");
+  // El área se acompaña del proyecto de inversión y su CUI cuando los hay, igual
+  // que en la forma de pago: dice a qué inversión pertenece quien firma. El
+  // hueco sigue siendo el ÁREA —sin ella, el corchete del formato tiene que
+  // verse, no una inversión sin nadie que la conforme—.
+  const area = hueco(
+    componerAreaConformidad({ area: h.areaConformidad, cui: h.cui, proyectoInversion: h.proyectoInversion }),
+    "CONSIGNAR EL ÁREA O UNIDAD ORGÁNICA QUE OTORGA LA CONFORMIDAD",
+  );
 
   if (plantilla === "bienes") {
     return [

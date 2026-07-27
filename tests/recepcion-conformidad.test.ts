@@ -184,6 +184,10 @@ describe("el apartado entero cabe en su tope", () => {
       const peor = componerRecepcionConformidad(objeto, {
         areaConformidad: "á".repeat(LIMITES_TEXTO.formaPagoAreaConformidad),
         areaRecepcion: "á".repeat(LIMITES_TEXTO.recepcionArea),
+        // El proyecto de inversión también entra en el texto ahora, y admite
+        // 2000 por sí solo: el peor caso lo es de verdad solo con él dentro.
+        proyectoInversion: "P".repeat(LIMITES_TEXTO.proyectoInversion),
+        cui: "9".repeat(LIMITES_TEXTO.cui),
         plazoConformidad: "999",
         plazoSubsanacion: "de 999 días hábiles",
       })!;
@@ -254,6 +258,52 @@ describe("en servicios, el área de recepción dice quién otorga la conformidad
     const i = fuente.indexOf("const pedirRedactarIA");
     const cuerpo = fuente.slice(i, fuente.indexOf("\n  };", i));
     expect(cuerpo.match(/areaQueOtorgaLaConformidad\(fichaForm\.tipoObjeto/g)).toHaveLength(2);
+  });
+});
+
+describe("el área que firma lleva su proyecto de inversión, como en la forma de pago", () => {
+  const CON_INVERSION = {
+    ...HUECOS,
+    cui: "2656190",
+    proyectoInversion: "CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA",
+  };
+
+  it("en servicios, el nombre del proyecto va tras el área", () => {
+    const t = componerRecepcionConformidad("servicios", CON_INVERSION)!;
+    expect(t).toContain(
+      "La conformidad es otorgada por Sub Gerencia de Desarrollo Económico, del proyecto de inversión «CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA», con CUI 2656190 en el plazo máximo",
+    );
+  });
+
+  it("en bienes, también acompaña a la conformidad", () => {
+    const t = componerRecepcionConformidad("bienes", CON_INVERSION)!;
+    expect(t).toContain(
+      "la conformidad será otorgada por Sub Gerencia de Desarrollo Económico, del proyecto de inversión «CREACION DEL SERVICIO DE PRÁCTICA DEPORTIVA», con CUI 2656190 en el plazo máximo",
+    );
+    // La recepción, que es otro acto, NO lleva el proyecto: lo lleva quien firma.
+    expect(t).toContain("La recepción será otorgada por Unidad de Almacén Central y la conformidad");
+  });
+
+  it("sin inversión, el apartado sale igual que antes", () => {
+    const t = componerRecepcionConformidad("servicios", HUECOS)!;
+    expect(t).toContain("La conformidad es otorgada por Sub Gerencia de Desarrollo Económico en el plazo máximo");
+    expect(t).not.toContain("proyecto de inversión");
+  });
+
+  it("sin área, el corchete se ve aunque haya inversión", () => {
+    const t = componerRecepcionConformidad("servicios", { ...CON_INVERSION, areaConformidad: "" })!;
+    expect(t).toContain("[CONSIGNAR EL ÁREA O UNIDAD ORGÁNICA QUE OTORGA LA CONFORMIDAD]");
+    expect(t).not.toContain("proyecto de inversión");
+  });
+
+  it("y no se duplica si el área ya lo menciona", () => {
+    // Misma protección que en la forma de pago: si alguien tecleó la inversión
+    // dentro del nombre del área, no se repite.
+    const t = componerRecepcionConformidad("servicios", {
+      ...CON_INVERSION,
+      areaConformidad: 'RESIDENTE, para el proyecto de inversión "CREACION"',
+    })!;
+    expect(t.match(/proyecto de inversión/gi)).toHaveLength(1);
   });
 });
 
