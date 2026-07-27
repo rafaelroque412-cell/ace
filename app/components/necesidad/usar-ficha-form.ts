@@ -264,7 +264,15 @@ export function useFichaForm({
           const num = Number(raw);
           if (Number.isFinite(num)) payload[field.api] = num;
         } else {
-          payload[field.api] = raw;
+          // Un campo con valor por defecto NO puede viajar vacío: son enums
+          // cerrados y el servidor los rechaza con un 400 que bloquea la ficha
+          // entera —«No se pudo autoguardar» en cada tecla, sin decir cuál—.
+          //
+          // Es la segunda capa. La primera es no ofrecer la opción vacía en el
+          // desplegable; esta repara además los borradores que ya la tienen
+          // guardada en el navegador, que de otro modo seguirían sin poder
+          // guardarse aunque el formulario ya no permita llegar ahí.
+          payload[field.api] = raw === "" && field.porDefecto ? field.porDefecto : raw;
         }
       }
     }

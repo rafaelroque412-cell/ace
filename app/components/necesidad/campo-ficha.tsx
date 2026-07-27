@@ -444,9 +444,17 @@ export const CampoFicha = memo(function CampoFicha({
           {...marcasError}
           onBlur={validarAlSalir}
           onChange={(e) => { onCambio(field.api, e.target.value); alEscribir(); }}
-          value={val}
+          // Con `porDefecto`, un valor vacio mostraria la primera opcion
+          // mientras el estado sigue vacio: lo que se ve y lo que se
+          // guardaria dejarian de ser lo mismo.
+          value={val || field.porDefecto || ""}
         >
-          <option value="">— Sin definir —</option>
+          {/* Sin «— Sin definir —» cuando el campo tiene valor por defecto: es
+              un enum cerrado y el guardado rechaza la cadena vacía con un 400.
+              Elegirla dejaba la ficha sin poder guardarse —«No se pudo
+              autoguardar» en cada tecla— sin decir qué campo la bloqueaba.
+              Misma regla que ya seguían los desplegables de ubicación. */}
+          {field.porDefecto ? null : <option value="">— Sin definir —</option>}
           {/* Un valor guardado antes de que el campo fuera una lista
               cerrada no está entre las opciones. Se añade como
               primera opción para NO perderlo al guardar. */}
