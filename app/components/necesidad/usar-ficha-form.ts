@@ -314,6 +314,18 @@ export function useFichaForm({
       }
       if (!response.ok) {
         setAutoguardado("error");
+        // Un 400 es de VALIDACIÓN: no se arregla solo y va a fallar en cada
+        // tecla hasta que alguien corrija el campo. La ruta responde diciendo
+        // CUÁL es y por qué —se mejoró justo para eso— y aquí se estaba tirando
+        // ese mensaje: el usuario veía «No se pudo autoguardar» y no tenía forma
+        // de saber qué mirar entre setenta campos.
+        //
+        // El resto de fallos (red, 5xx) sí se callan: son pasajeros y el
+        // autoguardado dispara mientras se escribe.
+        if (response.status === 400) {
+          const detalle = await response.json().catch(() => null);
+          if (detalle?.error) onError(detalle.error);
+        }
         return;
       }
       const data = await response.json().catch(() => null);
