@@ -1,0 +1,506 @@
+/**
+ * Definicion de la ficha del requerimiento: los campos, sus secciones y las
+ * reglas que deciden cuales aplican a cada objeto y procedimiento.
+ *
+ * Vivia dentro de `necesidad-detail.tsx`. Se saca aqui porque es DATO PURO —ni
+ * JSX ni React— y porque hay codigo de servidor que lo necesita: el precalculo
+ * de los campos que exige cada PDF-modelo construye su clave de cache con una
+ * HUELLA de este catalogo, asi que un script que usara otra lista guardaria algo
+ * que la aplicacion nunca encontraria.
+ *
+ * De paso el componente adelgaza casi 500 lineas, y estas reglas —que son las que
+ * deciden que campos ve el area usuaria— pasan a poder probarse sin renderizar.
+ */
+import type { Necesidad } from "./necesidades";
+import { NOMBRE_MAX } from "./necesidades-limites";
+import {
+  etiquetas,
+  OPCIONES_MODALIDAD_PAGO,
+  OPCIONES_MONEDA,
+  OPCIONES_SISTEMA_ENTREGA,
+} from "./opciones-contratacion";
+import {
+  OBJETOS_POR_PROCEDIMIENTO,
+  type ObjetoFilter,
+  PROCESOS_SELECCION,
+} from "./procesos-seleccion";
+
+// Configuración de la ficha editable: cada campo mapea la columna (snake_case,
+// para leer) con la clave del PATCH (camelCase) y su tipo de control.
+export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "subcontratacion" | "select";
+
+// Catálogo del "Tipo de proceso de selección" (referencia inicial del área
+// usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
+// copiloto del servidor: al elegir un proceso, el copiloto ancla el RAG al
+// modelo de requerimiento correspondiente (campo `pdf`).
+
+export type FichaField = {
+  col: keyof Necesidad;
+  api: string;
+  label: string;
+  kind?: FichaFieldKind;
+  /**
+   * Valor con el que arranca un desplegable cuando no hay nada guardado.
+   *
+   * Se usa donde la norma YA impone una opcion y «sin definir» no es un estado
+   * legitimo: el computo del plazo es en dias calendario salvo excepcion (Art.
+   * 105.3), asi que dejarlo vacio solo invita a que cada cual lo interprete.
+   * Con `porDefecto`, el desplegable no ofrece la opcion vacia.
+   */
+  porDefecto?: string;
+  /**
+   * Este campo se muestra siempre que se muestre AQUEL (por su `api`).
+   *
+   * Para pares que el modelo presenta juntos y que no tiene sentido separar:
+   * «Otras penalidades» empieza literalmente por «Adicionalmente a la penalidad
+   * por mora…». Sin esto quedaba escondida tras «Mostrar N campos opcionales»,
+   * porque no es obligatoria ni la exige el modelo, y quien la buscaba no la
+   * encontraba. No infla el modo «Solo obligatorios» con campos sueltos: solo
+   * acompaña a uno que ya estaba en pantalla.
+   */
+  juntoA?: string;
+  wide?: boolean;
+  /** Campo booleano (checkbox) */
+  checkbox?: boolean;
+  /**
+   * Opciones del desplegable (solo `kind: "select"`).
+   *
+   * El `value` que se GUARDA es la etiqueta legible, no una clave: la siembra de
+   * A3 (`normalizarModalidadPago`) reconoce el texto del área usuaria buscando
+   * expresiones como "suma alzada", y una clave con guion bajo no casa.
+   */
+  opciones?: Array<{ value: string; label: string }>;
+  /** Referencia legal (artículo de Ley/Reglamento) que sustenta el campo */
+  baseLegal?: string;
+  /** Ejemplo concreto para orientar al usuario no técnico */
+  ejemplo?: string;
+  /**
+   * Fórmula de redacción, mostrada DENTRO del campo vacío.
+   *
+   * Distinta de `ejemplo`, que es una muestra corta y vive en el globo de
+   * ayuda: la plantilla enseña las PARTES que el texto debe tener y en qué
+   * orden, con los huecos entre corchetes. Se usa donde la norma impone una
+   * estructura y un ejemplo suelto no basta para reproducirla.
+   */
+  plantilla?: string;
+  /** Si se define, el campo solo se muestra para estos tipos de objeto */
+  mostrarPara?: ObjetoFilter[];
+  /**
+   * Campo que se guarda pero no se muestra ni se valida: su valor lo aporta otro
+   * campo por espejo (p. ej. Centro de costo = Área usuaria). Evita pedir dos
+   * veces el mismo dato sin perder la columna en la base.
+   */
+  oculto?: boolean;
+  /** Si es true, el campo es obligatorio según la Guía (Art. 154.1 para obras/consultoría) */
+  obligatorio?: boolean;
+  /**
+   * Obligatorio SOLO para estos objetos (obligatorio condicional). P. ej.
+   * "Sistema de entrega" se exige en obras/consultoría de obra pero no en
+   * servicios, donde el formato de requerimiento no lo pide. Si el objeto
+   * efectivo del proceso cae aquí, el campo se trata como obligatorio.
+   */
+  obligatorioPara?: ObjetoFilter[];
+  /**
+   * Si se define, el campo solo se muestra para ESTOS procedimientos (valores de
+   * PROCESOS_SELECCION). Es un eje distinto del objeto: hay datos que solo
+   * existen en un procedimiento concreto y no en su objeto entero. P. ej. el
+   * código de catálogo solo tiene sentido en la Subasta Inversa Electrónica, que
+   * se convoca sobre bienes comunes con ficha técnica del Listado; pedirlo en
+   * toda contratación de bienes es ruido.
+   *
+   * Sin este eje, un campo que solo aplica a un procedimiento parece "muerto"
+   * cuando se mira el consumo global, y se acaba borrando algo que sí se usa.
+   */
+  mostrarEnProceso?: string[];
+  /** Obligatorio SOLO en estos procedimientos (obligatorio condicional por proceso). */
+  obligatorioEnProceso?: string[];
+  /**
+   * Deja de exigirse cuando el requerimiento está desagregado en ítems.
+   *
+   * "Cantidad" y "Unidad de medida" en la cabecera solo tienen sentido con una
+   * prestación. Desagregado, cada ítem lleva la suya y el dato de cabecera no
+   * existe: sumar 500 bolsas de cemento con 300 varillas de fierro no da nada.
+   * Seguir exigiéndolos obligaría a inventarse una cifra para poder guardar.
+   */
+  noExigibleConItems?: boolean;
+  /**
+   * Contenido del requerimiento que el Art. 44.2 exige "como mínimo, de
+   * corresponder": no es obligatorio (por eso no bloquea el guardado), pero
+   * tampoco es un extra de relleno. Se muestra SIEMPRE, incluso en el modo
+   * "solo obligatorios": si se oculta, el área usuaria nunca propone y la
+   * cadena propuesta → estrategia (Art. 44.7) queda muerta.
+   */
+  recomendado?: boolean;
+  /**
+   * Subgrupo por literal legal: varios campos comparten un mismo inciso del Art.
+   * 44.2 (p. ej. 44.2.a agrupa alcance + condiciones + plazo). Se pone el MISMO
+   * título en todos los campos del grupo; el render lo pinta UNA vez como
+   * subtítulo, en lugar de repetir "a)"/"c)" en cada label —que se leía como un
+   * error de numeración—. Es robusto ante campos ocultos: el subtítulo sale
+   * antes del primer campo VISIBLE del grupo.
+   */
+  subgrupo?: string;
+};
+
+/**
+ * Objetos efectivos de un requerimiento: si el procedimiento acota objetos,
+ * manda ese ámbito (afinado al objeto declarado si cae dentro, Art. 44.10); si
+ * no, el objeto declarado.
+ *
+ * Estaba copiado en cuatro sitios (medidor de avance, filtrado del formulario,
+ * obligatorio condicional y campos objetivo de la IA). Cuatro copias de la misma
+ * regla es cómo el medidor acaba contando campos que el formulario no enseña.
+ */
+export function objetosEfectivosDe(proceso: string, objeto?: ObjetoFilter): ObjetoFilter[] {
+  const objetosProc = proceso ? OBJETOS_POR_PROCEDIMIENTO[proceso] : undefined;
+  if (objetosProc) return objeto && objetosProc.includes(objeto) ? [objeto] : objetosProc;
+  return objeto ? [objeto] : [];
+}
+
+
+/**
+ * Etiqueta de un campo NO obligatorio pero que sí es contenido del
+ * requerimiento.
+ *
+ * Estaba fija en "contenido del requerimiento (Art. 44.2)" para todo campo
+ * `recomendado`. Al pasar a recomendados el problema identificado, el beneficio
+ * esperado y la población beneficiaria —que son sustento de la finalidad
+ * pública, Art. 44.1— la ficha empezó a atribuirles un artículo que no es el
+ * suyo. Se toma el artículo de su PROPIA base legal.
+ */
+export function etiquetaRecomendado(f: FichaField): string {
+  const art = f.baseLegal?.match(/Art\.\s*[\d.]+/)?.[0];
+  return art ? `contenido del requerimiento (${art})` : "recomendado";
+}
+
+/** ¿El campo aplica al objeto y al procedimiento efectivos? (no mira `oculto`) */
+export function campoAplica(f: FichaField, efectivos: ObjetoFilter[], proceso: string): boolean {
+  // El eje de proceso es el más específico: si el campo lo declara y el proceso
+  // ya está elegido, decide él. Con el proceso sin definir no se filtra: quien
+  // aún no lo eligió debe poder ver el campo.
+  if (f.mostrarEnProceso && proceso && !f.mostrarEnProceso.includes(proceso)) return false;
+  if (!f.mostrarPara) return true;
+  // Sin objeto ni proceso no hay con qué acotar: se muestra.
+  if (efectivos.length === 0) return true;
+  return f.mostrarPara.some((o) => efectivos.includes(o));
+}
+
+/** ¿El campo es obligatorio para ese objeto/procedimiento? */
+export function campoObligatorio(f: FichaField, efectivos: ObjetoFilter[], proceso: string): boolean {
+  if (f.obligatorio) return true;
+  if (proceso && f.obligatorioEnProceso?.includes(proceso)) return true;
+  return Boolean(f.obligatorioPara?.some((o) => efectivos.includes(o)));
+}
+/**
+ * Asistente de la denominación (Art. 44.1 / 44.6 / 44.10).
+ *
+ * Propone el nombre con las piezas YA registradas en la ficha y señala las que
+ * faltan, con la sección donde se rellenan. No completa huecos por su cuenta:
+ * el nombre viaja al expediente y acaba impreso en el Anexo N° 2.
+ */
+
+/**
+ * Todos los campos de la ficha que APLICAN al proceso/objeto, sin filtrar por
+ * tipo. Es lo que se le pasa al modelo para que diga cuáles exige.
+ *
+ * Vive FUERA del componente porque no depende de su estado: solo de
+ * FICHA_SECCIONES y del objeto efectivo. Dentro se declaraba después de su
+ * primer uso y se recreaba en cada render.
+ */
+export function catalogoCampos(
+  proceso: string,
+  objeto?: string | null,
+): Array<{ api: string; label: string; seccion: string }> {
+  const efectivos = objetosEfectivosDe(proceso, (objeto ?? undefined) as ObjetoFilter | undefined);
+  const out: Array<{ api: string; label: string; seccion: string }> = [];
+  for (const section of FICHA_SECCIONES) {
+    for (const f of section.fields) {
+      if (f.oculto || !campoAplica(f, efectivos, proceso)) continue;
+      out.push({ api: f.api, label: f.label, seccion: section.title });
+    }
+  }
+  return out;
+}
+
+export type FichaSection = {
+  title: string;
+  fields: FichaField[];
+  preliminar?: boolean;
+  nota?: string;
+  /**
+   * Resumen de UNA frase en lenguaje llano (sin artículos ni jerga), para
+   * orientar a quien no es técnico. Se muestra siempre como entradilla; en
+   * "Modo simple" reemplaza a la nota legal.
+   */
+  resumenLlano?: string;
+  simple?: boolean;
+  /** Si se define, la sección solo se muestra para estos tipos de objeto */
+  mostrarPara?: ObjetoFilter[];
+};
+
+// Orden de la ficha, alineado con el Art. 44 del Reglamento.
+//
+// La Necesidad ES el requerimiento del área usuaria, así que el recorrido sigue
+// el del artículo: primero POR QUÉ (44.1 finalidad pública), luego QUÉ (44.10
+// objeto, 126.1 EETT/TDR), luego EN QUÉ CONDICIONES (44.2), y al final lo
+// administrativo. Antes la Justificación iba quinta, detrás de quince campos de
+// presupuesto: quien formula tenía que atravesar rubros y clasificadores antes
+// de poder decir para qué lo necesita.
+export const FICHA_SECCIONES: FichaSection[] = [
+  {
+    title: "Identificación",
+    resumenLlano: "Quién pide la contratación y datos básicos de la entidad y el año.",
+    simple: true,
+    fields: [
+      { col: "area_usuaria", api: "areaUsuaria", label: "Área usuaria (y centro de costo)", obligatorio: true, baseLegal: "Art. 20.a Reglamento · el área usuaria formula su requerimiento en coordinación con la DEC, y ese requerimiento debe estar previsto en el CMN. Luego se lo remite (Art. 44.2).", ejemplo: "Oficina de Logística" },
+      { col: "entidad", api: "entidad", label: "Entidad", obligatorio: true, baseLegal: "Ley 32069, Art. 4", ejemplo: "Ministerio de Vivienda" },
+      { col: "unidad_ejecutora", api: "unidadEjecutora", label: "Unidad ejecutora", baseLegal: "Unidad ejecutora del pliego a la que se imputa la contratación. Identifica a la entidad contratante junto con su denominación y RUC.", obligatorio: true, ejemplo: "UE 001" },
+      // Centro de costo = Área usuaria (siempre espejado). Se guarda pero no se
+      // muestra: pedirlo aparte era registrar dos veces el mismo dato.
+      // Espejo del área usuaria: se guarda pero no se muestra. Estaba marcado
+      // `obligatorio` a la vez que `oculto`, dos cosas que se contradicen — no
+      // hay forma de rellenar un campo que no se enseña.
+      { col: "centro_costo", api: "centroCosto", label: "Centro de costo", oculto: true, ejemplo: "CC-1234" },
+      { col: "responsable", api: "responsable", label: "Responsable", baseLegal: "Art. 20.a Reglamento · formular adecuadamente el requerimiento es función del área usuaria; quien firma responde de su contenido.", obligatorio: true, ejemplo: "Nombre del jefe de área" },
+      { col: "anio_fiscal", api: "anioFiscal", label: "Año fiscal", kind: "number", obligatorio: true, baseLegal: "Ejercicio presupuestal al que corresponde la necesidad, según el CMN.", ejemplo: "2026" },
+    ],
+  },
+  {
+    title: "Programación y presupuesto",
+    resumenLlano: "Cuánto cuesta aproximadamente, con qué fondos se paga y para cuándo se necesita.",
+    simple: true,
+    fields: [
+      // Eran 19 campos en fila corrida. Se agrupan siguiendo el recorrido de quien
+      // rellena: dónde está programada la necesidad, a qué inversión se imputa, con
+      // qué fuente se paga, cuánto vale y para cuándo se necesita. El periodo del CMN
+      // vivia en Identificación, que no es donde se busca.
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "periodo_programacion", api: "periodoProgramacion", label: "Periodo de programación", baseLegal: "Art. 20.a Reglamento · el requerimiento debe estar previsto en el CMN; aquí va el periodo multianual al que corresponde.", ejemplo: "2026-I" },
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "meta_presupuestal", api: "metaPresupuestal", label: "Meta presupuestal", obligatorio: true, baseLegal: "Meta del presupuesto institucional que financia la contratación.", ejemplo: "Meta 001" },
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "trimestre", api: "trimestre", label: "Trimestre", kind: "number", baseLegal: "Trimestre en que el PAC prevé ejecutar la contratación (1 a 4).", ejemplo: "1" },
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "mes_programado", api: "mesProgramado", label: "Mes programado", kind: "number", baseLegal: "Mes previsto en el PAC (1 a 12).", ejemplo: "3" },
+      { subgrupo: "b) Inversión a la que se imputa", col: "cui", api: "cui", label: "Código Único de Inversión (CUI)", recomendado: true, baseLegal: "Art. 46.1.c Reglamento · lo pide la variable c) del Formato de Estrategia. Viene de act_proy del pedido SIGA.", ejemplo: "2661009" },
+      { subgrupo: "b) Inversión a la que se imputa", col: "cadena_funcional", api: "cadenaFuncional", label: "Cadena funcional", baseLegal: "Cadena funcional programática del SIGA; su 4.º segmento lleva el CUI.", ejemplo: "21-046-0102-2656190-4000129" },
+      { subgrupo: "b) Inversión a la que se imputa", col: "clasificador_gasto", api: "clasificadorGasto", label: "Clasificador de gasto", baseLegal: "Clasificador de gastos del SIAF; va a la solicitud de certificación presupuestal.", ejemplo: "2.3.1.1.1" },
+      { subgrupo: "b) Inversión a la que se imputa", col: "proyecto_inversion", api: "proyectoInversion", label: "Proyecto de inversión (nombre)", kind: "textarea", wide: true, baseLegal: "Art. 46.1.c Reglamento · declaración de viabilidad del proyecto de inversión.", ejemplo: "186 MEJORAMIENTO Y AMPLIACION DE LOS SERVICIOS DE AGUA POTABLE Y SANEAMIENTO BASICO EN LAS LOCALIDADES DE …, DISTRITO DE CHALLHUAHUACHO, PROVINCIA DE COTABAMBAS, DEPARTAMENTO DE APURIMAC" },
+      { subgrupo: "b) Inversión a la que se imputa", col: "ioarr", api: "ioarr", label: "IOARR", baseLegal: "Art. 46.1.c Reglamento · aprobación de la IOARR.", ejemplo: "IOARR-5678" },
+      { subgrupo: "c) Financiamiento", col: "fuente_financiamiento", api: "fuenteFinanciamiento", label: "Fuente de financiamiento", obligatorio: true, baseLegal: "Fuente de financiamiento del clasificador del MEF con la que se atiende la necesidad.", ejemplo: "Recursos Ordinarios" },
+      { subgrupo: "c) Financiamiento", col: "rubro", api: "rubro", label: "Rubro", obligatorio: true, baseLegal: "Rubro de financiamiento del SIGA (col. `fuente_fto` del pedido).", ejemplo: "18" },
+      { subgrupo: "c) Financiamiento", col: "moneda", api: "moneda", label: "Moneda", kind: "select", opciones: OPCIONES_MONEDA, baseLegal: "Moneda del requerimiento; determina cómo se expresa la cuantía (Art. 47.1).", ejemplo: "PEN" },
+      { subgrupo: "d) Valor estimado", col: "monto_estimado", api: "montoEstimado", label: "Monto estimado (S/)", kind: "number", obligatorio: true, baseLegal: "Ley 32069, Art. 48 · la entidad establece la CUANTÍA de la contratación para gestionar los recursos presupuestales. Art. 47.1 Reglamento · el valor definitivo lo fija la interacción con el mercado; esta es la estimación de partida.", ejemplo: "50000" },
+      { subgrupo: "d) Valor estimado", col: "costo_unitario", api: "costoUnitario", label: "Costo unitario (S/)", kind: "number", baseLegal: "Art. 47.1 Reglamento · base de la cuantía en Subasta Inversa y Comparación de Precios, donde se compara por unitario.", ejemplo: "12.50", obligatorioEnProceso: ["Subasta Inversa Electrónica", "Comparación de Precios"] },
+      { subgrupo: "d) Valor estimado", col: "costo_total", api: "costoTotal", label: "Costo total (S/)", kind: "number", baseLegal: "Se calcula automáticamente (cant. × costo unitario)", ejemplo: "6250" },
+      { subgrupo: "d) Valor estimado", col: "anio_referencia", api: "anioReferencia", label: "Año de referencia", kind: "number", ejemplo: "2026", obligatorioEnProceso: ["Comparación de Precios", "Subasta Inversa Electrónica"], baseLegal: "Art. 47.1 Reglamento · año del precio de referencia con el que se actualiza la cuantía." },
+      { subgrupo: "e) Fechas del requerimiento", col: "fecha_requerida", api: "fechaRequerida", label: "Fecha requerida", kind: "date", baseLegal: "Fecha para la que se necesita; la DEC estima contra ella el cronograma (Art. 46.1.o).", obligatorio: true, ejemplo: "2026-03-15" },
+      { subgrupo: "e) Fechas del requerimiento", col: "fecha_remision_dec", api: "fechaRemisionDec", label: "Fecha de recepción por la DEC", kind: "date", obligatorio: true, baseLegal: "Art. 44.2 Reglamento · El área usuaria remite el requerimiento a la DEC", ejemplo: "2026-03-16" },
+      { subgrupo: "e) Fechas del requerimiento", col: "fecha_version_dos", api: "fechaVersionDos", label: "Fecha de la 2ª versión del requerimiento", kind: "date", baseLegal: "Art. 44.7 Reglamento · Ciclo de no objeción (mejora del requerimiento)", ejemplo: "2026-03-20" },
+      { subgrupo: "e) Fechas del requerimiento", col: "fecha_version_n", api: "fechaVersionN", label: "Fecha de la \"n\" versión del requerimiento", kind: "date", baseLegal: "Art. 44.7 Reglamento · Última iteración del requerimiento", ejemplo: "2026-03-27" },
+      ],
+    },
+    {
+    title: "3.1 Finalidad pública de la contratación",
+    resumenLlano: "Explica para qué se necesita esta contratación: qué problema resuelve y a quién beneficia.",
+    simple: true,
+    nota: "El requerimiento atiende una necesidad para el cumplimiento de la finalidad pública, promoviendo el valor por dinero (Art. 44.1 del Reglamento · Bases Estándar, Cap. III · 3.1).",
+    // El sustento de la finalidad (problema, objetivo, beneficio, población) se
+    // retiró: no lo consumía ninguna fase, ya no se imprime en ningún documento
+    // desde que se quitó la Ficha en Word, y su único uso era dar contexto a la
+    // IA. Lo que el Art. 44.1 exige es la finalidad pública, que sí se conserva.
+    fields: [
+      // La fórmula sale LITERALMENTE del Art. 44.1 del Reglamento: "atienden una
+      // NECESIDAD para el cumplimiento de la FINALIDAD PÚBLICA, promoviendo el
+      // VALOR POR DINERO". Esas tres piezas, en ese orden, son la estructura que
+      // el texto debe reproducir; el cierre recoge los términos con que la Ley
+      // 32069 define el valor por dinero (Art. 5.1.c: eficiencia, eficacia y
+      // economía). No se cita otra normativa a propósito: el requerimiento se
+      // sustenta en la Ley 32069 y su Reglamento, y meter aquí normas generales
+      // desplaza el fundamento propio de la contratación.
+      {
+        col: "finalidad_publica",
+        api: "finalidadPublica",
+        label: "Finalidad pública",
+        kind: "textarea",
+        wide: true,
+        obligatorio: true,
+        baseLegal:
+          "Reglamento Art. 44.1 · el requerimiento atiende una NECESIDAD para el cumplimiento de la FINALIDAD PÚBLICA, promoviendo el VALOR POR DINERO.\n" +
+          "Ley 32069 Art. 5.1.c · el valor por dinero maximiza lo obtenido en términos de eficiencia, eficacia y economía.\n" +
+          "Ley 32069 Art. 27.2 · la decisión debe ser la más conveniente para alcanzar la finalidad pública del contrato.",
+        plantilla:
+          "La contratación de [OBJETO] atiende la necesidad de [NECESIDAD CONCRETA DEL ÁREA USUARIA], " +
+          "para el cumplimiento de la finalidad pública de [COMPETENCIA O SERVICIO PÚBLICO A CARGO DE LA ENTIDAD], " +
+          "promoviendo el valor por dinero en términos de eficiencia, eficacia y economía.",
+        ejemplo:
+          "La contratación del servicio de mantenimiento de vías vecinales atiende la necesidad de transitabilidad " +
+          "segura en el distrito, para el cumplimiento de la finalidad pública de conservar la infraestructura vial " +
+          "a cargo de la municipalidad, promoviendo el valor por dinero en términos de eficiencia, eficacia y economía.",
+      },
+    ],
+  },
+  {
+    title: "3.2 Descripción general del requerimiento",
+    resumenLlano: "Di qué es lo que se va a contratar, en cuánta cantidad y con qué unidad de medida.",
+    simple: true,
+    nota: "Describe el requerimiento en conjunto e incluye los ítems o paquetes —el cuadro de abajo los desagrega— y, si la prestación principal las conlleva, las prestaciones accesorias. El objeto se determina por la naturaleza de la contratación; con varias prestaciones, manda la de mayor costo (Art. 44.10). La descripción TÉCNICA detallada (EETT/TDR) NO va aquí: es el 3.4.",
+    fields: [
+      { col: "especialidad", api: "especialidad", label: "Especialidad", obligatorioPara: ["obras", "consultoria_obra"], mostrarPara: ["obras", "consultoria_obra"], baseLegal: "Art. 72.3.b Reglamento · en obras y consultoría de obras la experiencia del personal clave corresponde a la especialidad y subespecialidad (Art. 157).", ejemplo: "Bienes comunes" },
+      { col: "subespecialidad", api: "subespecialidad", label: "Subespecialidad", mostrarPara: ["obras", "consultoria_obra"], baseLegal: "Art. 157 Reglamento · subespecialidad de la experiencia en obras y consultoría de obras.", ejemplo: "Útiles de oficina" },
+      // El código de catálogo se registra AHORA POR ÍTEM, en el cuadro de la
+      // sección 3.2: un pedido de varias líneas trae un código por prestación y
+      // aquí solo cabía uno. Se guarda pero no se muestra —la columna sigue viva
+      // y las necesidades antiguas conservan su valor—. La exigencia de la
+      // Subasta Inversa (bienes comunes con FICHA TÉCNICA del Listado) se cumple
+      // ahora en la columna del cuadro, que es donde está el dato.
+      { col: "codigo_catalogo", api: "codigoCatalogo", label: "Código de catálogo", oculto: true, ejemplo: "CAT-00123" },
+      // A fila completa: al importar recibe el motivo del pedido (col. S), que es
+      // una frase larga y en un campo estrecho se leía a trozos.
+      // Lo que el 3.2 del modelo pide de verdad: «INDICAR LA DESCRIPCIÓN GENERAL
+      // DEL REQUERIMIENTO, INCLUYENDO LOS ÍTEMS O PAQUETES, DE SER EL CASO. EN CASO
+      // LA PRESTACIÓN PRINCIPAL CONLLEVE PRESTACIONES ACCESORIAS, CONSIGNARLAS».
+      // No existía: la ficha tenía el nombre de catálogo y el cuadro de ítems, pero
+      // ningún sitio donde describir el requerimiento en conjunto.
+      { col: "descripcion_general", api: "descripcionGeneral", label: "Descripción general del requerimiento", kind: "textarea", wide: true, obligatorio: true, baseLegal: "Art. 44.2 Reglamento · el requerimiento describe la prestación; el cuadro de ítems de abajo la desagrega cuando son varias (Arts. 52 y 53.3).", plantilla: "Se requiere [OBJETO] para [FINALIDAD OPERATIVA]. Comprende [NÚMERO] ítem(es) o paquete(s), detallados en el cuadro. La prestación principal es [PRESTACIÓN] y conlleva las prestaciones accesorias de [ACCESORIAS, si las hay].", ejemplo: "Se requiere el servicio de mantenimiento de vías vecinales para asegurar la transitabilidad. Comprende 3 ítems, detallados en el cuadro." },
+      { col: "prestaciones_accesorias", api: "prestacionesAccesorias", label: "Prestaciones accesorias de la prestación principal", kind: "textarea", wide: true, baseLegal: "Art. 44.4 Reglamento · se evalúa la necesidad de prestaciones accesorias —mantenimiento preventivo y correctivo, operación— considerando el ciclo de vida del activo. El formato pide consignarlas aquí cuando la prestación principal las conlleve; su detalle técnico va en el 3.4.", ejemplo: "Mantenimiento preventivo semestral durante los dos primeros años." },
+      { col: "descripcion_catalogo", api: "descripcionCatalogo", label: "Descripción de catálogo", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.6 Reglamento · Es el qué del nombre de la contratación, en términos genéricos: no debe referir marca, fabricante ni patente. Al importar se toma del motivo del pedido (col. S), así que conviene revisarlo.", ejemplo: "Papel bond A4" },
+      // "Cantidad" y "Unidad de medida" YA NO ESTÁN aquí: describían una sola
+      // prestación y el cuadro de ítems las lleva por línea (Art. 44.10 · 52).
+      // Las columnas siguen en la base —hay necesidades antiguas con esos datos
+      // y los exportables los leen— pero no se piden en el formulario: pedir un
+      // dato de cabecera que contradice al desagregado solo genera descuadres.
+      { col: "frecuencia", api: "frecuencia", label: "Frecuencia", baseLegal: "Art. 126.2 Reglamento · en provisión continua o periódica el plazo no puede ser menor a un año.", ejemplo: "Mensual" },
+    ],
+  },
+  {
+    // Los cinco literales del 44.2, juntos. Antes estaban repartidos entre
+    // "Objeto" y una sección llamada "Estrategia de contratación", que es otro
+    // artefacto: la estrategia la hace la DEC en el expediente (Art. 46), no el
+    // área usuaria en su requerimiento.
+    title: "3.3 Condiciones de contratación",
+    resumenLlano: "Cómo se ejecutará: plazo, forma de pago, entrega y demás condiciones. Lo obligatorio ya viene marcado.",
+    simple: false,
+    nota: "Condiciones de contratación (Art. 44.2 · Bases Estándar, Cap. III · 3.3): modalidad de pago, sistema de entrega, plazo y lugar de prestación, adelantos, subcontratación y fórmula de reajuste. La DEC las decide después en la Estrategia (A4); si las cambia, requiere la no objeción del área usuaria (Art. 44.7). Los requisitos de calificación van en la sección 3.5.",
+    fields: [
+      // Los apartados van en el ORDEN Y CON LAS LETRAS del requerimiento modelo
+      // (3.3, apartados a-j). Antes se rotulaban con las letras del Art. 44.2 del
+      // Reglamento —a) alcance, c) modalidad de pago, e) fórmula de reajuste—, que
+      // son otra numeración distinta: quien trasladaba la ficha al documento tenía
+      // que reordenar de cabeza. La cita del 44.2 sigue en la base legal de cada
+      // campo, que es donde corresponde.
+      { col: "modalidad_pago", api: "modalidadPago", label: "Propuesta de modalidad de pago", subgrupo: "a) Modalidad de pago", kind: "select", opciones: etiquetas(OPCIONES_MODALIDAD_PAGO), recomendado: true, baseLegal: "Art. 44.2.c Reglamento · la modalidad de pago es contenido mínimo del requerimiento: el área usuaria la propone y la DEC la determina en la estrategia (Art. 46.1.h). Las modalidades posibles son las siete del Art. 130: suma alzada, precios unitarios, esquema mixto, tarifas, porcentajes, honorario fijo más comisión de éxito y pago por consumo.", ejemplo: "Suma alzada" },
+      { col: "sistema_entrega", api: "sistemaEntrega", label: "Propuesta de sistema de entrega", subgrupo: "b) Sistema de entrega", kind: "select", opciones: etiquetas(OPCIONES_SISTEMA_ENTREGA), obligatorioPara: ["obras", "consultoria_obra"], baseLegal: "Art. 44.2.c Reglamento · el sistema de entrega es contenido mínimo del requerimiento: el área usuaria lo propone y la DEC lo determina en la estrategia (Art. 46.1.i). Los sistemas posibles son los del Art. 129; si no se prevé ninguno, se elige «No aplica».", ejemplo: "Llave en mano", mostrarPara: ["servicios", "obras", "consultoria_obra"] },
+      { col: "plazo_ejecucion", api: "plazoEjecucion", label: "Plazo de ejecución o prestación (días)", subgrupo: "c) Plazo de prestación", kind: "number", obligatorio: true, baseLegal: "Art. 126.2 Reglamento · En bienes y servicios rutinarios u operacionales de provisión continua, no puede ser menor a un año.", ejemplo: "60" },
+      { col: "plazo_ejecucion_unidad", api: "plazoEjecucionUnidad", label: "Cómputo del plazo", subgrupo: "c) Plazo de prestación", kind: "select", obligatorio: true, porDefecto: "calendario", opciones: [{ value: "calendario", label: "Días calendario" }, { value: "habiles", label: "Días hábiles" }], baseLegal: "Art. 105.3 Reglamento · durante la ejecución contractual los plazos se cuentan en días CALENDARIO, salvo que el Reglamento indique lo contrario; supletoriamente rigen los Arts. 183 y 184 del Código Civil.", ejemplo: "Días calendario" },
+      { subgrupo: "d) Lugar de prestación", col: "departamento", api: "departamento", label: "Departamento", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "Lima" },
+      { subgrupo: "d) Lugar de prestación", col: "provincia", api: "provincia", label: "Provincia", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "Lima" },
+      { subgrupo: "d) Lugar de prestación", col: "distrito", api: "distrito", label: "Distrito", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "San Isidro" },
+      { subgrupo: "d) Lugar de prestación", col: "lugar_entrega", api: "lugarEntrega", label: "Lugar de prestación o entrega", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar concreto de entrega o de prestación.", ejemplo: "Av. Principal 123" },
+      { subgrupo: "e) Adelanto directo", col: "adelanto_directo", api: "adelantoDirecto", label: "Adelanto directo", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 137 Reglamento · en bienes y servicios solo se otorga adelanto directo en los supuestos que ahí se tasan.", plantilla: "La entidad contratante otorgará [NÚMERO] adelanto(s) directo(s) por el [PORCENTAJE, no mayor al 30% en conjunto] del monto del contrato original. El contratista debe solicitarlos dentro de los [PLAZO] días siguientes al perfeccionamiento del contrato.", ejemplo: "Hasta 30% del monto del contrato" },
+      { subgrupo: "f) Penalidades", col: "penalidad_mora", api: "penalidadMora", label: "Penalidad por mora", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 120 Reglamento · penalidad por mora ante retraso injustificado; el Art. 119 exige que el contrato la establezca junto con las demás penalidades.", ejemplo: "0.10 × monto / (F × plazo en días)" },
+      // El Art. 119.1 pide que el contrato establezca la penalidad por mora Y OTRAS
+      // penalidades. El apartado f) del modelo trae un cuadro para ellas (supuesto,
+      // forma de calculo y procedimiento de verificacion) que la ficha no recogia.
+      { subgrupo: "f) Penalidades", col: "otras_penalidades", api: "otrasPenalidades", label: "Otras penalidades", juntoA: "penalidadMora", kind: "penalidades", wide: true, baseLegal: "Arts. 119.1 y 119.2 Reglamento · el contrato establece la penalidad por mora Y otras penalidades ante el incumplimiento injustificado de las obligaciones contractuales.", ejemplo: "No presentar el informe mensual en plazo · 0.5 UIT por informe · acta del área usuaria." },
+      { subgrupo: "g) Subcontratación", col: "subcontratacion", api: "subcontratacion", label: "Subcontratación", kind: "subcontratacion", wide: true, baseLegal: "Art. 108.1 Reglamento · se subcontrata hasta el 40% del monto del contrato vigente; las bases pueden excluir prestaciones esenciales o, si así se evaluó en la estrategia de contratación Y con el sustento correspondiente, prohibirla.", mostrarPara: ["servicios", "obras", "consultoria_obra"], ejemplo: "Prohibida / Permitida hasta 40%" },
+      { subgrupo: "h) Fórmula de reajuste", col: "formula_reajuste", api: "formulaReajuste", label: "Fórmula de reajuste", plantilla: "[DE SER EL CASO, CONSIGNAR LAS FÓRMULAS DE REAJUSTE CORRESPONDIENTES Y EL PROCEDIMIENTO, DE ACUERDO CON LO PREVISTO EN EL NUMERAL 136.2 DEL ARTÍCULO 136 DEL REGLAMENTO]", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 136.2 Reglamento · solo en contratos de ejecución PERIÓDICA O CONTINUADA; el reajuste sigue la variación del IPC nacional o de Lima Metropolitana del mes de pago, según dónde se ejecute la prestación. Se incluye a propuesta del área usuaria y previa validación en la estrategia de contratación.", ejemplo: "Fórmula polinómica basada en el índice de precios del INEI" },
+      { subgrupo: "i) Solución de controversias contractuales", col: "solucion_controversias", api: "solucionControversias", label: "Solución de controversias contractuales", kind: "controversias", wide: true, recomendado: true, baseLegal: "Arts. 330 y 331 Reglamento · conciliación y arbitraje; el arbitraje institucional se inicia ante la Institución Arbitral elegida entre las designadas (Art. 331.2). El Art. 224, que citaba antes este campo, es de contratos estandarizados de ingeniería y construcción de uso internacional.", ejemplo: "Cámara de Comercio de Lima — RUC 20112273922" },
+      { subgrupo: "j) Plazo para respuestas entre las partes", col: "plazo_respuestas", api: "plazoRespuestas", label: "Plazo máximo de respuesta entre las partes (días calendario)", kind: "number", baseLegal: "Apartado j) del formato de requerimiento · plazo en que las partes se responden durante la ejecución. No lo fija el Reglamento: es una condición del modelo.", ejemplo: "Cinco (5) días hábiles desde la recepción de la comunicación." },
+
+      // Lo que el Art. 44.2 exige y el modelo no numera en su 3.3. Va detrás y con
+      // rótulo propio para que no se confunda con la lista de letras.
+      { col: "alcance", api: "alcance", label: "Alcance de la contratación", subgrupo: "Alcance y condiciones de ejecución (Art. 44.2.a)", kind: "textarea", wide: true, recomendado: true, obligatorioPara: ["obras", "consultoria_obra"], baseLegal: "Art. 44.2.a Reglamento · el alcance y las condiciones de ejecución se definen en función del desempeño y la funcionalidad.", ejemplo: "Suministro a nivel nacional" },
+      { col: "condiciones_ejecucion", api: "condicionesEjecucion", label: "Condiciones de ejecución", subgrupo: "Alcance y condiciones de ejecución (Art. 44.2.a)", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.2.a Reglamento · En función del desempeño y la funcionalidad.", ejemplo: "Entrega en 30 días calendario" },
+      { col: "equipamiento_minimo", api: "equipamientoMinimo", label: "Equipamiento mínimo", subgrupo: "Equipamiento y habilitaciones (Art. 44.2.d)", kind: "textarea", wide: true, baseLegal: "Art. 44.2.d Reglamento · Recursos que el contratista necesita para ejecutar la contratación.", ejemplo: "2 camionetas, 1 almacén" },
+      { col: "habilitaciones", api: "habilitaciones", label: "Habilitaciones y permisos", subgrupo: "Equipamiento y habilitaciones (Art. 44.2.d)", kind: "textarea", wide: true, baseLegal: "Art. 44.2.d Reglamento", ejemplo: "Licencia municipal, RNP" },
+      { subgrupo: "Otras condiciones del contrato", col: "garantias", api: "garantias", label: "Garantías (fiel cumplimiento, etc.)", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 138 Reglamento · garantía de fiel cumplimiento en bienes y servicios; el Art. 139 fija las excepciones y el Art. 113 los tipos de garantía.", ejemplo: "Garantía de fiel cumplimiento 10% del contrato" },
+      { subgrupo: "Otras condiciones del contrato", col: "recepcion_conformidad", api: "recepcionConformidad", label: "Recepción y conformidad de la prestación", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 144 Reglamento · el área usuaria es responsable de brindar la conformidad de bienes y servicios.", ejemplo: "Conformidad otorgada por el área usuaria en 10 días hábiles" },
+      { subgrupo: "Otras condiciones del contrato", col: "gestion_riesgos", api: "gestionRiesgos", label: "Gestión de riesgos", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.3 Reglamento · al elaborar el requerimiento se inicia la identificación y evaluación de riesgos y su asignación a alguna de las partes, que es insumo de la estrategia de contratación.", ejemplo: "Matriz de riesgos y asignación entre las partes" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "metas_fisicas", api: "metasFisicas", label: "Metas físicas / objetivos funcionales", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154 Reglamento · requerimiento de obras y consultoría de obras; las metas físicas concretan el alcance del Art. 44.2.a.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Construcción de 1,200 m² de pavimento rígido" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "disponibilidad_terreno", api: "disponibilidadTerreno", label: "Disponibilidad física del terreno", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 154.1.e Reglamento · Sustento de la disponibilidad del terreno, según corresponda", mostrarPara: ["obras"], ejemplo: "Terreno saneado, libre de interferencias (acta adjunta)" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "seguros", api: "seguros", label: "Seguros", kind: "textarea", wide: true, recomendado: true, baseLegal: "Formato de las bases estándar de obras · seguros (CAR, responsabilidad civil). El Art. 154.1 no lo enumera: es una condición del modelo, no una exigencia del Reglamento.", mostrarPara: ["obras"], ejemplo: "Seguro CAR y de responsabilidad civil durante la ejecución" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "metodologia_bim", api: "metodologiaBim", label: "Metodologías colaborativas (BIM)", kind: "textarea", wide: true, baseLegal: "Art. 154.1.b Reglamento · Necesidad de emplear BIM", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Uso de BIM en la etapa de ejecución (SNPMGI)" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "gestion_calidad", api: "gestionCalidad", label: "Gestión de la calidad", kind: "textarea", wide: true, recomendado: true, baseLegal: "Formato de las bases estándar de obras · plan de gestión de la calidad. El Art. 154.1 no lo enumera.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Plan de aseguramiento y control de calidad" },
+      { subgrupo: "Obras y consultoría de obras (Art. 154.1)", col: "anexos_tecnicos", api: "anexosTecnicos", label: "Anexos técnicos", kind: "textarea", wide: true, baseLegal: "Formato de las bases estándar de obras y consultoría de obras · anexos técnicos. El Art. 154.1 no los enumera.", mostrarPara: ["obras", "consultoria_obra"], ejemplo: "Planos, estudios básicos, memoria descriptiva" },
+      ],
+    },
+    {
+    title: "3.4 Términos de referencia",
+    resumenLlano: "Describe con detalle las características técnicas de lo que se contrata (el «cómo debe ser»).",
+    simple: false,
+    nota: "Características técnicas y condiciones de ejecución, de preferencia por desempeño y funcionalidad antes que por rasgos meramente descriptivos (Art. 126.1 · principio de valor por dinero). AQUÍ NO van los requisitos de calificación del proveedor: esos son el 3.5. Sí cabe listar el personal, equipamiento o infraestructura NO clave que se necesite para prestar el servicio, pero sin exigir su acreditación en la selección: son condiciones de la ejecución.",
+    fields: [
+      { col: "descripcion_detallada", api: "descripcionDetallada", label: "Términos de referencia / Especificaciones técnicas", kind: "textarea", wide: true, obligatorio: true, baseLegal: "Art. 126.1 Reglamento · Especificaciones técnicas (bienes) o términos de referencia (servicios)", ejemplo: "Servicio de X con las siguientes características técnicas…" },
+      // Lo demás que el 3.4 del modelo exige y la ficha no recogía. Va detrás del
+      // TDR porque son precisiones SOBRE él, no descripciones alternativas.
+      { col: "ficha_tecnica_identificacion", api: "fichaTecnicaIdentificacion", label: "Ficha técnica u homologación aplicable", baseLegal: "Art. 260 Reglamento · las fichas técnicas y de homologación aprobadas son de uso OBLIGATORIO con independencia del monto; cuando se usan, el requerimiento debe identificarlas.", ejemplo: "Ficha técnica N° 0001-2025-PERUCOMPRAS · Papel bond A4 75 g" },
+      { col: "normas_tecnicas", api: "normasTecnicas", label: "Normas técnicas y metrológicas aplicables", kind: "textarea", wide: true, baseLegal: "Art. 44.5 Reglamento · el requerimiento incluye lo previsto en leyes, reglamentos, normas metrológicas y normas técnicas OBLIGATORIAS. Las voluntarias solo caben si se sustentan en la estrategia y cumplen las cuatro condiciones del 44.5.", ejemplo: "NTP 350.043-1 · extintores portátiles" },
+      { col: "compatibilizacion", api: "compatibilizacion", label: "Documento de compatibilización del requerimiento", baseLegal: "Art. 44.6 Reglamento · solo cabe referir marca, fabricante, patente u origen si la autoridad de la gestión administrativa aprobó la compatibilización; entonces hay que consignar el documento que la aprueba.", ejemplo: "Resolución de Gerencia Municipal N° 045-2026-GM-MDCH" },
+    ],
+  },
+  {
+    // Bases Estándar, Cap. III · 3.5.1: requisitos OBLIGATORIOS (capacidad legal
+    // + experiencia del postor). El área usuaria PROPONE; la DEC los establece
+    // en la Estrategia (Art. 72.1).
+    title: "3.5.1 Requisitos de calificación obligatorios",
+    resumenLlano: "Qué debe acreditar el proveedor para poder participar (habilitación y experiencia). Tú lo propones; la DEC lo confirma.",
+    simple: false,
+    nota: "Dos requisitos obligatorios, según el formato: A) capacidad legal —solo si la normativa del objeto exige habilitación para la actividad; si no la exige, se omite— y B) experiencia del postor en la especialidad. Cada uno lleva su REQUISITO y cómo se ACREDITA. Dos topes del formato: el monto facturado acumulado no puede superar TRES VECES la cuantía de la contratación o del ítem, y se cuenta en los QUINCE años anteriores a la presentación de ofertas. En consorcio, cada integrante comprometido con el objeto acredita el requisito. El área usuaria PROPONE; la DEC los establece en la estrategia (Art. 72.1).",
+    fields: [
+      // 3.5.1 del formato de requerimiento: los requisitos de calificación son
+      // OBLIGATORIOS en los 15 procesos (todos los modelos incluyen esta sección).
+      // El área usuaria PROPONE; la DEC los establece (Art. 72.1), pero la
+      // propuesta debe existir en el requerimiento.
+      { col: "requisitos_calificacion", api: "requisitosCalificacion", label: "Propuesta de requisitos de calificación / precalificación", kind: "requisitos", wide: true, obligatorio: true, baseLegal: "Art. 44.2.b / 72.3 Reglamento · Sección 3.5.1 (obligatoria). El área usuaria PROPONE; la DEC los establece en la Estrategia (Art. 72.1). Los 5 tipos son los del Art. 72.3.", ejemplo: "Capacidad legal; Experiencia del postor en la especialidad" },
+      // CONSOLIDADO en la Propuesta de requisitos de calificación (editor): la
+      // "Experiencia del postor en la especialidad" es uno de los 5 tipos del
+      // Art. 72.3 que gestiona el editor. Se mantiene la columna (oculta) como
+      // respaldo del dato heredado; su contenido se migra al tipo
+      // `experiencia_postor` del editor al abrir la ficha.
+    ],
+  },
+  {
+    // Bases Estándar, Cap. III · 3.5.2: requisitos ADICIONALES (capacidad
+    // técnica y profesional / personal clave), de corresponder.
+    title: "3.5.2 Requisitos de calificación adicionales",
+    simple: false,
+    nota: "Facultativos: solo se incluyen si así se determina en la estrategia de contratación. El típico es la capacidad técnica y profesional —calificaciones y experiencia del personal clave, Art. 72.3.b—. Aviso del formato sobre la formación académica: como requisito de calificación solo puede exigirse el GRADO o título, no cursos ni especializaciones.",
+    fields: [
+      // CONSOLIDADO en la Propuesta de requisitos de calificación (editor): la
+      // "Capacidad técnica y profesional (personal clave)" es el tipo
+      // `capacidad_tecnica` del Art. 72.3 que gestiona el editor. Columna oculta
+      // como respaldo; su contenido se migra a ese tipo al abrir la ficha.
+      //
+      // La sección se había quedado SIN campos visibles al consolidar el personal
+      // clave, y `seccionesVisibles` descarta las secciones vacías: el 3.5.2
+      // desaparecía de la ficha aunque el requerimiento modelo lo trae. Los
+      // adicionales no son solo personal clave: son los facultativos que la DEC
+      // decida en la estrategia.
+      { col: "requisitos_adicionales", api: "requisitosAdicionales", label: "Requisitos de calificación adicionales", kind: "textarea", wide: true, baseLegal: "Art. 72.1 Reglamento · los requisitos de calificación se establecen en la estrategia de contratación; el área usuaria propone los adicionales que correspondan.", ejemplo: "Capacidad técnica y profesional: experiencia del personal clave en servicios similares." },
+    ],
+  },
+  {
+    title: "Planeamiento (PEI / POI)",
+    simple: false,
+    nota: "Articulación con el planeamiento institucional. Ni el PEI ni el POI aparecen en la Ley 32069 o su Reglamento —vienen del planeamiento de la entidad—, y por eso estos tres campos no citan artículo. Lo que sí exige la norma es que el requerimiento esté previsto en el CMN (Art. 20.a), y el CMN se arma a partir de estas actividades: rellenarlos es lo que permite rastrear la necesidad hasta el plan que la justifica.",
+    fields: [
+      { col: "pei_objetivo", api: "peiObjetivo", label: "PEI · Objetivo", baseLegal: "Objetivo estratégico institucional con el que se articula la necesidad.", ejemplo: "OE.01 Mejorar la gestión" },
+      { col: "pei_accion", api: "peiAccion", label: "PEI · Acción", baseLegal: "Acción estratégica del PEI con la que se articula la necesidad.", ejemplo: "AE.01.01" },
+      { col: "poi_actividad", api: "poiActividad", label: "POI · Actividad", baseLegal: "Actividad operativa del POI que financia la necesidad.", ejemplo: "Actividad 500123" },
+    ],
+  },
+  {
+    title: "Verificaciones DEC (Art. 14 Reglamento)",
+    simple: false,
+    nota: "La DEC participa en la elaboración y revisión del requerimiento SOLO en cuanto al cumplimiento de la normativa: los aspectos TÉCNICOS de la necesidad son responsabilidad del área usuaria (Art. 14.2.b). Estas cuatro casillas son las verificaciones del Art. 14.2 que tocan al requerimiento —c) CMN, d) ficha técnica o acuerdo marco, e) almacén y patrimonio, j) certificación presupuestal—. La del CMN se resuelve además con las acciones del flujo (aprobar / solicitar no objeción).",
+    fields: [
+      // El CMN es una verificación del 14.2.c, no un dato de identificación.
+      { col: "version_cmn", api: "versionCmn", label: "Versión del CMN", baseLegal: "Art. 14.2.c Reglamento · La necesidad debe constar en el CMN aprobado del año fiscal o su modificatoria (Art. 54.3)", ejemplo: "CMN 2026 v2" },
+      { col: "verificacion_ficha_tecnica", api: "verificacionFichaTecnica", label: "Verificación de ficha técnica, homologación o acuerdo marco", checkbox: true, baseLegal: "Art. 14.2.d Reglamento · la DEC verifica si la necesidad está definida en una ficha técnica, en una ficha de homologación O EN EL CATÁLOGO ELECTRÓNICO DE ACUERDOS MARCO. Las fichas aprobadas son de uso obligatorio con independencia del monto (Art. 260); el acuerdo marco es otra vía de contratación." },
+      { col: "verificacion_almacen", api: "verificacionAlmacen", label: "Verificación de almacén / patrimonio", checkbox: true, baseLegal: "Art. 14.2.e Reglamento · DEC verifica si la necesidad puede cubrirse con existencias disponibles o bienes patrimoniales sin asignar" },
+      { col: "certificacion_presupuestal", api: "certificacionPresupuestal", label: "Certificación / previsión presupuestal", baseLegal: "Art. 14.2.j Reglamento · DEC solicita a la oficina de presupuesto la certificación o previsión presupuestal" },
+    ],
+  },
+  {
+    title: "Resumen",
+    simple: true,
+    fields: [{ col: "summary", api: "summary", label: "Resumen / descripción", baseLegal: "Resumen interno de la necesidad; viaja al expediente como `summary`.", kind: "textarea", wide: true, ejemplo: "Resumen ejecutivo de la contratación" }],
+  },
+];
