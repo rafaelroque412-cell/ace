@@ -15,7 +15,6 @@ import {
   Download,
   FileText,
   Loader,
-  MessageSquare,
   Pencil,
   Plus,
   ShieldCheck,
@@ -37,7 +36,6 @@ import {
 // Desde el modulo de topes, NO desde lib/necesidades: ese arrastra los 31
 // esquemas de zod al navegador para nada.
 import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
-import { filasTextarea } from "@/lib/textarea-alto";
 import {
   type ObjetoFilter,
   PROCESO_SELECCION_OPCIONES,
@@ -69,13 +67,8 @@ import { PORCENTAJE_LINEA_CORTE, soles } from "@/lib/segmentacion-parametros";
 import { useYear } from "@/lib/year-context";
 import { ConfirmDialog } from "./confirm-dialog";
 import type { NecesidadItem } from "@/lib/necesidad-items";
-import { NecesidadEettCampo } from "./necesidad-eett-campo";
 import { NecesidadItemsEditor } from "./necesidad-items-editor";
 import { componerControversias, parseInstituciones } from "@/lib/instituciones-arbitrales";
-import { InstitucionesArbitralesEditor } from "./instituciones-arbitrales-editor";
-import { OtrasPenalidadesEditor } from "./otras-penalidades-editor";
-import { SubcontratacionEditor } from "./subcontratacion-editor";
-import { RequisitosCalificacionEditor } from "./requisitos-calificacion-editor";
 import type { EettPropuesta, EettRevision, EettTdrDoc } from "./necesidad-eett-tdr-modal";
 
 /**
@@ -101,21 +94,18 @@ import {
   Button,
   EmptyState,
   IconButton,
-  InfoPopover,
   buttonClasses,
 } from "./ui";
 import { cn } from "@/lib/utils";
 import {
   FICHA_CTRL,
-  FICHA_CTRL_AREA,
-  FICHA_CTRL_ERR,
   FICHA_CTRL_H,
   FICHA_IA,
   FICHA_LABEL,
-  FICHA_OPT,
-  FICHA_REQ,
 } from "./necesidad/ficha-estilos";
 import { PanelRiesgos } from "./necesidad/panel-riesgos";
+import { CampoFicha } from "./necesidad/campo-ficha";
+import { useCallbackEstable } from "./necesidad/usar-callback-estable";
 import {
   type AccionDef,
   NO_OBJECION_LABEL,
@@ -139,7 +129,6 @@ import {
   campoAplica,
   campoObligatorio,
   catalogoCampos,
-  etiquetaRecomendado,
   FICHA_SECCIONES,
   type FichaField,
   type FichaSection,
@@ -176,27 +165,6 @@ function DenominacionAsistente({ form }: { form: Record<string, string> }) {
 }
 
 
-// El botón "Redactar con IA" solo aporta en campos de prosa (finalidad,
-// alcance, condiciones…). En Identificación y Programación y presupuesto los
-// campos son datos factuales (entidad, meta, monto, fechas), así que se omite.
-const CAMPOS_SIN_REDACCION_IA: ReadonlySet<string> = new Set([
-  ...FICHA_SECCIONES.filter(
-    (s) => s.title === "Identificación" || s.title === "Programación y presupuesto",
-  ).flatMap((s) => s.fields.map((f) => f.api)),
-  // Estos cuatro son de prosa pero NO se redactan: su contenido tiene una
-  // fuente externa que la IA no puede sustituir sin inventarse el dato.
-  //
-  //  * catálogo (código y descripción): salen del CUBSO/SIGA. Redactarlos sería
-  //    describir un bien con palabras que no están en el catálogo, y el Art.
-  //    44.6 prohíbe orientar la contratación hacia una marca o fabricante.
-  //  * EETT/TDR: las escribe el área usuaria, o llegan del PDF por el traslado
-  //    con visto bueno. Ese es el circuito, y tiene control de calidad.
-  //  * Lugar de entrega: es un domicilio, no un texto.
-  "codigoCatalogo",
-  "descripcionCatalogo",
-  "descripcionDetallada",
-  "lugarEntrega",
-]);
 
 // Lookups derivados de FICHA_SECCIONES para el autocompletado con IA.
 const CAMPO_LABEL: Record<string, string> = (() => {
@@ -506,6 +474,17 @@ export function NecesidadDetail({
    * puede distinguir lo redactado por el área usuaria de lo propuesto por un
    * modelo. Esa distinción es justo la que hay que mirar con más cuidado.
    */
+  // Memoizado: se pasa a cada campo memoizado, y un Map nuevo por render
+  // devolveria arrays nuevos y anularia su memo.
+  const obsPendientesPorCampo = useMemo(() => {
+    const m = new Map<string, ObservacionNecesidad[]>();
+    for (const o of observaciones) {
+      if (o.resuelto) continue;
+      m.set(o.campo, [...(m.get(o.campo) ?? []), o]);
+    }
+    return m;
+  }, [observaciones]);
+
   const camposDeIA = useMemo(() => {
     const out = new Map<string, string>();
     for (const d of eettDocs) {
@@ -589,6 +568,34 @@ export function NecesidadDetail({
     setCopilotoMontado(true);
     setCopilotoRedactar((prev) => ({ key: api, nonce: (prev?.nonce ?? 0) + 1 }));
   };
+
+  // Manejadores de identidad fija para <CampoFicha>, que esta memoizado. Una
+  // funcion nueva por render seria una prop nueva por render, y el campo se
+  // repintaria igual: la memo solo sirve si TODAS las props aguantan.
+  const cambiarCampo = useCallbackEstable((api: string, valor: string) => setFichaField(api, valor));
+  const redactarConIA = useCallbackEstable((api: string) => pedirRedactarIA(api));
+  const abrirEettEstable = useCallbackEstable((doc: { id: string }) => {
+    const encontrado = eettDocs.find((d) => d.id === doc.id);
+    if (encontrado) abrirEett(encontrado);
+  });
+  const subirEettEstable = useCallbackEstable((archivo: File, tipo: "eett" | "tdr") => {
+    void subirEett(archivo, tipo);
+  });
+  const marcarTocado = useCallback((api: string) => {
+    setCamposTocados((prev) => (prev.has(api) ? prev : new Set(prev).add(api)));
+  }, []);
+  /** `null` retira el error. */
+  const marcarError = useCallback((api: string, mensaje: string | null) => {
+    setFieldErrors((prev) => {
+      // Mismo objeto si nada cambia: evita un render y no despierta al efecto
+      // que lleva el foco, que escucha a `fieldErrors`.
+      if (mensaje === null ? !prev[api] : prev[api] === mensaje) return prev;
+      const n = { ...prev };
+      if (mensaje === null) delete n[api];
+      else n[api] = mensaje;
+      return n;
+    });
+  }, []);
   // Campos que se están copiando de su gemelo y que nadie ha tocado a mano.
   const [sembrados, setSembrados] = useState<ReadonlySet<string>>(new Set());
   // El formulario tiene cambios del usuario (no solo la carga inicial). Sin
@@ -653,7 +660,7 @@ export function NecesidadDetail({
   const [modo, setModo] = useState<ModoFicha>(MODO_POR_DEFECTO);
   useEffect(() => {
     try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       const guardado = localStorage.getItem("ficha-modo-trabajo");
       if (guardado === "redactar" || guardado === "revisar") setModo(guardado);
     } catch { /* ignora */ }
@@ -1203,14 +1210,9 @@ export function NecesidadDetail({
     }
   }
 
-  // `reload` se declara de nuevo en cada render, asi que pasarlo tal cual a un
-  // panel memoizado le daria una prop distinta cada vez y anularia la memo. El
-  // ref guarda la ultima version y `recargar` mantiene una identidad fija.
-  const reloadRef = useRef(reload);
-  useEffect(() => {
-    reloadRef.current = reload;
-  });
-  const recargar = useCallback(() => reloadRef.current(), []);
+  // `reload` se declara de nuevo en cada render; los paneles memoizados
+  // necesitan una identidad fija.
+  const recargar = useCallbackEstable(reload);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -2044,11 +2046,6 @@ export function NecesidadDetail({
   const camposObservables = FICHA_SECCIONES.flatMap((s) => s.fields)
     .filter((f) => !f.oculto)
     .map((f) => ({ api: f.api, label: f.label }));
-  const obsPendientesPorCampo = new Map<string, ObservacionNecesidad[]>();
-  for (const o of observaciones) {
-    if (o.resuelto) continue;
-    obsPendientesPorCampo.set(o.campo, [...(obsPendientesPorCampo.get(o.campo) ?? []), o]);
-  }
   const campoLabel = (api: string) => CAMPO_LABEL[api] ?? api;
   // Diff del ciclo de no objeción (D3): última versión remitida por el área
   // usuaria vs la última propuesta de la DEC. Solo campos del requerimiento que
@@ -2734,397 +2731,40 @@ export function NecesidadDetail({
             }));
 
             function renderFichaField(field: FichaField) {
-              const val = fichaForm[field.api] ?? "";
-              const hasError = Boolean(fieldErrors[field.api]);
-              // Geografía por catálogo de la entidad (si está configurada).
+              // El campo se pinta en su propio componente memoizado. Lo que se le
+              // pasa son VALORES de este campo, no las estructuras completas: el
+              // formulario y los mapas de avisos cambian de identidad en cada
+              // pulsacion y anularian la memo, que es justo lo que se buscaba.
               const geoKey = CAMPO_GEO_ENTIDAD[field.api];
-              const geoValorEntidad = geoKey ? (configuredEntity?.[geoKey] ?? "").trim() : "";
-              const limpiarError = () => {
-                if (fieldErrors[field.api]) setFieldErrors((prev) => { const n = { ...prev }; delete n[field.api]; return n; });
-              };
-              /** Al escribir: se anota el campo como tocado y se retira su error. */
-              const alEscribir = () => {
-                if (!camposTocados.has(field.api)) setCamposTocados((prev) => new Set(prev).add(field.api));
-                limpiarError();
-              };
-              /**
-               * Validacion al salir del campo. Antes solo se validaba al pulsar
-               * Guardar: se rellenaban nueve secciones y el fallo aparecia al final,
-               * lejos de donde se cometio. Solo actua sobre campos ya tocados (o que
-               * ya estaban en error), para no senalar lo que nadie ha tocado todavia.
-               */
-              const validarAlSalir = () => {
-                if (!campoEsObligatorio(field)) return;
-                if (!camposTocados.has(field.api) && !fieldErrors[field.api]) return;
-                const vacio = !String(fichaForm[field.api] ?? "").trim();
-                setFieldErrors((prev) => {
-                  // Mismo objeto si nada cambia: evita un render y no despierta al
-                  // efecto que lleva el foco, que escucha a `fieldErrors`.
-                  if (vacio === Boolean(prev[field.api])) return prev;
-                  const n = { ...prev };
-                  if (vacio) n[field.api] = "Campo obligatorio";
-                  else delete n[field.api];
-                  return n;
-                });
-              };
-              // Marcas de accesibilidad del control. Sin ellas el error solo existe
-              // en rojo: `aria-invalid` hace que el lector de pantalla anuncie el
-              // campo como invalido, y `aria-describedby` le engancha el texto del
-              // motivo, que hasta ahora era un <span> suelto sin relacion con el
-              // control. Se declaran una vez y se reparten a los seis controles
-              // para que no puedan divergir.
-              const errorId = `err-${field.api}`;
-              const marcasError = {
-                "aria-describedby": hasError ? errorId : undefined,
-                "aria-invalid": hasError || undefined,
-              } as const;
-              // Botón ✨ "Redactar con IA" reutilizable (solo para editores). No
-              // se ofrece en Identificación ni en Programación y presupuesto: sus
-              // campos son datos factuales, no prosa que redactar.
-              const botonRedactarIA = permisos.manage && !CAMPOS_SIN_REDACCION_IA.has(field.api) ? (
-                <button
-                  className="mb-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-accent/10 px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/20"
-                  onClick={(e) => { e.preventDefault(); pedirRedactarIA(field.api); }}
-                  title="Redactar este campo con el copiloto IA (Ley 32069)"
-                  type="button"
-                >
-                  <Sparkles size={12} /> Redactar con IA
-                </button>
-              ) : null;
-              // Base legal del campo. El disparador y el globo los pone Radix: teclado,
-              // Escape, reposicionamiento y ARIA salen de serie.
-              const tooltipNode = !modoSimple && field.baseLegal ? (
-                <InfoPopover etiqueta={`Base legal de ${field.label}`}>
-                  {field.baseLegal}
-                  {field.ejemplo ? `
-Ej: ${field.ejemplo}` : ""}
-                </InfoPopover>
-              ) : null;
-
-              if (field.checkbox) {
-                return (
-                  // data-campo: la verificación («¿Está lista?») salta hasta aquí.
-                  <label
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5",
-                      field.wide && "col-span-full",
-                    )}
-                    data-campo={field.api}
-                    key={field.api}
-                  >
-                    <input
-                      checked={val === "true"}
-                      onChange={(e) => { setFichaField(field.api, e.target.checked ? "true" : "false"); }}
-                      type="checkbox"
-                      className="size-4 shrink-0 accent-brand"
-                    />
-                    <span className="text-[13px] font-semibold text-ink">{field.label}</span>
-                    {tooltipNode}
-                  </label>
-                );
-              }
-
-              // El EETT/TDR es un ADJUNTO, no un texto: se redacta fuera, en
-              // Word o PDF, con sus tablas y su formato. Transcribirlo a un
-              // textarea perdía la maqueta y creaba una segunda versión que no
-              // coincidía con la que se firma. Los documentos son los del módulo
-              // EETT/TDR; esto es su puerta de entrada desde el campo.
-              if (field.api === "descripcionDetallada") {
-                return (
-                  <div className="col-span-full" data-campo={field.api} key={field.api}>
-                    <span className={FICHA_LABEL}>
-                      {field.label}
-                      {campoEsObligatorio(field) ? (
-                        <span className={FICHA_REQ}>obligatorio</span>
-                      ) : (
-                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                      )}
-                    </span>
-                    <NecesidadEettCampo
-                      docs={eettDocs.map((d) => ({
-                        file_name: d.file_name,
-                        id: d.id,
-                        status: d.status,
-                        title: d.title,
-                      }))}
-                      necesidadId={necesidadId}
-                      onAbrir={(docId) => {
-                        const doc = eettDocs.find((d) => d.id === docId);
-                        if (doc) abrirEett(doc);
-                      }}
-                      onSubir={(archivo, tipo) => void subirEett(archivo, tipo)}
-                      readOnly={!fichaEdit || !permisos.manage}
-                      subiendo={eettUploading}
-                    />
-                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
-                  </div>
-                );
-              }
-
-              // Editor estructurado (varios inputs): fuera de <label>.
-              if (field.kind === "requisitos") {
-                return (
-                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
-                    <span className={FICHA_LABEL}>
-                      {field.label}
-                      {campoEsObligatorio(field) ? (
-                        <span className={FICHA_REQ}>obligatorio</span>
-                      ) : (
-                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                      )}
-                      {camposDeIA.has(field.api) ? (
-                        <span
-                          className={FICHA_IA}
-                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
-                        >
-                          ✦ propuesto por IA
-                        </span>
-                      ) : null}
-                    </span>
-                    <RequisitosCalificacionEditor
-                      // Sin la cuantía no se puede comprobar el tope de 3x del modelo, y sin el
-                      // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
-                      montoEstimado={Number(fichaForm.montoEstimado) || null}
-                      tipoProceso={fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? null}
-                      objeto={fichaForm.tipoObjeto}
-                      onChange={(next) => setFichaField(field.api, next)}
-                      value={val}
-                    />
-                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
-                  </div>
-                );
-              }
-
-              // Cuadro de instituciones arbitrales: varios inputs, fuera de <label>.
-              if (field.kind === "controversias") {
-                return (
-                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
-                    <span className={FICHA_LABEL}>
-                      {field.label}
-                      {campoEsObligatorio(field) ? (
-                        <span className={FICHA_REQ}>obligatorio</span>
-                      ) : (
-                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                      )}
-                      {camposDeIA.has(field.api) ? (
-                        <span
-                          className={FICHA_IA}
-                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
-                        >
-                          ✦ propuesto por IA
-                        </span>
-                      ) : null}
-                    </span>
-                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
-                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
-                    {botonRedactarIA}
-                    <InstitucionesArbitralesEditor
-                      onChange={(next) => setFichaField(field.api, next)}
-                      value={val}
-                    />
-                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
-                  </div>
-                );
-              }
-
-              // Cuadro de otras penalidades: varios inputs, fuera de <label>.
-              if (field.kind === "penalidades") {
-                return (
-                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
-                    <span className={FICHA_LABEL}>
-                      {field.label}
-                      {campoEsObligatorio(field) ? (
-                        <span className={FICHA_REQ}>obligatorio</span>
-                      ) : (
-                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                      )}
-                      {camposDeIA.has(field.api) ? (
-                        <span
-                          className={FICHA_IA}
-                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
-                        >
-                          ✦ propuesto por IA
-                        </span>
-                      ) : null}
-                    </span>
-                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
-                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
-                    {botonRedactarIA}
-                    <OtrasPenalidadesEditor
-                      onChange={(next) => setFichaField(field.api, next)}
-                      value={val}
-                    />
-                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
-                  </div>
-                );
-              }
-
-              // Cuadro de subcontratación: varios inputs, fuera de <label>.
-              if (field.kind === "subcontratacion") {
-                return (
-                  <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
-                    <span className={FICHA_LABEL}>
-                      {field.label}
-                      {campoEsObligatorio(field) ? (
-                        <span className={FICHA_REQ}>obligatorio</span>
-                      ) : (
-                        <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                      )}
-                      {camposDeIA.has(field.api) ? (
-                        <span
-                          className={FICHA_IA}
-                          title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
-                        >
-                          ✦ propuesto por IA
-                        </span>
-                      ) : null}
-                    </span>
-                    {/* La IA no reescribe el apartado: aporta las condiciones adicionales
-                        (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
-                    {botonRedactarIA}
-                    <SubcontratacionEditor
-                      onChange={(next) => setFichaField(field.api, next)}
-                      value={val}
-                    />
-                    {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
-                  </div>
-                );
-              }
-
               return (
-                <label className={cn("flex min-w-0 flex-col", field.wide && "col-span-full")} data-campo={field.api} key={field.api}>
-                  <span className={FICHA_LABEL}>
-                    {field.label}
-                    {campoEsObligatorio(field) ? (
-                      <span className={FICHA_REQ}>obligatorio</span>
-                    ) : (
-                      <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
-                    )}
-                    {camposDeIA.has(field.api) ? (
-                      <span
-                        className={FICHA_IA}
-                        title={`Propuesto por la IA desde el EETT/TDR y aprobado en el traslado el ${new Date(camposDeIA.get(field.api)!).toLocaleString("es-PE")}. Revísalo antes de firmar.`}
-                      >
-                        ✦ propuesto por IA
-                      </span>
-                    ) : null}
-                    {exigidosModelo.has(field.api) ? (
-                      <span className="text-[11px] font-medium text-brand" title="El requerimiento de este proceso de selección exige este campo">
-                        · exige el proceso
-                      </span>
-                    ) : null}
-                    {obsPendientesPorCampo.has(field.api) ? (
-                      <span
-                        className="inline-flex items-center gap-0.5 rounded-full bg-warning-soft px-1.5 py-px text-[10px] font-bold text-warning"
-                        title={obsPendientesPorCampo
-                          .get(field.api)!
-                          .map((o) => `Observación (${o.autor_referencia ?? "—"}): ${o.comentario}`)
-                          .join("\n")}
-                      >
-                        <MessageSquare size={11} aria-hidden /> {obsPendientesPorCampo.get(field.api)!.length}
-                      </span>
-                    ) : null}
-                    {tooltipNode}
-                  </span>
-                  {geoKey && geoValorEntidad ? (
-                    // Desplegable con la ubicación de la entidad. Preserva un
-                    // valor previo distinto para no borrarlo en silencio.
-                    <select
-                      className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
-                      {...marcasError}
-                      onBlur={validarAlSalir}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                      value={val || field.porDefecto || ""}
-                    >
-                      {field.porDefecto ? null : <option value="">— Sin definir —</option>}
-                      {val && val !== geoValorEntidad ? <option value={val}>{val} — valor actual</option> : null}
-                      <option value={geoValorEntidad}>{geoValorEntidad}</option>
-                    </select>
-                  ) : field.api === "areaUsuaria" ? (
-                    // Texto con autocompletado de las áreas ya registradas: sugiere
-                    // la grafía existente sin cerrar la lista a un catálogo rígido.
-                    <>
-                      <input
-                        className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
-                        {...marcasError}
-                        list="areas-usuarias-sugeridas"
-                        maxLength={LIMITES_TEXTO[field.api]}
-                        onBlur={validarAlSalir}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                        type="text"
-                        value={val}
-                      />
-                      {areasSugeridas.length > 0 ? (
-                        <datalist id="areas-usuarias-sugeridas">
-                          {areasSugeridas.map((a) => <option key={a} value={a} />)}
-                        </datalist>
-                      ) : null}
-                    </>
-                  ) : field.kind === "textarea" ? (
-                    <>
-                      {botonRedactarIA}
-                      <textarea
-                        className={cn(FICHA_CTRL, FICHA_CTRL_AREA, hasError && FICHA_CTRL_ERR)}
-                        {...marcasError}
-                        maxLength={LIMITES_TEXTO[field.api]}
-                        onBlur={validarAlSalir}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                        // La fórmula se ve al redactar, no escondida en el globo
-                        // de ayuda: es la estructura que el texto debe seguir.
-                        placeholder={field.plantilla}
-                        rows={filasTextarea(val, field.wide)}
-                        value={val}
-                      />
-                      <span className={cn("mt-1 text-[11px]", val.length > 1800 ? "font-semibold text-warning" : "text-muted")}>
-                        {val.length} caracteres
-                      </span>
-                    </>
-                  ) : field.kind === "select" ? (
-                    <select
-                      className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
-                      {...marcasError}
-                      onBlur={validarAlSalir}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                      value={val}
-                    >
-                      <option value="">— Sin definir —</option>
-                      {/* Un valor guardado antes de que el campo fuera una lista
-                          cerrada no está entre las opciones. Se añade como
-                          primera opción para NO perderlo al guardar. */}
-                      {val && !(field.opciones ?? []).some((o) => o.value === val) ? (
-                        <option value={val}>{val} — valor actual</option>
-                      ) : null}
-                      {(field.opciones ?? []).map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : field.kind === "number" || field.kind === "date" ? (
-                    <input
-                      className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
-                      {...marcasError}
-                      onBlur={validarAlSalir}
-                      onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                      type={field.kind === "number" ? "number" : "date"}
-                      value={val}
-                    />
-                  ) : (
-                    <>
-                      {botonRedactarIA}
-                      <input
-                        className={cn(FICHA_CTRL, FICHA_CTRL_H, hasError && FICHA_CTRL_ERR)}
-                        {...marcasError}
-                        maxLength={LIMITES_TEXTO[field.api]}
-                        onBlur={validarAlSalir}
-                        onChange={(e) => { setFichaField(field.api, e.target.value); alEscribir(); }}
-                        type="text"
-                        value={val}
-                      />
-                    </>
-                  )}
-                  {hasError ? <span className="mt-1 text-[12px] font-medium text-danger" id={errorId}>{fieldErrors[field.api]}</span> : null}
-                </label>
+                <CampoFicha
+                  areasSugeridas={areasSugeridas}
+                  editable={fichaEdit}
+                  eettDocs={eettDocs}
+                  eettUploading={eettUploading}
+                  error={fieldErrors[field.api]}
+                  exigido={exigidosModelo.has(field.api)}
+                  fechaIA={camposDeIA.get(field.api) ?? null}
+                  field={field}
+                  geoValorEntidad={geoKey ? (configuredEntity?.[geoKey] ?? "").trim() : ""}
+                  key={field.api}
+                  modoSimple={modoSimple}
+                  montoEstimado={Number(fichaForm.montoEstimado) || null}
+                  necesidadId={necesidadId}
+                  obligatorio={campoEsObligatorio(field)}
+                  obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}
+                  onAbrirEett={abrirEettEstable}
+                  onCambio={cambiarCampo}
+                  onError={marcarError}
+                  onRedactarIA={redactarConIA}
+                  onSubirEett={subirEettEstable}
+                  onTocar={marcarTocado}
+                  puedeGestionar={permisos.manage}
+                  tipoObjeto={fichaForm.tipoObjeto}
+                  tipoProceso={fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? null}
+                  tocado={camposTocados.has(field.api)}
+                  valor={fichaForm[field.api] ?? ""}
+                />
               );
             }
 
