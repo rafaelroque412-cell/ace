@@ -83,7 +83,22 @@ export const LIMITES_TEXTO: Record<string, number> = {
   prestacionesAccesorias: 2000,
   otrasPenalidades: 3000,
   solucionControversias: 1500,
-  plazoRespuestas: 20,
+  // `plazoRespuestas` NO esta aqui: paso a ser un numero de dias, no texto.
+  // Aqui solo viven los campos de texto, que es lo que el formulario capa.
+  plazoRespuestasTexto: 1200,
+  // Los apartados que se componen con plantilla. Sin tope aqui, el formulario
+  // no capaba la entrada y un texto largo llegaba al PATCH para que lo
+  // rechazara con un 400 —que es como se cuelan estos fallos—.
+  formaPago: 6000,
+  formaPagoTipo: 1000,
+  formaPagoAreaConformidad: 300,
+  formaPagoDocumentacion: 1000,
+  formaPagoLugar: 300,
+  formaPagoDireccion: 300,
+  recepcionArea: 300,
+  conformidadArea: 300,
+  conformidadPlazo: 200,
+  conformidadPlazoSubsanacion: 300,
   requisitosAdicionales: 4000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,

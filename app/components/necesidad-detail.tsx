@@ -138,6 +138,7 @@ import {
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
 import { componerFormaPago } from "@/lib/forma-pago";
+import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
 
 
 
@@ -458,6 +459,18 @@ export function NecesidadDetail({
           lugarPresentacion: fichaForm.formaPagoLugar ?? "",
           tipoPago: fichaForm.formaPagoTipo ?? "",
         }),
+      );
+      return;
+    }
+    // Apartado j): texto fijo del formato con UN hueco, el plazo. Se compone.
+    if (api === "plazoRespuestasTexto") {
+      // El plazo vive en su campo NUMERICO y el texto en el suyo: no compiten
+      // por la misma columna, asi que recomponer no puede anidar el apartado
+      // dentro de si mismo ni perder el numero.
+      const dias = (fichaForm.plazoRespuestas ?? "").trim();
+      setFichaField(
+        "plazoRespuestasTexto",
+        componerPlazoRespuestas(dias ? `${dias} días calendario` : ""),
       );
       return;
     }

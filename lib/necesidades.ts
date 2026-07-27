@@ -119,7 +119,8 @@ export type Necesidad = {
   prestaciones_accesorias: string | null;
   otras_penalidades: string | null;
   solucion_controversias: string | null;
-  plazo_respuestas: string | null;
+  plazo_respuestas: number | null;
+  plazo_respuestas_texto: string | null;
   requisitos_adicionales: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
@@ -274,7 +275,14 @@ export const necesidadCreateSchema = z.object({
   prestacionesAccesorias: optionalText(2000),
   otrasPenalidades: optionalText(3000),
   solucionControversias: optionalText(1500),
-  plazoRespuestas: optionalText(20),
+  // NUMERO, no texto. La ficha lo declara `kind: "number"` y `construirPayload`
+  // lo envia como numero; con `optionalText` aqui, el PATCH respondia 400 en
+  // CADA guardado en cuanto alguien escribia algo, y bloqueaba la ficha entera.
+  // El desajuste venia de cambiar el campo a numero sin cambiar la validacion.
+  plazoRespuestas: z.number().int().min(1).max(365).optional(),
+  // El apartado j) ya redactado, que es texto y va aparte: el plazo sigue siendo
+  // un dato con el que se puede contar y comparar.
+  plazoRespuestasTexto: optionalText(1200),
   requisitosAdicionales: optionalText(4000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
