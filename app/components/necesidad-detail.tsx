@@ -137,6 +137,7 @@ import {
   type FichaSection,
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
+import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { componerFormaPago } from "@/lib/forma-pago";
 import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
 import { componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
@@ -451,6 +452,17 @@ export function NecesidadDetail({
     // firma, y ademas tardaria y costaria para dar una respuesta que ya
     // conocemos exacta.
     if (api === "formaPago") {
+      // La direccion exacta sale de Configuracion → Datos de la entidad si aun
+      // no se escribio aqui. Es el domicilio de la propia municipalidad: no hay
+      // motivo para teclearlo en cada requerimiento, y es asi como acaban
+      // conviviendo tres direcciones distintas de la misma entidad.
+      const direccion =
+        (fichaForm.formaPagoDireccion ?? "").trim() || direccionDeLaEntidad(configuredEntity);
+      if (direccion && direccion !== (fichaForm.formaPagoDireccion ?? "").trim()) {
+        // Se escribe en el campo, no solo en el texto: lo que va al documento
+        // tiene que poder verse y corregirse en la ficha.
+        setFichaField("formaPagoDireccion", direccion);
+      }
       setFichaField(
         "formaPago",
         componerFormaPago({
@@ -462,7 +474,7 @@ export function NecesidadDetail({
           // El formato mete el tipo y su detalle en un solo corchete; en la
           // ficha son dos campos porque uno se elige y el otro se escribe.
           detallePagosACuenta: fichaForm.formaPagoDetalle ?? "",
-          direccion: fichaForm.formaPagoDireccion ?? "",
+          direccion,
           documentacionAdicional: fichaForm.formaPagoDocumentacion ?? "",
           lugarPresentacion: fichaForm.formaPagoLugar ?? "",
           proyectoInversion: fichaForm.proyectoInversion ?? "",

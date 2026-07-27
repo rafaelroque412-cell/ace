@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { decidirSiembra, GEMELO } from "@/lib/necesidad-denominacion";
 import { FICHA_SECCIONES, type FichaField } from "@/lib/necesidad-ficha-secciones";
 import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
@@ -54,8 +55,21 @@ export function useFichaForm({
   campoEsObligatorio: (field: FichaField) => boolean;
   /** Filtra los campos que aplican al objeto y al procedimiento actuales. */
   camposParaObjeto: (fields: FichaField[]) => FichaField[];
-  /** Entidad configurada, para sembrar entidad y unidad ejecutora al abrir. */
-  entidad: { executingUnit?: string | null; name?: string | null } | null | undefined;
+  /**
+   * Entidad configurada, para sembrar al abrir lo que ya está en Configuración:
+   * la denominación, la unidad ejecutora y el domicilio.
+   */
+  entidad:
+    | {
+        address?: string | null;
+        city?: string | null;
+        department?: string | null;
+        executingUnit?: string | null;
+        name?: string | null;
+        province?: string | null;
+      }
+    | null
+    | undefined;
   items: NecesidadItem[];
   /** Serializacion de los items tal como estan guardados, para no reescribirlos. */
   itemsGuardados: string;
@@ -135,6 +149,11 @@ export function useFichaForm({
     if (!initial.entidad && entidad?.name) initial.entidad = entidad.name;
     if (!initial.unidadEjecutora && entidad?.executingUnit) initial.unidadEjecutora = entidad.executingUnit;
     if (!initial.anioFiscal) initial.anioFiscal = String(year);
+    // El domicilio de la entidad ya está en Configuración → Datos de la entidad,
+    // partido en cuatro casillas. Aquí hace falta la línea entera, y volver a
+    // teclearla en cada requerimiento es como acaban conviviendo tres
+    // direcciones distintas de la misma municipalidad.
+    if (!initial.formaPagoDireccion) initial.formaPagoDireccion = direccionDeLaEntidad(entidad);
     if (initial.areaUsuaria && !initial.centroCosto) initial.centroCosto = initial.areaUsuaria;
     if (initial.centroCosto && !initial.areaUsuaria) initial.areaUsuaria = initial.centroCosto;
     // Cargar borrador local si existe
