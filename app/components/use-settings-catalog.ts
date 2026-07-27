@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PROCESS_TYPES, type TaxonomyOption } from "@/lib/legal-taxonomy";
+import { cargarCatalogo } from "@/lib/settings-catalog-cache";
 
 export type ClientCatalogEntity = {
   address: string;
@@ -69,9 +70,10 @@ export function useSettingsCatalog() {
 
     async function load() {
       try {
-        const response = await fetch("/api/settings/catalog", { cache: "no-store" });
-        const payload = (await response.json()) as ClientSettingsCatalog;
-        if (!cancelled && response.ok) {
+        // Compartido entre instancias: son trece los componentes que piden este
+        // catálogo, y en la ficha de necesidad coinciden dos en pantalla.
+        const payload = await cargarCatalogo<ClientSettingsCatalog>();
+        if (!cancelled) {
           setCatalog(payload);
         }
       } catch {
