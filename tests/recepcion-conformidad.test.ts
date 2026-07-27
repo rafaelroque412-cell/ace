@@ -126,3 +126,117 @@ describe("cada objeto pide sus huecos y no los del otro", () => {
     ]);
   });
 });
+
+/**
+ * El apartado se COMPONE al pulsar «Redactar con IA», no se le pide al copiloto.
+ *
+ * El texto es el literal que la entidad facilitó, con sus huecos entre
+ * corchetes: parafrasear un artículo del Reglamento en un documento que se firma
+ * es un defecto, no una ayuda.
+ */
+describe("el texto de servicios es el literal del formato, palabra por palabra", () => {
+  const t = componerRecepcionConformidad("servicios", {
+    areaConformidad: "la Sub Gerencia de Desarrollo Económico",
+    plazoConformidad: "7",
+    plazoSubsanacion: "de 5 días hábiles",
+  })!;
+
+  it("el primer párrafo cita la norma y su decreto sin reformularlos", () => {
+    expect(t).toContain(
+      "La conformidad de la prestación se regula por lo dispuesto en el artículo 144 del Reglamento de la Ley 32069, Ley General de Contrataciones Públicas, aprobado mediante Decreto Supremo N° 009-2025-EF.",
+    );
+  });
+
+  it("el plazo numérico encaja en la frase sin retocarla", () => {
+    // El campo es un número de días y la frase ya trae el «días»: por eso ahí
+    // no se compone ninguna coletilla.
+    expect(t).toContain(
+      "en el plazo máximo de 7 días computados desde el día siguiente de producida la recepción.",
+    );
+  });
+
+  it("el de subsanación sí necesita su frase: un «5» suelto no se lee", () => {
+    expect(t).toContain("otorgándole un plazo para subsanar, de 5 días hábiles.");
+  });
+
+  it("el párrafo de los periodos adicionales va entero", () => {
+    expect(t).toContain(
+      "En este supuesto corresponde aplicar la penalidad por mora desde el vencimiento del plazo para subsanar sin considerar los días en los que pudiera incurrir la entidad contratante para efectuar las revisiones y notificar las observaciones correspondientes.",
+    );
+  });
+
+  it("y el último párrafo también", () => {
+    expect(t).toContain(
+      "Este procedimiento no resulta aplicable cuando los servicios manifiestamente no cumplan con las características y condiciones ofrecidas, en cuyo caso LA ENTIDAD CONTRATANTE no efectúa la recepción o no otorga la conformidad, según corresponda, debiendo considerarse como no ejecutada la prestación, aplicándose la penalidad que corresponda por cada día de atraso.",
+    );
+  });
+});
+
+describe("el apartado entero cabe en su tope", () => {
+  it("el peor caso —las dos áreas al máximo— no se corta", async () => {
+    // El texto capa a `LIMITES_TEXTO.recepcionConformidad` al escribirlo en la
+    // ficha. Con 2000 el último párrafo de BIENES se cortaba sin avisar en
+    // cuanto las dos áreas tenían nombre largo.
+    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
+    const { necesidadUpdateSchema } = await import("@/lib/necesidades");
+    for (const objeto of ["bienes", "servicios"]) {
+      const peor = componerRecepcionConformidad(objeto, {
+        areaConformidad: "á".repeat(LIMITES_TEXTO.formaPagoAreaConformidad),
+        areaRecepcion: "á".repeat(LIMITES_TEXTO.recepcionArea),
+        plazoConformidad: "999",
+        plazoSubsanacion: "de 999 días hábiles",
+      })!;
+      expect(peor.length, objeto).toBeLessThanOrEqual(LIMITES_TEXTO.recepcionConformidad);
+      expect(
+        necesidadUpdateSchema.safeParse({ recepcionConformidad: peor }).success,
+        objeto,
+      ).toBe(true);
+    }
+  });
+
+  it("y con los huecos vacíos tampoco, que es donde los corchetes son más largos", async () => {
+    const { LIMITES_TEXTO } = await import("@/lib/necesidades-limites");
+    for (const objeto of ["bienes", "servicios"]) {
+      const t = componerRecepcionConformidad(objeto, {})!;
+      expect(t.length, objeto).toBeLessThanOrEqual(LIMITES_TEXTO.recepcionConformidad);
+    }
+  });
+});
+
+describe("«Redactar con IA» lo compone en vez de pedírselo al copiloto", () => {
+  // Se vigila el fuente porque el suite no monta React.
+  async function cuerpoDelManejador() {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("app/components/necesidad-detail.tsx", "utf-8");
+    const i = fuente.indexOf("const pedirRedactarIA");
+    return fuente.slice(i, fuente.indexOf("\n  };", i));
+  }
+
+  it("el atajo existe y va ANTES de abrir el copiloto", async () => {
+    const cuerpo = await cuerpoDelManejador();
+    expect(cuerpo).toContain('api === "recepcionConformidad"');
+    expect(cuerpo).toContain("componerRecepcionConformidad");
+    expect(cuerpo.indexOf("componerRecepcionConformidad")).toBeLessThan(
+      cuerpo.indexOf("setCopilotoAbierto"),
+    );
+  });
+
+  it("le pasa el objeto y los tres datos registrados", async () => {
+    const cuerpo = await cuerpoDelManejador();
+    expect(cuerpo).toContain("fichaForm.tipoObjeto");
+    // El área se pide una sola vez, en la forma de pago: aquí se lee de allí.
+    expect(cuerpo).toContain("fichaForm.formaPagoAreaConformidad");
+    expect(cuerpo).toContain("fichaForm.recepcionArea");
+    expect(cuerpo).toContain("fichaForm.conformidadPlazo");
+    expect(cuerpo).toContain("fichaForm.conformidadPlazoSubsanacion");
+  });
+
+  it("y en obras sigue al copiloto, porque no hay plantilla que aplicar", async () => {
+    const cuerpo = await cuerpoDelManejador();
+    // La guarda: solo se escribe el campo si SALIÓ texto. Sin ella, obras
+    // —donde `componerRecepcionConformidad` devuelve null— habría dejado de
+    // llegar al copiloto y el botón no haría nada.
+    expect(cuerpo).toMatch(/if \(texto\) \{/);
+    expect(componerRecepcionConformidad("obras", {})).toBeNull();
+  });
+});

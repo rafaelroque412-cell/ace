@@ -139,6 +139,7 @@ import {
 } from "@/lib/necesidad-ficha-secciones";
 import { componerFormaPago } from "@/lib/forma-pago";
 import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
+import { componerRecepcionConformidad } from "@/lib/recepcion-conformidad";
 
 
 
@@ -479,13 +480,34 @@ export function NecesidadDetail({
       );
       return;
     }
-    // Recepcion y conformidad (Art. 144) pasa por el copiloto, a diferencia de
-    // la forma de pago. Se probo componiendolo con plantilla y la entidad
-    // prefiere el copiloto, que lee el modelo del procedimiento: el apartado
-    // admite mas variacion de la que parece —el plazo cambia segun hagan falta
-    // pruebas, y en obras el regimen es otro— y un texto fijo se quedaba corto.
+    // Recepcion y conformidad (Art. 144). Se COMPONE con el texto del formato,
+    // como la forma de pago: la entidad facilito el literal con sus huecos entre
+    // corchetes, y lo que tiene una respuesta exacta no se le pide a un modelo
+    // de lenguaje. Paso una temporada yendo al copiloto y el resultado
+    // parafraseaba el articulo del Reglamento en un documento que se firma.
     //
-    // La plantilla sigue en lib/recepcion-conformidad.ts, sin usar por ahora.
+    // OBRAS no tiene plantilla —su recepcion se rige por otro procedimiento, con
+    // comision de recepcion y pliego de observaciones, que el formato facilitado
+    // no cubre—: ahi `componerRecepcionConformidad` devuelve null y se sigue al
+    // copiloto en vez de escribir algo aproximado.
+    if (api === "recepcionConformidad") {
+      const subsanacion = (fichaForm.conformidadPlazoSubsanacion ?? "").trim();
+      const texto = componerRecepcionConformidad(fichaForm.tipoObjeto, {
+        // El area que otorga la conformidad se pide una sola vez, en la forma
+        // de pago; aqui se lee de alli.
+        areaConformidad: fichaForm.formaPagoAreaConformidad ?? "",
+        areaRecepcion: fichaForm.recepcionArea ?? "",
+        plazoConformidad: (fichaForm.conformidadPlazo ?? "").trim(),
+        // El campo es un NUMERO de dias y el hueco pide una frase: el texto dice
+        // «otorgandole un plazo para subsanar, ___», y un «5» suelto ahi no se
+        // lee. El de la conformidad no lo necesita: su frase ya trae el «dias».
+        plazoSubsanacion: subsanacion ? `de ${subsanacion} días hábiles` : "",
+      });
+      if (texto) {
+        setFichaField("recepcionConformidad", texto);
+        return;
+      }
+    }
     setCopilotoAbierto(true);
     setCopilotoMontado(true);
     setCopilotoRedactar((prev) => ({ key: api, nonce: (prev?.nonce ?? 0) + 1 }));
