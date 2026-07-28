@@ -12305,6 +12305,58 @@ textarea:focus,
   color: var(--muted);
 }
 
+/* Condiciones de participación en consorcio: casillas D.1/D.2/D.3 con su número. */
+.reqCalConsorcio {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reqCalConsorcioMsg {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.reqCalConsorcioFila {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reqCalConsorcioCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.reqCalConsorcioCheck input {
+  margin-top: 2px;
+  accent-color: var(--brand);
+}
+
+.reqCalConsorcioNum {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reqCalConsorcioNum input[type="number"] {
+  width: 80px;
+  font-size: 12.5px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
 .reqCalSpin {
   animation: reqCalGiro 0.8s linear infinite;
 }

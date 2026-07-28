@@ -28,6 +28,8 @@ import { ACREDITACION_FORMACION_ACADEMICA } from "@/lib/formacion-academica";
 import { ACREDITACION_CAPACITACION } from "@/lib/capacitacion-personal-clave";
 import { ACREDITACION_EQUIPAMIENTO, REQUISITO_EQUIPAMIENTO } from "@/lib/equipamiento-estrategico";
 import { ACREDITACION_INFRAESTRUCTURA, REQUISITO_INFRAESTRUCTURA } from "@/lib/infraestructura-estrategica";
+import { ACREDITACION_CONSORCIO } from "@/lib/consorcio";
+import { ConsorcioEditor } from "./consorcio-editor";
 import { PersonalClaveEditor } from "./personal-clave-editor";
 import { FormacionAcademicaEditor } from "./formacion-academica-editor";
 import { CapacitacionPersonalClaveEditor } from "./capacitacion-personal-clave-editor";
@@ -373,7 +375,20 @@ export function RequisitosCalificacionEditor({
                   </button>
                 </>
               ) : null}
-              {estado !== "no" ? (
+              {/* Consorcio (Art. 72.3.d): el requisito no es texto libre, son las
+                  tres condiciones D.1/D.2/D.3 con su número. Se componen en el
+                  mismo `detalle`, así que el resto del flujo no cambia. */}
+              {tipo.key === "consorcio" && estado !== "no" ? (
+                <label className="reqCalCampo">
+                  <span>Requisitos (condiciones de participación en consorcio)</span>
+                  <ConsorcioEditor
+                    onChange={(next) => editar("consorcio", "detalle", next)}
+                    readOnly={readOnly}
+                    value={e?.detalle ?? ""}
+                  />
+                </label>
+              ) : null}
+              {tipo.key !== "consorcio" && estado !== "no" ? (
                 <label className="reqCalCampo">
                   <span>¿Qué se exige exactamente?</span>
                   <textarea
@@ -411,11 +426,24 @@ export function RequisitosCalificacionEditor({
                   placeholder propone la acreditación típica del tipo (72.3). */}
               {estado !== "no" ? (
                 <label className="reqCalCampo">
-                  <span>¿Con qué se acredita?</span>
+                  <span className={tipo.key === "consorcio" ? "reqCalSpanConBoton" : undefined}>
+                    ¿Con qué se acredita?
+                    {tipo.key === "consorcio" ? (
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => editar("consorcio", "acreditacion", ACREDITACION_CONSORCIO)}
+                        title="Rellenar con el texto estándar del formato"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    ) : null}
+                  </span>
                   <textarea
                     disabled={readOnly}
                     onChange={(ev) => editar(tipo.key, "acreditacion", ev.target.value)}
-                    placeholder={ACREDITACION_TIPICA[tipo.key]}
+                    placeholder={tipo.key === "consorcio" ? "Pulsa «Redactar con IA»: se acredita con la promesa de consorcio." : ACREDITACION_TIPICA[tipo.key]}
                     rows={filasTextarea(e?.acreditacion ?? "")}
                     value={e?.acreditacion ?? ""}
                   />
