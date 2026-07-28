@@ -274,33 +274,10 @@ export function RequisitosCalificacionEditor({
                   «Redactar con IA» lo compone en el detalle de abajo. */}
               {tipo.key === "experiencia_postor" && estado !== "no" ? (
                 <>
-                  <label className="reqCalCampo">
-                    <span className="reqCalSpanConBoton">
-                      {`¿Qué se considera ${objetoConvocatoria(objeto)} similar al objeto convocado?`}
-                      {necesidadId ? (
-                        <button
-                          className="reqCalRedactar"
-                          disabled={readOnly || proponiendo}
-                          onClick={proponerSimilares}
-                          title="Que la IA proponga qué se considera similar, a partir del objeto de la contratación"
-                          type="button"
-                        >
-                          {proponiendo ? <Loader className="reqCalSpin" size={12} /> : <Sparkles size={12} />}
-                          {proponiendo ? "Proponiendo…" : "Proponer con IA"}
-                        </button>
-                      ) : null}
-                    </span>
-                    <textarea
-                      disabled={readOnly}
-                      onChange={(ev) => setSimilaresExp(ev.target.value)}
-                      placeholder="Ej. mantenimiento de áreas verdes, jardinería y afines."
-                      rows={filasTextarea(similaresExp)}
-                      value={similaresExp}
-                    />
-                    {errorSimilares ? <span className="reqCalAvisoTope" role="status">{errorSimilares}</span> : null}
-                  </label>
-                  <div className="reqCalExperiencia">
-                    <label className="reqCalCampo">
+                  {/* Monto y «qué se considera similar», en UNA fila: el monto es
+                      una cifra corta y no necesita todo el ancho. */}
+                  <div className="reqCalExperienciaFila">
+                    <label className="reqCalCampo reqCalMonto">
                       <span>Monto facturado acumulado exigido</span>
                       <input
                         disabled={readOnly}
@@ -313,16 +290,41 @@ export function RequisitosCalificacionEditor({
                         value={montoExp}
                       />
                     </label>
-                    <button
-                      className="reqCalRedactar"
-                      disabled={readOnly}
-                      onClick={redactarExperiencia}
-                      title="Redactar el requisito con el texto del formato (Art. 72.3.c)"
-                      type="button"
-                    >
-                      <Sparkles size={12} /> Redactar con IA
-                    </button>
+                    <label className="reqCalCampo reqCalSimilares">
+                      <span className="reqCalSpanConBoton">
+                        {`¿Qué se considera ${objetoConvocatoria(objeto)} similar al objeto convocado?`}
+                        {necesidadId ? (
+                          <button
+                            className="reqCalRedactar"
+                            disabled={readOnly || proponiendo}
+                            onClick={proponerSimilares}
+                            title="Que la IA proponga qué se considera similar, a partir del objeto de la contratación"
+                            type="button"
+                          >
+                            {proponiendo ? <Loader className="reqCalSpin" size={12} /> : <Sparkles size={12} />}
+                            {proponiendo ? "Proponiendo…" : "Proponer con IA"}
+                          </button>
+                        ) : null}
+                      </span>
+                      <textarea
+                        disabled={readOnly}
+                        onChange={(ev) => setSimilaresExp(ev.target.value)}
+                        placeholder="Ej. mantenimiento de áreas verdes, jardinería y afines."
+                        rows={2}
+                        value={similaresExp}
+                      />
+                      {errorSimilares ? <span className="reqCalAvisoTope" role="status">{errorSimilares}</span> : null}
+                    </label>
                   </div>
+                  <button
+                    className="reqCalRedactar"
+                    disabled={readOnly}
+                    onClick={redactarExperiencia}
+                    title="Redactar el requisito con el texto del formato (Art. 72.3.c)"
+                    type="button"
+                  >
+                    <Sparkles size={12} /> Redactar con IA
+                  </button>
                 </>
               ) : null}
               {estado !== "no" ? (
@@ -332,7 +334,11 @@ export function RequisitosCalificacionEditor({
                     disabled={readOnly}
                     onChange={(ev) => editar(tipo.key, "detalle", ev.target.value)}
                     placeholder={`Ej. ${tipo.ejemplo}`}
-                    rows={filasTextarea(e?.detalle ?? "")}
+                    // La experiencia del postor se compone («Redactar con IA») y
+                    // es texto largo: se muestra en una caja baja con scroll, no
+                    // ocupando media pantalla. El resto de tipos crece con su
+                    // contenido, como antes.
+                    rows={tipo.key === "experiencia_postor" ? 3 : filasTextarea(e?.detalle ?? "")}
                     value={e?.detalle ?? ""}
                   />
                   {/* El modelo parte la capacidad tecnica en cuatro literales con reglas

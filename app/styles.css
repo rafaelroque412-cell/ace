@@ -12223,21 +12223,26 @@ textarea:focus,
   overflow-wrap: anywhere;
 }
 
-/* Experiencia del postor: el monto (número) y su botón de redacción, en fila.
-   El número no ocupa todo el ancho —es una cifra corta— y el botón se alinea
-   abajo con la casilla, no con la etiqueta de arriba. */
-.reqCalExperiencia {
+/* Experiencia del postor: el monto (cifra corta) y «qué se considera similar»
+   (texto), en UNA fila. El monto no necesita todo el ancho; lo similar sí más.
+   Se alinean arriba —no abajo— porque el textarea es más alto que el input, y en
+   pantalla estrecha se apilan. */
+.reqCalExperienciaFila {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.reqCalExperiencia .reqCalCampo {
-  flex: 1 1 180px;
+.reqCalMonto {
+  flex: 0 1 190px;
 }
 
-.reqCalExperiencia input[type="number"] {
+.reqCalSimilares {
+  flex: 2 1 260px;
+}
+
+.reqCalExperienciaFila input[type="number"] {
   width: 100%;
   font-size: 12.5px;
   padding: 6px 8px;
