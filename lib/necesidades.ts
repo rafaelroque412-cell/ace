@@ -128,6 +128,8 @@ export type Necesidad = {
   // fijo de cómo se acredita.
   personal_clave_experiencia: string | null;
   personal_clave_acreditacion: string | null;
+  // Calificaciones del personal clave · Formación académica (Art. 72.3.b, C.2.1).
+  formacion_academica: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
   metas_fisicas: string | null;
@@ -305,6 +307,7 @@ export const necesidadCreateSchema = z.object({
   // (lib/personal-clave.ts). Varias filas, por eso el tope es holgado.
   personalClaveExperiencia: optionalText(4000),
   personalClaveAcreditacion: optionalText(3000),
+  formacionAcademica: optionalText(1000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

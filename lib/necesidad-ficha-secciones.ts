@@ -558,6 +558,11 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // tras el cuadro— pero SÍ va al documento; ver la excepción en
       // requerimiento-estructura.ts.
       { col: "personal_clave_acreditacion", api: "personalClaveAcreditacion", label: "Acreditación de la experiencia del personal clave", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la experiencia del personal clave (Anexo N° 19). Texto estándar del formato de Concurso Público de servicios.", ejemplo: "El postor debe señalar la denominación del puesto…" },
+      // CALIFICACIONES DEL PERSONAL CLAVE · Formación académica (Art. 72.3.b,
+      // C.2.1). Requisito con dos huecos —grado/título y puesto— que se compone
+      // (lib/formacion-academica.ts). Oculto —lo pinta el editor— pero SÍ al
+      // documento; ver la excepción en requerimiento-estructura.ts.
+      { col: "formacion_academica", api: "formacionAcademica", label: "Formación académica del personal clave (requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · como requisito de calificación solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.", ejemplo: "Título profesional de Ingeniero Civil del personal clave requerido como Ingeniero residente." },
     ],
   },
   {

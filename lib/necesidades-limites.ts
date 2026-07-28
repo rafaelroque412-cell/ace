@@ -120,6 +120,7 @@ export const LIMITES_TEXTO: Record<string, number> = {
   requisitosAdicionales: 4000,
   personalClaveExperiencia: 4000,
   personalClaveAcreditacion: 3000,
+  formacionAcademica: 1000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,
   disponibilidadTerreno: 2000,
