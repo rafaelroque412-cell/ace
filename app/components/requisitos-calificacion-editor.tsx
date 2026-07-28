@@ -492,6 +492,7 @@ export function RequisitosCalificacionEditor({
                     value={capacitacionPersonalClave ?? ""}
                   />
                   {/* Cómo se acredita la capacitación: texto fijo del formato (Anexo N° 19). */}
+                  <p className="reqCalPersonalClaveTitulo">Capacitación del personal clave</p>
                   <label className="reqCalCampo">
                     <span className="reqCalSpanConBoton">
                       ¿Cómo se acredita la capacitación?
