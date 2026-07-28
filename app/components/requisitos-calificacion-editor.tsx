@@ -415,7 +415,9 @@ export function RequisitosCalificacionEditor({
                       disabled={readOnly}
                       onChange={(ev) => onCampoFicha("personalClaveAcreditacion", ev.target.value)}
                       placeholder="Pulsa «Redactar con IA» para el texto estándar del Anexo N° 19."
-                      rows={4}
+                      // Crece con el contenido: el texto del Anexo N° 19 son tres
+                      // párrafos y con cuatro filas no se leía sin desplazarse.
+                      rows={filasTextarea(personalClaveAcreditacion ?? "", true)}
                       value={personalClaveAcreditacion ?? ""}
                     />
                   </label>
