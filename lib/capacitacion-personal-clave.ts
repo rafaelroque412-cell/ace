@@ -12,11 +12,17 @@
 
 /**
  * Como se acredita la capacitacion del personal clave, texto literal del formato
- * OECE. ENTRADA EXTERNA: lo pasa el usuario. Hasta entonces, un marcador visible
- * para no fabricar texto legal.
+ * OECE (Concurso Publico de servicios). Las tres advertencias van en vinetas: el
+ * Word convierte las lineas que empiezan por «- » en bullets.
  */
-export const ACREDITACION_CAPACITACION =
-  "[PENDIENTE: pegar aqui el texto de acreditacion de la capacitacion del personal clave del formato OECE]";
+export const ACREDITACION_CAPACITACION = [
+  "Se acredita con copia simple de [CONSIGNAR CONSTANCIAS, CERTIFICADOS U OTROS DOCUMENTOS, SEGÚN CORRESPONDA].",
+  "",
+  "Advertencia:",
+  "- Las horas indicadas pueden ser lectivas, académicas y/o pedagógicas sin distinción entre estas.",
+  "- Al evaluar la incorporación de este requisito, la entidad contratante debe sustentar que el tipo de capacitación seleccionado se encuentre vinculado con las actividades que va a desempeñar el personal clave.",
+  "- Se podrá acreditar la capacitación mediante certificados de estudios de postgrado, considerando que cada crédito del curso que acredita la capacitación equivale a dieciséis horas, según la normativa de la materia.",
+].join("\n");
 
 const HUECO_HORAS = "CONSIGNAR LA CANTIDAD DE HORAS, HASTA UN MAXIMO DE 120";
 const HUECO_MATERIA =
