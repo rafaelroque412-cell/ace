@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
@@ -162,6 +162,20 @@ export function RequisitosCalificacionEditor({
 
 
   const { porTipo, otrosObligatorios, otrosFacultativos } = reparto;
+
+  // Las actividades del cuadro de experiencia, que heredan formación y
+  // capacitación. Se calcula UNA vez (antes se parseaba dos veces por render, una
+  // por cuadro) y con identidad estable, para que los cuadros hijos —memoizados—
+  // no se repinten en cada tecla que se escriba en OTRO campo del editor.
+  const actividadesExperiencia = useMemo(
+    () => parsePersonalClave(personalClaveExperiencia ?? "").map((f) => f.actividad),
+    [personalClaveExperiencia],
+  );
+  // Callbacks estables hacia los cuadros hijos: `onCampoFicha` ya es estable, pero
+  // envolverlo en una flecha nueva por render anularía la memoización del hijo.
+  const setPersonalClave = useCallback((next: string) => onCampoFicha?.("personalClaveExperiencia", next), [onCampoFicha]);
+  const setFormacion = useCallback((next: string) => onCampoFicha?.("formacionAcademica", next), [onCampoFicha]);
+  const setCapacitacion = useCallback((next: string) => onCampoFicha?.("capacitacionPersonalClave", next), [onCampoFicha]);
 
   function propagar(next: RepartoRequisitos) {
     if (readOnly) return;
@@ -421,7 +435,7 @@ export function RequisitosCalificacionEditor({
                     Un puesto por fila. En el requerimiento sale como cuadro (Art. 72.3.b).
                   </p>
                   <PersonalClaveEditor
-                    onChange={(next) => onCampoFicha("personalClaveExperiencia", next)}
+                    onChange={setPersonalClave}
                     readOnly={readOnly}
                     value={personalClaveExperiencia ?? ""}
                   />
@@ -459,8 +473,8 @@ export function RequisitosCalificacionEditor({
                     Formación académica · solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.
                   </p>
                   <FormacionAcademicaEditor
-                    actividades={parsePersonalClave(personalClaveExperiencia ?? "").map((f) => f.actividad)}
-                    onChange={(next) => onCampoFicha("formacionAcademica", next)}
+                    actividades={actividadesExperiencia}
+                    onChange={setFormacion}
                     readOnly={readOnly}
                     value={formacionAcademica ?? ""}
                   />
@@ -498,8 +512,8 @@ export function RequisitosCalificacionEditor({
                     puesto del que se acredita.
                   </p>
                   <CapacitacionPersonalClaveEditor
-                    actividades={parsePersonalClave(personalClaveExperiencia ?? "").map((f) => f.actividad)}
-                    onChange={(next) => onCampoFicha("capacitacionPersonalClave", next)}
+                    actividades={actividadesExperiencia}
+                    onChange={setCapacitacion}
                     readOnly={readOnly}
                     value={capacitacionPersonalClave ?? ""}
                   />

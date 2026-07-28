@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import {
   FILA_PERSONAL_CLAVE_VACIA,
@@ -21,7 +21,7 @@ import {
  * re-sincroniza cuando el valor cambia por FUERA (recarga de la ficha), para no
  * borrar un espacio recién escrito con el round-trip serializar → parsear.
  */
-export function PersonalClaveEditor({
+export const PersonalClaveEditor = memo(function PersonalClaveEditor({
   value,
   onChange,
   readOnly = false,
@@ -173,4 +173,4 @@ export function PersonalClaveEditor({
       )}
     </div>
   );
-}
+});
