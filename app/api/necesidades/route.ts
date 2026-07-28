@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCapability, requireUser } from "@/lib/auth";
 import { type Necesidad, necesidadCreateSchema } from "@/lib/necesidades";
-import { construirColumnas } from "@/lib/necesidad-columnas";
+import { columnasSelect, construirColumnas } from "@/lib/necesidad-columnas";
 import { construirQueryNecesidades } from "@/lib/necesidades-query";
 import { estadosBandeja } from "@/lib/necesidades-bandeja";
 import { NECESIDAD_ESTADOS } from "@/lib/necesidad-workflow";
@@ -47,8 +47,24 @@ function filtrosDeVista(vista: string): { statusIn?: string[]; fechaRequeridaHas
   return {};
 }
 
-const FULL_SELECT =
-  "id,codigo,anio_fiscal,periodo_programacion,version_cmn,entidad,unidad_ejecutora,area_usuaria,centro_costo,responsable,nombre,finalidad_publica,pei_objetivo,pei_accion,poi_actividad,meta_presupuestal,proyecto_inversion,cui,ioarr,tipo_objeto,tipo_proceso_seleccion,especialidad,subespecialidad,codigo_catalogo,descripcion_catalogo,descripcion_general,descripcion_detallada,ficha_tecnica_identificacion,compatibilizacion,normas_tecnicas,prestaciones_accesorias,cantidad,unidad_medida,frecuencia,fecha_requerida,trimestre,mes_programado,fuente_financiamiento,rubro,cadena_funcional,clasificador_gasto,monto_estimado,costo_unitario,costo_total,moneda,anio_referencia,departamento,provincia,distrito,lugar_entrega,alcance,condiciones_ejecucion,modalidad_pago,sistema_entrega,plazo_ejecucion,equipamiento_minimo,habilitaciones,formula_reajuste,adelanto_directo,penalidad_mora,garantias,recepcion_conformidad,subcontratacion,otras_penalidades,solucion_controversias,plazo_respuestas,requisitos_adicionales,gestion_riesgos,metas_fisicas,disponibilidad_terreno,seguros,metodologia_bim,gestion_calidad,anexos_tecnicos,requisitos_calificacion,verificacion_ficha_tecnica,verificacion_almacen,certificacion_presupuestal,fecha_remision_dec,status,tipo_area,cmn_verificado,no_objecion,no_objecion_sustento,no_objecion_mecanismo,summary,process_id,owner_id,created_at,updated_at";
+// Lo que devuelve el POST tras crear: la necesidad ENTERA. Se deriva del
+// esquema para no repetir el bug de la lista fija —una columna nueva que no se
+// sumaba a mano y volvía vacía—; ver la nota en `necesidades/[id]/route.ts`.
+const COLUMNAS_SISTEMA = [
+  "id",
+  "codigo",
+  "status",
+  "cmn_verificado",
+  "no_objecion",
+  "no_objecion_sustento",
+  "no_objecion_mecanismo",
+  "summary",
+  "process_id",
+  "owner_id",
+  "created_at",
+  "updated_at",
+];
+const FULL_SELECT = [...new Set([...columnasSelect(), ...COLUMNAS_SISTEMA])].join(",");
 
 export async function GET(request: NextRequest) {
   const auth = await requireUser();

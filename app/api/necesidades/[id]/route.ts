@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCapability, requireUser } from "@/lib/auth";
-import { construirColumnas } from "@/lib/necesidad-columnas";
+import { columnasSelect, construirColumnas } from "@/lib/necesidad-columnas";
 import { nomenclaturaExpediente } from "@/lib/necesidad-denominacion";
 import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
 import { hitosEstadoDesdeAuditoria } from "@/lib/necesidad-flujo";
@@ -22,8 +22,31 @@ function aNumero(valor: number | string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const SELECT =
-  "id,codigo,anio_fiscal,periodo_programacion,version_cmn,entidad,unidad_ejecutora,area_usuaria,centro_costo,responsable,nombre,finalidad_publica,pei_objetivo,pei_accion,poi_actividad,meta_presupuestal,proyecto_inversion,cui,ioarr,tipo_objeto,tipo_proceso_seleccion,especialidad,subespecialidad,codigo_catalogo,descripcion_catalogo,descripcion_general,descripcion_detallada,ficha_tecnica_identificacion,compatibilizacion,normas_tecnicas,prestaciones_accesorias,cantidad,unidad_medida,frecuencia,fecha_requerida,trimestre,mes_programado,fuente_financiamiento,rubro,cadena_funcional,clasificador_gasto,monto_estimado,costo_unitario,costo_total,moneda,anio_referencia,departamento,provincia,distrito,lugar_entrega,alcance,condiciones_ejecucion,modalidad_pago,sistema_entrega,plazo_ejecucion,plazo_ejecucion_unidad,equipamiento_minimo,habilitaciones,formula_reajuste,adelanto_directo,penalidad_mora,garantias,recepcion_conformidad,subcontratacion,otras_penalidades,solucion_controversias,plazo_respuestas,requisitos_adicionales,gestion_riesgos,metas_fisicas,disponibilidad_terreno,seguros,metodologia_bim,gestion_calidad,anexos_tecnicos,requisitos_calificacion,verificacion_ficha_tecnica,verificacion_almacen,certificacion_presupuestal,fecha_remision_dec,fecha_version_dos,fecha_version_n,status,tipo_area,cmn_verificado,no_objecion,no_objecion_sustento,no_objecion_mecanismo,summary,process_id,owner_id,created_at,updated_at";
+// Antes era una lista fija de ~90 columnas escrita a mano. Es EL MISMO patrón
+// que `necesidad-columnas.ts` mató en la escritura: se añadía una columna a la
+// ficha, se guardaba bien, y al recargar volvía vacía porque nadie la sumó
+// también a este SELECT. Pasó con las trece columnas de esta tanda —forma de
+// pago, plazos de conformidad, personal clave—: se guardaban en la base y el
+// GET no las leía, así que parecían no guardarse.
+//
+// Ahora las columnas de ficha se DERIVAN del esquema (`columnasSelect`), y solo
+// las de sistema —las que no son campos de la ficha— se listan aparte. Una
+// columna nueva de la ficha llega sola a la lectura.
+const COLUMNAS_SISTEMA = [
+  "id",
+  "codigo",
+  "status",
+  "cmn_verificado",
+  "no_objecion",
+  "no_objecion_sustento",
+  "no_objecion_mecanismo",
+  "summary",
+  "process_id",
+  "owner_id",
+  "created_at",
+  "updated_at",
+];
+const SELECT = [...new Set([...columnasSelect(), ...COLUMNAS_SISTEMA])].join(",");
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
