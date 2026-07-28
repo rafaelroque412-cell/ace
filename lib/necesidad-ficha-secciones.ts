@@ -25,7 +25,7 @@ import {
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,
 // para leer) con la clave del PATCH (camelCase) y su tipo de control.
-export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "subcontratacion" | "select";
+export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "formacionAcademica" | "subcontratacion" | "select";
 
 // Catálogo del "Tipo de proceso de selección" (referencia inicial del área
 // usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
@@ -562,7 +562,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // C.2.1). Requisito con dos huecos —grado/título y puesto— que se compone
       // (lib/formacion-academica.ts). Oculto —lo pinta el editor— pero SÍ al
       // documento; ver la excepción en requerimiento-estructura.ts.
-      { col: "formacion_academica", api: "formacionAcademica", label: "Formación académica del personal clave (requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · como requisito de calificación solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.", ejemplo: "Título profesional de Ingeniero Civil del personal clave requerido como Ingeniero residente." },
+      { col: "formacion_academica", api: "formacionAcademica", label: "Formación académica del personal clave", oculto: true, kind: "formacionAcademica", baseLegal: "Art. 72.3.b Reglamento · un requisito por fila (grado/título + puesto). Como requisito de calificación solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.", ejemplo: "Título profesional de Ingeniero Civil · Ingeniero residente" },
     ],
   },
   {

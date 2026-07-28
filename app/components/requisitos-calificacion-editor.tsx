@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
@@ -24,8 +24,8 @@ import {
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
 import { ACREDITACION_PERSONAL_CLAVE } from "@/lib/personal-clave";
-import { componerFormacionAcademica, parseFormacionAcademica } from "@/lib/formacion-academica";
 import { PersonalClaveEditor } from "./personal-clave-editor";
+import { FormacionAcademicaEditor } from "./formacion-academica-editor";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 import { Sparkles } from "lucide-react";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
@@ -136,24 +136,6 @@ export function RequisitosCalificacionEditor({
     }
   }, [value]);
 
-  // Formación académica: los dos huecos se releen del requisito ya compuesto, que
-  // vive en su propia columna (no en el texto canónico de requisitos). El objeto
-  // que devuelve `parseFormacionAcademica` cambia de identidad en cada render, así
-  // que se memoiza para no reseedear el estado en bucle.
-  const fa = useMemo(() => parseFormacionAcademica(formacionAcademica ?? ""), [formacionAcademica]);
-  const [gradoFA, setGradoFA] = useState(fa.grado);
-  const [puestoFA, setPuestoFA] = useState(fa.puesto);
-  const faRef = useRef(formacionAcademica ?? "");
-  useEffect(() => {
-    if ((formacionAcademica ?? "") !== faRef.current) {
-      setGradoFA(fa.grado);
-      setPuestoFA(fa.puesto);
-      faRef.current = formacionAcademica ?? "";
-    }
-  }, [formacionAcademica, fa]);
-  function redactarFormacion() {
-    onCampoFicha?.("formacionAcademica", componerFormacionAcademica({ grado: gradoFA, puesto: puestoFA }));
-  }
 
   const { porTipo, otrosObligatorios, otrosFacultativos } = reparto;
 
@@ -446,53 +428,17 @@ export function RequisitosCalificacionEditor({
                   </label>
 
                   {/* CALIFICACIONES DEL PERSONAL CLAVE · Formación académica
-                      (Art. 72.3.b, C.2.1). Dos huecos —grado/título y puesto—;
-                      «Redactar con IA» compone el requisito. */}
+                      (Art. 72.3.b, C.2.1). Un puesto por fila; el requisito de
+                      cada uno se redacta con el grado y el puesto de su fila. */}
                   <p className="reqCalPersonalClaveTitulo">Calificaciones del personal clave</p>
                   <p className="reqCalPersonalClaveAyuda">
                     Formación académica · solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.
                   </p>
-                  <label className="reqCalCampo">
-                    <span>Grado de bachiller o título profesional requerido</span>
-                    <textarea
-                      disabled={readOnly}
-                      onChange={(ev) => setGradoFA(ev.target.value)}
-                      placeholder="Ej. Título profesional de Ingeniero Civil"
-                      rows={2}
-                      value={gradoFA}
-                    />
-                  </label>
-                  <label className="reqCalCampo">
-                    <span>Personal clave del cual acreditar el requisito</span>
-                    <textarea
-                      disabled={readOnly}
-                      onChange={(ev) => setPuestoFA(ev.target.value)}
-                      placeholder="Ej. Ingeniero residente"
-                      rows={2}
-                      value={puestoFA}
-                    />
-                  </label>
-                  <label className="reqCalCampo">
-                    <span className="reqCalSpanConBoton">
-                      Requisitos (formación académica)
-                      <button
-                        className="reqCalRedactar"
-                        disabled={readOnly}
-                        onClick={redactarFormacion}
-                        title="Redactar el requisito con el texto del formato (Art. 72.3.b)"
-                        type="button"
-                      >
-                        <Sparkles size={12} /> Redactar con IA
-                      </button>
-                    </span>
-                    <textarea
-                      disabled={readOnly}
-                      onChange={(ev) => onCampoFicha("formacionAcademica", ev.target.value)}
-                      placeholder="Se compone con «Redactar con IA» a partir de los dos campos de arriba."
-                      rows={filasTextarea(formacionAcademica ?? "")}
-                      value={formacionAcademica ?? ""}
-                    />
-                  </label>
+                  <FormacionAcademicaEditor
+                    onChange={(next) => onCampoFicha("formacionAcademica", next)}
+                    readOnly={readOnly}
+                    value={formacionAcademica ?? ""}
+                  />
                 </div>
               ) : null}
 

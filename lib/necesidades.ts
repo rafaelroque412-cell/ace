@@ -307,7 +307,7 @@ export const necesidadCreateSchema = z.object({
   // (lib/personal-clave.ts). Varias filas, por eso el tope es holgado.
   personalClaveExperiencia: optionalText(4000),
   personalClaveAcreditacion: optionalText(3000),
-  formacionAcademica: optionalText(1000),
+  formacionAcademica: optionalText(3000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

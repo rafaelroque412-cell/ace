@@ -18,7 +18,7 @@ import type { ObjetoFilter } from "./procesos-seleccion";
  */
 
 /** Cómo se pinta un campo en el documento. */
-export type FormatoCampo = "linea" | "parrafo" | "tabla" | "tablaPersonalClave" | "vinetas";
+export type FormatoCampo = "linea" | "parrafo" | "tabla" | "tablaPersonalClave" | "tablaFormacion" | "vinetas";
 
 export type CampoRequerimiento = {
   /** api del campo en la ficha; el renderizador lo necesita para los estructurados. */
@@ -61,6 +61,7 @@ export function etiquetaDeDocumento(label: string): string {
 function formatoDe(field: FichaField): FormatoCampo {
   if (field.kind === "penalidades") return "tabla";
   if (field.kind === "personalClave") return "tablaPersonalClave";
+  if (field.kind === "formacionAcademica") return "tablaFormacion";
   if (field.kind === "requisitos") return "vinetas";
   if (field.kind === "textarea" || field.kind === "controversias" || field.kind === "subcontratacion") {
     return "parrafo";
@@ -131,8 +132,8 @@ export function estructuraDelRequerimiento(
       // resto de ocultos son espejos internos.
       const soloEnDocumento =
         field.kind === "personalClave" ||
-        field.api === "personalClaveAcreditacion" ||
-        field.api === "formacionAcademica";
+        field.kind === "formacionAcademica" ||
+        field.api === "personalClaveAcreditacion";
       if ((field.oculto && !soloEnDocumento) || NO_VAN_SOLOS.has(field.api)) continue;
       const valor = (ficha[field.api] ?? "").trim();
       const exigido = exigidos.has(field.api);

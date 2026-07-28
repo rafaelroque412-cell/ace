@@ -22,6 +22,7 @@ import { cuantiaPorSumatoria, importeItem, type NecesidadItem } from "./necesida
 import type { ObjetoFilter } from "./procesos-seleccion";
 import { parseOtrasPenalidades, textoLibrePenalidades } from "./otras-penalidades";
 import { parsePersonalClave } from "./personal-clave";
+import { componerRequisitoFormacion, parseFilasFormacion } from "./formacion-academica";
 import { parseRequisitos } from "./requisitos-calificacion";
 import {
   type CampoRequerimiento,
@@ -252,6 +253,35 @@ function nota(texto_: string): Paragraph {
 }
 
 /** Cuadro de penalidades distintas a la mora (Art. 119.2). */
+/** Cuadro de formación académica del personal clave (Art. 72.3.b, C.2.1). */
+function tablaFormacion(filas: ReturnType<typeof parseFilasFormacion>): Table {
+  const cabecera = new TableRow({
+    children: [
+      celda("N°", { ancho: 5, bold: true }),
+      celda("Grado de bachiller o título profesional requerido", { ancho: 34, bold: true }),
+      celda("Personal clave del cual acreditar el requisito", { ancho: 27, bold: true }),
+      celda("Requisito", { ancho: 34, bold: true }),
+    ],
+    tableHeader: true,
+  });
+  return new Table({
+    rows: [
+      cabecera,
+      ...filas.map((f, i) =>
+        new TableRow({
+          children: [
+            celda(String(i + 1)),
+            celda(f.grado ?? ""),
+            celda(f.puesto ?? ""),
+            celda(componerRequisitoFormacion(f)),
+          ],
+        }),
+      ),
+    ],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
 /** Cuadro de la experiencia del personal clave (Art. 72.3.b): un puesto por fila. */
 function tablaPersonalClave(filas: ReturnType<typeof parsePersonalClave>): Table {
   const cabecera = new TableRow({
@@ -326,6 +356,11 @@ function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Ta
   if (c.formato === "tablaPersonalClave") {
     const filas = parsePersonalClave(c.valor);
     return filas.length > 0 ? [tablaPersonalClave(filas)] : [contenido(c.valor)];
+  }
+
+  if (c.formato === "tablaFormacion") {
+    const filas = parseFilasFormacion(c.valor);
+    return filas.length > 0 ? [tablaFormacion(filas)] : [contenido(c.valor)];
   }
 
   if (c.formato === "tabla") {

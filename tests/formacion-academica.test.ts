@@ -1,75 +1,94 @@
 import { describe, expect, it } from "vitest";
-import { componerFormacionAcademica, parseFormacionAcademica } from "@/lib/formacion-academica";
+import {
+  componerRequisitoFormacion,
+  formacionIncompletas,
+  formatFilasFormacion,
+  parseFilasFormacion,
+} from "@/lib/formacion-academica";
 import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
-import { necesidadUpdateSchema } from "@/lib/necesidades";
+import { LIMITES_TEXTO, necesidadUpdateSchema } from "@/lib/necesidades";
 
 /**
- * Formación académica del personal clave (Art. 72.3.b, C.2.1). Frase del formato
- * con dos huecos: el grado/título y el puesto del que se acredita.
+ * Formación académica del personal clave (Art. 72.3.b, C.2.1). Es una LISTA de
+ * requisitos —un puesto por fila— serializada en una columna; en el Word sale
+ * como cuadro y el texto de cada fila se compone con su grado y su puesto.
  */
-describe("compone la frase con los dos huecos", () => {
-  it("con datos, en el orden del formato", () => {
-    expect(
-      componerFormacionAcademica({ grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" }),
-    ).toBe("Título profesional de Ingeniero Civil del personal clave requerido como Ingeniero residente.");
+const FILAS = [
+  { grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
+  { grado: "Bachiller en Contabilidad", puesto: "Especialista en costos" },
+];
+const vacia = { grado: "", puesto: "" };
+
+describe("el requisito de una fila se compone con sus dos campos", () => {
+  it("en el orden del formato", () => {
+    expect(componerRequisitoFormacion(FILAS[0])).toBe(
+      "Título profesional de Ingeniero Civil del personal clave requerido como Ingeniero residente.",
+    );
   });
 
   it("un hueco sin rellenar conserva su corchete", () => {
-    const t = componerFormacionAcademica({ grado: "Bachiller en Contabilidad" });
-    expect(t).toContain("Bachiller en Contabilidad del personal clave requerido como [CONSIGNAR EL PERSONAL CLAVE REQUERIDO");
-  });
-
-  it("sin nada, salen los dos corchetes del formato", () => {
-    const t = componerFormacionAcademica({});
-    expect((t.match(/\[CONSIGNAR/g) ?? []).length).toBe(2);
-    expect(t).toContain("del personal clave requerido como");
-  });
-
-  it("los espacios en blanco no cuentan como relleno", () => {
-    expect(componerFormacionAcademica({ grado: "  ", puesto: "Residente" })).toContain(
-      "[CONSIGNAR EL GRADO DE BACHILLER O TÍTULO PROFESIONAL",
+    expect(componerRequisitoFormacion({ grado: "Bachiller" })).toContain(
+      "Bachiller del personal clave requerido como [CONSIGNAR EL PERSONAL CLAVE REQUERIDO",
     );
+    expect((componerRequisitoFormacion({}).match(/\[CONSIGNAR/g) ?? []).length).toBe(2);
   });
 });
 
-describe("relee los huecos del requisito ya compuesto", () => {
-  it("recupera grado y puesto", () => {
-    const t = componerFormacionAcademica({ grado: "Título de Arquitecto", puesto: "Jefe de proyecto" });
-    expect(parseFormacionAcademica(t)).toEqual({ grado: "Título de Arquitecto", puesto: "Jefe de proyecto" });
+describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
+  it("el par parse/format es reversible", () => {
+    expect(parseFilasFormacion(formatFilasFormacion(FILAS))).toEqual(FILAS);
   });
 
-  it("el corchete no cuenta como valor", () => {
-    expect(parseFormacionAcademica(componerFormacionAcademica({}))).toEqual({ grado: "", puesto: "" });
-    expect(parseFormacionAcademica(componerFormacionAcademica({ puesto: "Residente" })).grado).toBe("");
+  it("numera y etiqueta cada fila", () => {
+    const t = formatFilasFormacion(FILAS);
+    expect(t).toContain("1. Grado: Título profesional de Ingeniero Civil · Puesto: Ingeniero residente");
+    expect(t).toContain("2. Grado: Bachiller en Contabilidad ·");
   });
 
-  it("un texto que no es del formato no aporta huecos", () => {
-    expect(parseFormacionAcademica("una frase suelta")).toEqual({ grado: "", puesto: "" });
-    expect(parseFormacionAcademica("")).toEqual({ grado: "", puesto: "" });
+  it("sin filas útiles no compone nada", () => {
+    expect(formatFilasFormacion([])).toBe("");
+    expect(formatFilasFormacion([{ ...vacia }])).toBe("");
+    expect(parseFilasFormacion("")).toEqual([]);
+    expect(parseFilasFormacion("una frase suelta")).toEqual([]);
+  });
+
+  it("una fila con solo el grado también es una fila", () => {
+    expect(formatFilasFormacion([{ ...vacia, grado: "Bachiller" }])).toContain("Grado: Bachiller ·");
   });
 });
 
-describe("está en la ficha, en 3.5.1, oculta y editada por el editor", () => {
+describe("filas a medio declarar", () => {
+  it("se cuentan para avisar, sin bloquear", () => {
+    expect(formacionIncompletas(FILAS)).toEqual([]);
+    expect(formacionIncompletas([{ grado: "Bachiller", puesto: "" }])).toEqual([1]);
+    expect(formacionIncompletas([{ ...vacia }])).toEqual([]);
+  });
+});
+
+describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
   const campo = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!
     .fields.find((f) => f.api === "formacionAcademica");
 
-  it("existe, oculta, kind textarea", () => {
+  it("existe, oculta, kind formacionAcademica (tabla en Word)", () => {
     expect(campo?.oculto).toBe(true);
-    expect(campo?.kind).toBe("textarea");
+    expect(campo?.kind).toBe("formacionAcademica");
   });
 
-  it("el esquema acepta el requisito compuesto", () => {
-    const r = necesidadUpdateSchema.safeParse({
-      formacionAcademica: componerFormacionAcademica({ grado: "Bachiller", puesto: "Residente" }),
-    });
+  it("el esquema acepta la lista serializada", () => {
+    const r = necesidadUpdateSchema.safeParse({ formacionAcademica: formatFilasFormacion(FILAS) });
     expect(r.success, r.success ? "" : JSON.stringify(r.error.issues)).toBe(true);
   });
 
-  it("el editor lo compone con «Redactar con IA» y lo escribe por api", async () => {
+  it("un cuadro razonable cabe en el tope del campo", () => {
+    const muchas = Array.from({ length: 6 }, () => FILAS[0]);
+    expect(formatFilasFormacion(muchas).length).toBeLessThanOrEqual(LIMITES_TEXTO.formacionAcademica);
+  });
+
+  it("el editor lo pinta con «Agregar», dentro de la experiencia del postor", async () => {
     const { readFileSync } = await import("node:fs");
     const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
-    expect(editor).toContain("componerFormacionAcademica");
-    expect(editor).toContain('onCampoFicha("formacionAcademica"');
-    expect(editor).toContain("Calificaciones del personal clave");
+    expect(editor).toContain("FormacionAcademicaEditor");
+    const comp = readFileSync("app/components/formacion-academica-editor.tsx", "utf-8");
+    expect(comp).toContain("Agregar formación académica");
   });
 });
