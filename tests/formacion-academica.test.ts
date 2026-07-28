@@ -14,10 +14,10 @@ import { LIMITES_TEXTO, necesidadUpdateSchema } from "@/lib/necesidades";
  * como cuadro y el texto de cada fila se compone con su grado y su puesto.
  */
 const FILAS = [
-  { grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
-  { grado: "Bachiller en Contabilidad", puesto: "Especialista en costos" },
+  { actividad: "Estructuras metálicas", grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
+  { actividad: "Control de calidad", grado: "Bachiller en Contabilidad", puesto: "Especialista en costos" },
 ];
-const vacia = { grado: "", puesto: "" };
+const vacia = { actividad: "", grado: "", puesto: "" };
 
 describe("el requisito de una fila se compone con sus dos campos", () => {
   it("en el orden del formato", () => {
@@ -39,10 +39,10 @@ describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
     expect(parseFilasFormacion(formatFilasFormacion(FILAS))).toEqual(FILAS);
   });
 
-  it("numera y etiqueta cada fila", () => {
+  it("numera y etiqueta cada fila, con la actividad heredada delante", () => {
     const t = formatFilasFormacion(FILAS);
-    expect(t).toContain("1. Grado: Título profesional de Ingeniero Civil · Puesto: Ingeniero residente");
-    expect(t).toContain("2. Grado: Bachiller en Contabilidad ·");
+    expect(t).toContain("1. Actividad: Estructuras metálicas · Grado: Título profesional de Ingeniero Civil · Puesto: Ingeniero residente");
+    expect(t).toContain("2. Actividad: Control de calidad · Grado: Bachiller en Contabilidad ·");
   });
 
   it("sin filas útiles no compone nada", () => {
@@ -52,15 +52,16 @@ describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
     expect(parseFilasFormacion("una frase suelta")).toEqual([]);
   });
 
-  it("una fila con solo el grado también es una fila", () => {
-    expect(formatFilasFormacion([{ ...vacia, grado: "Bachiller" }])).toContain("Grado: Bachiller ·");
+  it("una fila con solo la actividad heredada también es una fila", () => {
+    expect(formatFilasFormacion([{ ...vacia, actividad: "Estructuras" }])).toContain("Actividad: Estructuras ·");
   });
 });
 
 describe("filas a medio declarar", () => {
-  it("se cuentan para avisar, sin bloquear", () => {
+  it("la actividad viene heredada; falta grado o puesto que se completa", () => {
     expect(formacionIncompletas(FILAS)).toEqual([]);
-    expect(formacionIncompletas([{ grado: "Bachiller", puesto: "" }])).toEqual([1]);
+    // Actividad heredada pero sin grado ni puesto: falta completar.
+    expect(formacionIncompletas([{ actividad: "Estructuras", grado: "", puesto: "" }])).toEqual([1]);
     expect(formacionIncompletas([{ ...vacia }])).toEqual([]);
   });
 });
@@ -84,11 +85,17 @@ describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
     expect(formatFilasFormacion(muchas).length).toBeLessThanOrEqual(LIMITES_TEXTO.formacionAcademica);
   });
 
-  it("el editor lo pinta con «Agregar», dentro de la experiencia del postor", async () => {
+  it("hereda las actividades del cuadro de experiencia del personal clave", async () => {
+    // Las filas se copian del cuadro de experiencia (Art. 72.3.b): una por
+    // actividad, mismo orden. El editor lee las actividades de ese cuadro.
     const { readFileSync } = await import("node:fs");
     const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
     expect(editor).toContain("FormacionAcademicaEditor");
+    expect(editor).toContain("parsePersonalClave(personalClaveExperiencia");
+    expect(editor).toContain(".map((f) => f.actividad)");
     const comp = readFileSync("app/components/formacion-academica-editor.tsx", "utf-8");
-    expect(comp).toContain("Agregar formación académica");
+    // Una fila por actividad heredada, en orden, con grado/puesto por índice.
+    expect(comp).toContain("actividades.map((actividad, i) => ({");
+    expect(comp).toContain("grado: guardadas[i]?.grado ?? \"\"");
   });
 });

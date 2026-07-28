@@ -141,7 +141,7 @@ describe("formato del documento", () => {
         apartados: ["3.5.1 Requisitos de calificación obligatorios"],
         ficha: {
           formacionAcademica: formatFilasFormacion([
-            { grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
+            { actividad: "Estructuras", grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
           ]),
         },
       }),

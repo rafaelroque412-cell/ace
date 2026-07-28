@@ -23,7 +23,7 @@ import {
   objetoConvocatoria,
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
-import { ACREDITACION_PERSONAL_CLAVE } from "@/lib/personal-clave";
+import { ACREDITACION_PERSONAL_CLAVE, parsePersonalClave } from "@/lib/personal-clave";
 import { PersonalClaveEditor } from "./personal-clave-editor";
 import { FormacionAcademicaEditor } from "./formacion-academica-editor";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
@@ -435,6 +435,7 @@ export function RequisitosCalificacionEditor({
                     Formación académica · solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.
                   </p>
                   <FormacionAcademicaEditor
+                    actividades={parsePersonalClave(personalClaveExperiencia ?? "").map((f) => f.actividad)}
                     onChange={(next) => onCampoFicha("formacionAcademica", next)}
                     readOnly={readOnly}
                     value={formacionAcademica ?? ""}

@@ -257,10 +257,11 @@ function nota(texto_: string): Paragraph {
 function tablaFormacion(filas: ReturnType<typeof parseFilasFormacion>): Table {
   const cabecera = new TableRow({
     children: [
-      celda("N°", { ancho: 5, bold: true }),
-      celda("Grado de bachiller o título profesional requerido", { ancho: 34, bold: true }),
-      celda("Personal clave del cual acreditar el requisito", { ancho: 27, bold: true }),
-      celda("Requisito", { ancho: 34, bold: true }),
+      celda("N°", { ancho: 4, bold: true }),
+      celda("Actividad", { ancho: 15, bold: true }),
+      celda("Grado de bachiller o título profesional requerido", { ancho: 29, bold: true }),
+      celda("Personal clave del cual acreditar el requisito", { ancho: 23, bold: true }),
+      celda("Requisito", { ancho: 29, bold: true }),
     ],
     tableHeader: true,
   });
@@ -271,6 +272,7 @@ function tablaFormacion(filas: ReturnType<typeof parseFilasFormacion>): Table {
         new TableRow({
           children: [
             celda(String(i + 1)),
+            celda(f.actividad ?? ""),
             celda(f.grado ?? ""),
             celda(f.puesto ?? ""),
             celda(componerRequisitoFormacion(f)),

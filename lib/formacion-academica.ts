@@ -23,14 +23,19 @@ const HUECO_PUESTO =
 const CONECTOR = " del personal clave requerido como ";
 
 export type FilaFormacion = {
+  /**
+   * Actividad. Se copia del cuadro de «Experiencia del personal clave» —es el
+   * mismo personal—, así que aquí no se escribe: se hereda por fila.
+   */
+  actividad: string;
   /** Grado de bachiller o título profesional requerido. */
   grado: string;
   /** Puesto del personal clave del que debe acreditarse. */
   puesto: string;
 };
 
-/** Una fila vacía, para el estado inicial y el botón «Agregar». */
-export const FILA_FORMACION_VACIA: FilaFormacion = { grado: "", puesto: "" };
+/** Una fila vacía. */
+export const FILA_FORMACION_VACIA: FilaFormacion = { actividad: "", grado: "", puesto: "" };
 
 function hueco(valor: string, textoOriginal: string): string {
   return valor.trim() || `[${textoOriginal}]`;
@@ -43,10 +48,10 @@ export function componerRequisitoFormacion(f: Partial<FilaFormacion>): string {
 
 // Etiquetas explícitas: son textos libres que pueden traer guiones o puntos, y
 // así la línea se sigue leyendo si alguien abre la columna a mano.
-const LINEA = /^\s*\d+\.\s*Grado:\s*(.*?)\s*·\s*Puesto:\s*(.*?)\s*$/;
+const LINEA = /^\s*\d+\.\s*Actividad:\s*(.*?)\s*·\s*Grado:\s*(.*?)\s*·\s*Puesto:\s*(.*?)\s*$/;
 
 function algoEscrito(f: FilaFormacion): boolean {
-  return Boolean(f.grado.trim() || f.puesto.trim());
+  return Boolean(f.actividad.trim() || f.grado.trim() || f.puesto.trim());
 }
 
 export function parseFilasFormacion(texto: string | null | undefined): FilaFormacion[] {
@@ -55,7 +60,7 @@ export function parseFilasFormacion(texto: string | null | undefined): FilaForma
   for (const linea of texto.split(/\r?\n/)) {
     const m = linea.match(LINEA);
     if (!m) continue;
-    const fila = { grado: m[1].trim(), puesto: m[2].trim() };
+    const fila = { actividad: m[1].trim(), grado: m[2].trim(), puesto: m[3].trim() };
     if (algoEscrito(fila)) salida.push(fila);
   }
   return salida;
@@ -66,10 +71,15 @@ export function formatFilasFormacion(filas: FilaFormacion[]): string {
   const utiles = filas.filter(algoEscrito);
   if (utiles.length === 0) return "";
   const g = (v: string) => v.trim() || "[POR DEFINIR]";
-  return utiles.map((f, k) => `${k + 1}. Grado: ${g(f.grado)} · Puesto: ${g(f.puesto)}`).join("\n");
+  return utiles
+    .map((f, k) => `${k + 1}. Actividad: ${g(f.actividad)} · Grado: ${g(f.grado)} · Puesto: ${g(f.puesto)}`)
+    .join("\n");
 }
 
-/** Filas a medio declarar: tienen un campo pero les falta el otro. */
+/**
+ * Filas a medio declarar: la actividad viene heredada, pero falta el grado o el
+ * puesto que es lo que hay que completar.
+ */
 export function formacionIncompletas(filas: FilaFormacion[]): number[] {
   return filas
     .map((f, i) => (algoEscrito(f) && !(f.grado.trim() && f.puesto.trim()) ? i + 1 : 0))
