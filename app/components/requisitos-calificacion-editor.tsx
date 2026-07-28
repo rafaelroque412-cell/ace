@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
-  SUBTIPOS_CAPACIDAD_TECNICA,
   TIPOS_REQUISITO_ART72,
   ayudaPorObjeto,
   componerRequisitos,
@@ -345,18 +344,6 @@ export function RequisitosCalificacionEditor({
                     rows={tipo.key === "experiencia_postor" ? 3 : filasTextarea(e?.detalle ?? "")}
                     value={e?.detalle ?? ""}
                   />
-                  {/* El modelo parte la capacidad tecnica en cuatro literales con reglas
-                      propias. Se enseñan aqui, donde se escribe, en vez de dejarlas en el
-                      PDF: son las que se observan si se incumplen. */}
-                  {tipo.key === "capacidad_tecnica" ? (
-                    <ul className="reqCalSubtipos">
-                      {SUBTIPOS_CAPACIDAD_TECNICA.map((sub) => (
-                        <li key={sub.clave}>
-                          <strong>{sub.clave} {sub.label}.</strong> {sub.regla}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                   {/* Topes del modelo. Se avisa, no se bloquea: esto es una PROPUESTA del
                       area usuaria y quien establece los requisitos es la DEC (Art. 72.1).
                       Impedir escribir la cifra seria arrogarse esa decision. */}

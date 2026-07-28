@@ -119,16 +119,6 @@ a {
 /* Aviso de tope superado en un requisito de calificacion. Tono de advertencia:
    la cifra se guarda igual —es una propuesta, y quien decide es la DEC—, pero
    por encima del tope del modelo unas bases se observan. */
-/* Las cuatro reglas del modelo dentro de la capacidad tecnica. */
-.reqCalSubtipos {
-  margin: 5px 0 0;
-  padding-left: 15px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-.reqCalSubtipos li { margin-bottom: 3px; }
-.reqCalSubtipos strong { color: var(--ink); font-weight: 650; }
 
 /* Marca de que el modelo del procedimiento trae este apartado. Es informativa:
    no filtra tipos, porque el Art. 72.3 permite los cinco. */
