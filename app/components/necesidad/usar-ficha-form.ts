@@ -480,7 +480,17 @@ export function useFichaForm({
           return;
         }
       }
-      setFichaEdit(false);
+      // NO se cierra la edición: al pulsar «Guardar ficha» se queda en el
+      // editor para seguir trabajando. Antes saltaba a la vista de lectura, que
+      // desde el editor se vivía como «salir de la página».
+      //
+      // El sello de versión se avanza con el que devuelve el PATCH, para que el
+      // siguiente guardado (o autoguardado) no choque con un 409 por creer que
+      // la fila cambió por detrás. `formSucio` vuelve a false: lo recién guardado
+      // ya no está pendiente, y el autoguardado no dispara sin un cambio nuevo.
+      if (data?.necesidad?.updated_at) baseUpdatedAtRef.current = data.necesidad.updated_at;
+      setFormSucio(false);
+      setAutoguardado("guardado");
       // Guardado con éxito: el borrador ya no representa nada pendiente.
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
       setCamposBorrador([]);

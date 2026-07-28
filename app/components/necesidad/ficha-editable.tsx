@@ -848,7 +848,7 @@ export function FichaEditable({
                 {autoguardado === "guardando"
                   ? "Guardando…"
                   : autoguardado === "guardado"
-                    ? "Cambios guardados automáticamente"
+                    ? "Cambios guardados"
                     : "No se pudo autoguardar — pulsa Guardar ficha"}
               </span>
             ) : null}
