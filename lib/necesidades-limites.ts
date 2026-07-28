@@ -124,6 +124,8 @@ export const LIMITES_TEXTO: Record<string, number> = {
   formacionAcademicaAcreditacion: 2000,
   capacitacionPersonalClave: 3000,
   capacitacionPersonalClaveAcreditacion: 2000,
+  equipamientoEstrategico: 2000,
+  equipamientoEstrategicoAcreditacion: 2000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,
   disponibilidadTerreno: 2000,

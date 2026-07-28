@@ -26,6 +26,7 @@ import {
 import { ACREDITACION_PERSONAL_CLAVE, parsePersonalClave } from "@/lib/personal-clave";
 import { ACREDITACION_FORMACION_ACADEMICA } from "@/lib/formacion-academica";
 import { ACREDITACION_CAPACITACION } from "@/lib/capacitacion-personal-clave";
+import { ACREDITACION_EQUIPAMIENTO, REQUISITO_EQUIPAMIENTO } from "@/lib/equipamiento-estrategico";
 import { PersonalClaveEditor } from "./personal-clave-editor";
 import { FormacionAcademicaEditor } from "./formacion-academica-editor";
 import { CapacitacionPersonalClaveEditor } from "./capacitacion-personal-clave-editor";
@@ -62,6 +63,8 @@ export function RequisitosCalificacionEditor({
   formacionAcademicaAcreditacion,
   capacitacionPersonalClave,
   capacitacionPersonalClaveAcreditacion,
+  equipamientoEstrategico,
+  equipamientoEstrategicoAcreditacion,
   onCampoFicha,
   tipoProceso,
   requisitosModelo,
@@ -88,6 +91,9 @@ export function RequisitosCalificacionEditor({
   capacitacionPersonalClave?: string;
   /** Texto de cómo se acredita la capacitación (fijo del formato). */
   capacitacionPersonalClaveAcreditacion?: string;
+  /** Requisito y acreditación del equipamiento estratégico (textos del formato). */
+  equipamientoEstrategico?: string;
+  equipamientoEstrategicoAcreditacion?: string;
   /** Escribe un campo suelto de la ficha (el cuadro del personal clave). */
   onCampoFicha?: (api: string, valor: string) => void;
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
@@ -512,6 +518,52 @@ export function RequisitosCalificacionEditor({
                       placeholder="Pulsa «Redactar con IA» para el texto estándar (Anexo N° 19)."
                       rows={filasTextarea(capacitacionPersonalClaveAcreditacion ?? "", true)}
                       value={capacitacionPersonalClaveAcreditacion ?? ""}
+                    />
+                  </label>
+
+                  {/* EQUIPAMIENTO ESTRATÉGICO (Art. 72.3.b, C.3). No es cuadro:
+                      dos textos —el requisito, con su hueco, y su acreditación—. */}
+                  <p className="reqCalPersonalClaveTitulo">Equipamiento estratégico</p>
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      Requisitos (equipamiento estratégico)
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => onCampoFicha("equipamientoEstrategico", REQUISITO_EQUIPAMIENTO)}
+                        title="Insertar el hueco del formato para consignar el equipamiento estratégico"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("equipamientoEstrategico", ev.target.value)}
+                      placeholder="Solo el equipamiento CLASIFICADO como estratégico para la prestación, según la estrategia de contratación."
+                      rows={filasTextarea(equipamientoEstrategico ?? "")}
+                      value={equipamientoEstrategico ?? ""}
+                    />
+                  </label>
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      ¿Cómo se acredita el equipamiento estratégico?
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => onCampoFicha("equipamientoEstrategicoAcreditacion", ACREDITACION_EQUIPAMIENTO)}
+                        title="Rellenar con el texto estándar del formato"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("equipamientoEstrategicoAcreditacion", ev.target.value)}
+                      placeholder="Pulsa «Redactar con IA» para el texto estándar."
+                      rows={filasTextarea(equipamientoEstrategicoAcreditacion ?? "", true)}
+                      value={equipamientoEstrategicoAcreditacion ?? ""}
                     />
                   </label>
                 </div>

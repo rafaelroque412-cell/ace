@@ -134,6 +134,9 @@ export type Necesidad = {
   // Calificaciones del personal clave · Capacitación (Art. 72.3.b).
   capacitacion_personal_clave: string | null;
   capacitacion_personal_clave_acreditacion: string | null;
+  // Equipamiento estratégico (Art. 72.3.b, C.3): requisito + acreditación.
+  equipamiento_estrategico: string | null;
+  equipamiento_estrategico_acreditacion: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
   metas_fisicas: string | null;
@@ -315,6 +318,8 @@ export const necesidadCreateSchema = z.object({
   formacionAcademicaAcreditacion: optionalText(2000),
   capacitacionPersonalClave: optionalText(3000),
   capacitacionPersonalClaveAcreditacion: optionalText(2000),
+  equipamientoEstrategico: optionalText(2000),
+  equipamientoEstrategicoAcreditacion: optionalText(2000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

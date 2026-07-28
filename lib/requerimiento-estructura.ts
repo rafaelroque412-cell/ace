@@ -137,7 +137,9 @@ export function estructuraDelRequerimiento(
         field.kind === "capacitacion" ||
         field.api === "personalClaveAcreditacion" ||
         field.api === "formacionAcademicaAcreditacion" ||
-        field.api === "capacitacionPersonalClaveAcreditacion";
+        field.api === "capacitacionPersonalClaveAcreditacion" ||
+        field.api === "equipamientoEstrategico" ||
+        field.api === "equipamientoEstrategicoAcreditacion";
       if ((field.oculto && !soloEnDocumento) || NO_VAN_SOLOS.has(field.api)) continue;
       const valor = (ficha[field.api] ?? "").trim();
       const exigido = exigidos.has(field.api);

@@ -323,6 +323,8 @@ export function FichaEditable({
         formacionAcademicaAcreditacion={esRequisitos ? (fichaForm.formacionAcademicaAcreditacion ?? "") : ""}
         capacitacionPersonalClave={esRequisitos ? (fichaForm.capacitacionPersonalClave ?? "") : ""}
         capacitacionPersonalClaveAcreditacion={esRequisitos ? (fichaForm.capacitacionPersonalClaveAcreditacion ?? "") : ""}
+        equipamientoEstrategico={esRequisitos ? (fichaForm.equipamientoEstrategico ?? "") : ""}
+        equipamientoEstrategicoAcreditacion={esRequisitos ? (fichaForm.equipamientoEstrategicoAcreditacion ?? "") : ""}
         onCampoFicha={cambiarCampo}
         obligatorio={campoEsObligatorio(field)}
         obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}

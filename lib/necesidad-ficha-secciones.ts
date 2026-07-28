@@ -576,6 +576,12 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // Cómo se acredita la capacitación: texto fijo del formato (Anexo N° 19).
       // Oculto —lo pinta el editor, tras el cuadro— pero SÍ al documento.
       { col: "capacitacion_personal_clave_acreditacion", api: "capacitacionPersonalClaveAcreditacion", label: "Acreditación de la capacitación", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la capacitación del personal clave (Anexo N° 19)." },
+      // EQUIPAMIENTO ESTRATÉGICO (Art. 72.3.b, C.3). No es cuadro: es el
+      // equipamiento estratégico de la contratación. Dos textos —el requisito y
+      // su acreditación—, ocultos en la lista de campos pero SÍ al documento; ver
+      // la excepción en requerimiento-estructura.ts.
+      { col: "equipamiento_estrategico", api: "equipamientoEstrategico", label: "Equipamiento estratégico (requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · solo el equipamiento e infraestructura estratégicos; lo que no sea clave va en las condiciones de la prestación." },
+      { col: "equipamiento_estrategico_acreditacion", api: "equipamientoEstrategicoAcreditacion", label: "Acreditación del equipamiento estratégico", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar el equipamiento estratégico. Texto estándar del formato de Concurso Público de servicios." },
     ],
   },
   {
