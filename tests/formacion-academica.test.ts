@@ -59,10 +59,12 @@ describe("la lista se serializa y se vuelve a leer sin perder nada", () => {
 });
 
 describe("filas a medio declarar", () => {
-  it("la actividad viene heredada; falta grado o puesto que se completa", () => {
+  it("la actividad viene heredada y no cuenta; se marca al empezar grado o puesto", () => {
     expect(formacionIncompletas(FILAS)).toEqual([]);
-    // Actividad heredada pero sin grado ni puesto: falta completar.
-    expect(formacionIncompletas([{ actividad: "Estructuras", grado: "", puesto: "" }])).toEqual([1]);
+    // Solo la actividad heredada: aún no se ha tocado, NO se marca (era el bug).
+    expect(formacionIncompletas([{ actividad: "Estructuras", grado: "", puesto: "" }])).toEqual([]);
+    // En cuanto se escribe el grado pero falta el puesto, sí se marca.
+    expect(formacionIncompletas([{ actividad: "Estructuras", grado: "Bachiller", puesto: "" }])).toEqual([1]);
     expect(formacionIncompletas([{ ...vacia }])).toEqual([]);
   });
 });

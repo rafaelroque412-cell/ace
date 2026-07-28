@@ -86,11 +86,18 @@ export function formatFilasFormacion(filas: FilaFormacion[]): string {
 }
 
 /**
- * Filas a medio declarar: la actividad viene heredada, pero falta el grado o el
- * puesto que es lo que hay que completar.
+ * Filas a medio declarar: falta el grado o el puesto.
+ *
+ * La actividad NO cuenta como «empezada»: viene heredada del cuadro de
+ * experiencia, así que una fila con solo la actividad puesta aún no se ha
+ * tocado. Si contara, todas las filas heredadas saldrían marcadas al aparecer.
  */
 export function formacionIncompletas(filas: FilaFormacion[]): number[] {
   return filas
-    .map((f, i) => (algoEscrito(f) && !(f.grado.trim() && f.puesto.trim()) ? i + 1 : 0))
+    .map((f, i) => {
+      const empezado = f.grado.trim() || f.puesto.trim();
+      const lleno = f.grado.trim() && f.puesto.trim();
+      return empezado && !lleno ? i + 1 : 0;
+    })
     .filter((n) => n > 0);
 }

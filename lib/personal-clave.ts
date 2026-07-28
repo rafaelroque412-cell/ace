@@ -93,14 +93,16 @@ export function formatPersonalClave(filas: FilaPersonalClave[]): string {
  * Filas a medio declarar: tienen algo pero les falta el núcleo del requisito.
  *
  * No bloquea, pero un puesto sin tiempo mínimo, sin prestaciones o sin cargo no
- * es un requisito acreditable. La actividad y la cantidad no se exigen aquí: son
- * el encuadre, no lo que se acredita. Devuelve el número de fila (1-based).
+ * es un requisito acreditable. La actividad y la cantidad son el encuadre, no lo
+ * que se acredita: no cuentan como «empezada», así que una fila con solo la
+ * actividad puesta no se marca. Devuelve el número de fila (1-based).
  */
 export function personalClaveIncompletas(filas: FilaPersonalClave[]): number[] {
   return filas
     .map((f, i) => {
+      const empezado = f.tiempo.trim() || f.trabajos.trim() || f.puesto.trim();
       const completa = f.tiempo.trim() && f.trabajos.trim() && f.puesto.trim();
-      return algoEscrito(f) && !completa ? i + 1 : 0;
+      return empezado && !completa ? i + 1 : 0;
     })
     .filter((n) => n > 0);
 }

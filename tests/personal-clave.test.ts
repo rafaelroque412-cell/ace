@@ -57,6 +57,8 @@ describe("filas a medio declarar", () => {
     // Falta prestaciones: el núcleo del requisito. La actividad/cantidad no cuentan.
     expect(personalClaveIncompletas([{ ...vacia, tiempo: "3 años", puesto: "Residente" }])).toEqual([1]);
     expect(personalClaveIncompletas([{ ...vacia }])).toEqual([]);
+    // Solo actividad/cantidad (el encuadre), sin tiempo/trabajos/puesto: no se marca.
+    expect(personalClaveIncompletas([{ ...vacia, actividad: "Estructuras", cantidad: "2" }])).toEqual([]);
   });
 });
 
