@@ -10,7 +10,10 @@
 -- la ficha fallará al guardarla.
 
 alter table public.necesidades
-  add column if not exists personal_clave_experiencia text;
+  add column if not exists personal_clave_experiencia text,
+  add column if not exists personal_clave_acreditacion text;
 
 comment on column public.necesidades.personal_clave_experiencia is
   'Cuadro de experiencia del personal clave (Art. 72.3.b), serializado: una fila por puesto (tiempo, actividad, cargo).';
+comment on column public.necesidades.personal_clave_acreditacion is
+  'Texto estandar de como se acredita la experiencia del personal clave (Anexo N° 19).';

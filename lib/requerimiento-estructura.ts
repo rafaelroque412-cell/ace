@@ -126,9 +126,10 @@ export function estructuraDelRequerimiento(
     const campos: CampoRequerimiento[] = [];
     for (const field of seccion.fields) {
       // El personal clave está `oculto` porque en la FICHA lo pinta el editor de
-      // requisitos, no la lista de campos; pero en el DOCUMENTO sí es su propio
-      // cuadro, así que se deja pasar. El resto de ocultos son espejos internos.
-      const soloEnDocumento = field.kind === "personalClave";
+      // requisitos, no la lista de campos; pero en el DOCUMENTO sí van —el cuadro
+      // y, tras él, el texto de cómo se acredita—, así que se dejan pasar. El
+      // resto de ocultos son espejos internos.
+      const soloEnDocumento = field.kind === "personalClave" || field.api === "personalClaveAcreditacion";
       if ((field.oculto && !soloEnDocumento) || NO_VAN_SOLOS.has(field.api)) continue;
       const valor = (ficha[field.api] ?? "").trim();
       const exigido = exigidos.has(field.api);

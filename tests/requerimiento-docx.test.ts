@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { componerOtrasPenalidades } from "@/lib/otras-penalidades";
 import { formatRequisitos } from "@/lib/requisitos-calificacion";
 import { ACREDITACION_EXPERIENCIA } from "@/lib/requisitos-experiencia";
-import { formatPersonalClave } from "@/lib/personal-clave";
+import { ACREDITACION_PERSONAL_CLAVE, formatPersonalClave } from "@/lib/personal-clave";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
 
 /**
@@ -116,6 +116,7 @@ describe("formato del documento", () => {
             { actividad: "Estructuras", cantidad: "1", tiempo: "tres (3) años", trabajos: "supervisión de montaje", puesto: "Ingeniero residente" },
             { actividad: "Calidad", cantidad: "2", tiempo: "dos (2) años", trabajos: "control de calidad", puesto: "Supervisor de obra" },
           ]),
+          personalClaveAcreditacion: ACREDITACION_PERSONAL_CLAVE,
         },
       }),
     );
@@ -127,6 +128,9 @@ describe("formato del documento", () => {
     expect(xml).toContain("Supervisor de obra");
     // El campo está `oculto` en la ficha pero SÍ va al documento (kind personalClave).
     expect(xml).not.toContain("1. Actividad:"); // no vuelca la serialización cruda
+    // Y tras el cuadro, el texto de cómo se acredita (Anexo N° 19).
+    expect(xml).toContain("Anexo N° 19");
+    expect(xml).toContain("periodo traslapado");
   });
 
   it("las penalidades adicionales salen en TABLA", async () => {

@@ -74,6 +74,8 @@ export type CampoFichaProps = {
    * Cadena vacía salvo en el campo de requisitos, para no repintar el resto.
    */
   personalClaveExperiencia: string;
+  /** Texto de cómo se acredita la experiencia del personal clave. */
+  personalClaveAcreditacion: string;
   /** Escribe un campo suelto de la ficha; el editor lo usa para el personal clave. */
   onCampoFicha: (api: string, valor: string) => void;
   obligatorio: boolean;
@@ -120,6 +122,7 @@ export const CampoFicha = memo(function CampoFicha({
   moneda,
   necesidadId,
   personalClaveExperiencia,
+  personalClaveAcreditacion,
   onCampoFicha,
   obligatorio,
   obsPendiente,
@@ -300,6 +303,7 @@ export const CampoFicha = memo(function CampoFicha({
           moneda={moneda}
           necesidadId={necesidadId}
           personalClaveExperiencia={personalClaveExperiencia}
+          personalClaveAcreditacion={personalClaveAcreditacion}
           onCampoFicha={onCampoFicha}
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}

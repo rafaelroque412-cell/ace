@@ -124,8 +124,10 @@ export type Necesidad = {
   plazo_respuestas_texto: string | null;
   requisitos_adicionales: string | null;
   // CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave (Art.
-  // 72.3.b): cuadro de puestos serializado (lib/personal-clave.ts).
+  // 72.3.b): cuadro de puestos serializado (lib/personal-clave.ts) + el texto
+  // fijo de cómo se acredita.
   personal_clave_experiencia: string | null;
+  personal_clave_acreditacion: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
   metas_fisicas: string | null;
@@ -302,6 +304,7 @@ export const necesidadCreateSchema = z.object({
   // Experiencia del personal clave (Art. 72.3.b): cuadro de puestos serializado
   // (lib/personal-clave.ts). Varias filas, por eso el tope es holgado.
   personalClaveExperiencia: optionalText(4000),
+  personalClaveAcreditacion: optionalText(3000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

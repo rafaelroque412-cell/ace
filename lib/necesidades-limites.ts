@@ -119,6 +119,7 @@ export const LIMITES_TEXTO: Record<string, number> = {
   // sus primeros caracteres sin motivo.
   requisitosAdicionales: 4000,
   personalClaveExperiencia: 4000,
+  personalClaveAcreditacion: 3000,
   gestionRiesgos: 2000,
   metasFisicas: 2000,
   disponibilidadTerreno: 2000,

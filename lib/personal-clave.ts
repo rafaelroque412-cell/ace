@@ -12,6 +12,17 @@
  * vuelve a leer al abrir, sin migración por fila, y el Word lo pinta como tabla.
  */
 
+/**
+ * Cómo se acredita la experiencia del personal clave, texto literal de las bases
+ * estándar de servicios (Concurso Público). Es fijo: no depende de nada que el
+ * área usuaria escriba, así que se pone entero. Acompaña al cuadro de puestos.
+ */
+export const ACREDITACION_PERSONAL_CLAVE = [
+  "El postor debe señalar la denominación del puesto, cargo y/o posición, y tiempo de experiencia del personal clave propuesto (años, meses y días) en el Anexo N° 19, adjuntando en su oferta, copia simple de cualquiera de los siguientes documentos: (i) contratos y su respectiva conformidad; (ii) constancias; (iii) certificados; o (iv) cualquier otra documentación que, de manera fehaciente, demuestre la experiencia del personal propuesto.",
+  "Estos documentos deben señalar los nombres y apellidos del personal clave; el cargo desempeñado indicando el día, mes y año de inicio y culminación; el nombre de la entidad u organización que emite el documento; la fecha de emisión y nombres y apellidos de quien suscribe el documento.",
+  "En caso los documentos que acreditan la experiencia establezcan esta en meses sin especificar los días se debe considerar el mes completo. Se considera aquella experiencia que no tenga una antigüedad mayor a veinticinco años anteriores a la fecha de la presentación de ofertas. De presentarse experiencia ejecutada paralelamente (traslape), para el cómputo de la misma solo se considera una vez el periodo traslapado. En ningún caso corresponde exigir que el mismo personal clave acredite experiencia en más de un cargo.",
+].join("\n\n");
+
 export type FilaPersonalClave = {
   /** Actividad general a la que corresponde el personal. */
   actividad: string;

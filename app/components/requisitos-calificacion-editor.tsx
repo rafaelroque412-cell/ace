@@ -24,6 +24,7 @@ import {
   objetoConvocatoria,
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
+import { ACREDITACION_PERSONAL_CLAVE } from "@/lib/personal-clave";
 import { PersonalClaveEditor } from "./personal-clave-editor";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 import { Sparkles } from "lucide-react";
@@ -53,6 +54,7 @@ export function RequisitosCalificacionEditor({
   moneda,
   necesidadId,
   personalClaveExperiencia,
+  personalClaveAcreditacion,
   onCampoFicha,
   tipoProceso,
   requisitosModelo,
@@ -69,6 +71,8 @@ export function RequisitosCalificacionEditor({
    * por eso llega y se escribe por fuera del `value`/`onChange` del editor.
    */
   personalClaveExperiencia?: string;
+  /** Texto de cómo se acredita la experiencia del personal clave (fijo del formato). */
+  personalClaveAcreditacion?: string;
   /** Escribe un campo suelto de la ficha (el cuadro del personal clave). */
   onCampoFicha?: (api: string, valor: string) => void;
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
@@ -405,6 +409,29 @@ export function RequisitosCalificacionEditor({
                     readOnly={readOnly}
                     value={personalClaveExperiencia ?? ""}
                   />
+                  {/* Cómo se acredita: texto fijo del formato. «Redactar con IA»
+                      lo rellena; se puede ajustar a mano. */}
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      ¿Cómo se acredita la experiencia del personal clave?
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => onCampoFicha("personalClaveAcreditacion", ACREDITACION_PERSONAL_CLAVE)}
+                        title="Rellenar con el texto estándar del formato (Anexo N° 19)"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("personalClaveAcreditacion", ev.target.value)}
+                      placeholder="Pulsa «Redactar con IA» para el texto estándar del Anexo N° 19."
+                      rows={4}
+                      value={personalClaveAcreditacion ?? ""}
+                    />
+                  </label>
                 </div>
               ) : null}
 

@@ -553,6 +553,11 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // muestre por su cuenta, pero sigue en FICHA_SECCIONES para cargarse y
       // guardarse; `kind: "personalClave"` hace que en el Word salga como TABLA.
       { col: "personal_clave_experiencia", api: "personalClaveExperiencia", label: "Experiencia del personal clave", oculto: true, kind: "personalClave", baseLegal: "Art. 72.3.b Reglamento · un puesto por fila: tiempo mínimo de experiencia, la actividad en que se exige y el cargo. Se acredita con el Anexo N° 19.", ejemplo: "tres (3) años · supervisión de montaje · Ingeniero residente" },
+      // Cómo se acredita la experiencia del personal clave: texto fijo del formato
+      // (Anexo N° 19, documentos, 25 años, traslape). Oculto —lo pinta el editor,
+      // tras el cuadro— pero SÍ va al documento; ver la excepción en
+      // requerimiento-estructura.ts.
+      { col: "personal_clave_acreditacion", api: "personalClaveAcreditacion", label: "Acreditación de la experiencia del personal clave", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la experiencia del personal clave (Anexo N° 19). Texto estándar del formato de Concurso Público de servicios.", ejemplo: "El postor debe señalar la denominación del puesto…" },
     ],
   },
   {

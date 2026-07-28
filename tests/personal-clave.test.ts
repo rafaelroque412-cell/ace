@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACREDITACION_PERSONAL_CLAVE,
   formatPersonalClave,
   parsePersonalClave,
   personalClaveIncompletas,
@@ -84,6 +85,26 @@ describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
   it("un cuadro razonable cabe en el tope del campo", () => {
     const muchas = Array.from({ length: 8 }, () => FILAS[0]);
     expect(formatPersonalClave(muchas).length).toBeLessThanOrEqual(LIMITES_TEXTO.personalClaveExperiencia);
+  });
+
+  it("la acreditación del personal clave es un campo aparte, oculto, y va al Word", () => {
+    const acr = seccion.fields.find((f) => f.api === "personalClaveAcreditacion");
+    expect(acr?.oculto).toBe(true);
+    expect(acr?.kind).toBe("textarea");
+  });
+
+  it("el texto estándar cita el Anexo 19, los 25 años y el traslape", () => {
+    expect(ACREDITACION_PERSONAL_CLAVE).toContain("Anexo N° 19");
+    expect(ACREDITACION_PERSONAL_CLAVE).toContain("veinticinco años anteriores a la fecha de la presentación de ofertas");
+    expect(ACREDITACION_PERSONAL_CLAVE).toContain("solo se considera una vez el periodo traslapado");
+    expect(ACREDITACION_PERSONAL_CLAVE).toContain("En ningún caso corresponde exigir que el mismo personal clave acredite experiencia en más de un cargo");
+  });
+
+  it("el editor lo compone con «Redactar con IA» y lo escribe por api", async () => {
+    const { readFileSync } = await import("node:fs");
+    const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
+    expect(editor).toContain("ACREDITACION_PERSONAL_CLAVE");
+    expect(editor).toContain('onCampoFicha("personalClaveAcreditacion", ACREDITACION_PERSONAL_CLAVE)');
   });
 
   it("el editor lo pinta dentro de la experiencia del postor, con «Agregar»", async () => {
