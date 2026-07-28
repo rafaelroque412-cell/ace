@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACREDITACION_FORMACION_ACADEMICA,
   componerRequisitoFormacion,
   formacionIncompletas,
   formatFilasFormacion,
@@ -83,6 +84,27 @@ describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
   it("un cuadro razonable cabe en el tope del campo", () => {
     const muchas = Array.from({ length: 6 }, () => FILAS[0]);
     expect(formatFilasFormacion(muchas).length).toBeLessThanOrEqual(LIMITES_TEXTO.formacionAcademica);
+  });
+
+  it("la acreditación de la formación es un campo aparte, oculto, y va al Word", () => {
+    const acr = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!
+      .fields.find((f) => f.api === "formacionAcademicaAcreditacion");
+    expect(acr?.oculto).toBe(true);
+    expect(acr?.kind).toBe("textarea");
+  });
+
+  it("el texto estándar cita el Anexo 19, la SUNEDU y el MINEDU con sus links", () => {
+    expect(ACREDITACION_FORMACION_ACADEMICA).toContain("Anexo N° 19");
+    expect(ACREDITACION_FORMACION_ACADEMICA).toContain("SUNEDU");
+    expect(ACREDITACION_FORMACION_ACADEMICA).toContain("https://enlinea.sunedu.gob.pe/");
+    expect(ACREDITACION_FORMACION_ACADEMICA).toContain("https://titulosinstitutos.minedu.gob.pe/");
+  });
+
+  it("el editor lo compone con «Redactar con IA» y lo escribe por api", async () => {
+    const { readFileSync } = await import("node:fs");
+    const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
+    expect(editor).toContain("ACREDITACION_FORMACION_ACADEMICA");
+    expect(editor).toContain('onCampoFicha("formacionAcademicaAcreditacion", ACREDITACION_FORMACION_ACADEMICA)');
   });
 
   it("hereda las actividades del cuadro de experiencia del personal clave", async () => {

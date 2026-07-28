@@ -9,7 +9,10 @@
 -- la ficha fallará al guardarla.
 
 alter table public.necesidades
-  add column if not exists formacion_academica text;
+  add column if not exists formacion_academica text,
+  add column if not exists formacion_academica_acreditacion text;
 
 comment on column public.necesidades.formacion_academica is
   'Requisito de formacion academica del personal clave (Art. 72.3.b, C.2.1): grado/titulo + puesto, ya redactado.';
+comment on column public.necesidades.formacion_academica_acreditacion is
+  'Texto estandar de como se acredita la formacion academica (Anexo N° 19, SUNEDU/MINEDU).';

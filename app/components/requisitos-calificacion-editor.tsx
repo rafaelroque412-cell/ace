@@ -24,8 +24,11 @@ import {
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
 import { ACREDITACION_PERSONAL_CLAVE, parsePersonalClave } from "@/lib/personal-clave";
+import { ACREDITACION_FORMACION_ACADEMICA } from "@/lib/formacion-academica";
+import { ACREDITACION_CAPACITACION } from "@/lib/capacitacion-personal-clave";
 import { PersonalClaveEditor } from "./personal-clave-editor";
 import { FormacionAcademicaEditor } from "./formacion-academica-editor";
+import { CapacitacionPersonalClaveEditor } from "./capacitacion-personal-clave-editor";
 import { tienePrecalificacion } from "@/lib/procesos-seleccion";
 import { Sparkles } from "lucide-react";
 // El alto se calcula con la estimación ESTRECHA (no `wide`): estos textarea
@@ -56,6 +59,9 @@ export function RequisitosCalificacionEditor({
   personalClaveExperiencia,
   personalClaveAcreditacion,
   formacionAcademica,
+  formacionAcademicaAcreditacion,
+  capacitacionPersonalClave,
+  capacitacionPersonalClaveAcreditacion,
   onCampoFicha,
   tipoProceso,
   requisitosModelo,
@@ -76,6 +82,12 @@ export function RequisitosCalificacionEditor({
   personalClaveAcreditacion?: string;
   /** Requisito de formación académica del personal clave, ya compuesto. */
   formacionAcademica?: string;
+  /** Texto de cómo se acredita la formación académica (fijo del formato). */
+  formacionAcademicaAcreditacion?: string;
+  /** Requisito de capacitación del personal clave (cuadro serializado). */
+  capacitacionPersonalClave?: string;
+  /** Texto de cómo se acredita la capacitación (fijo del formato). */
+  capacitacionPersonalClaveAcreditacion?: string;
   /** Escribe un campo suelto de la ficha (el cuadro del personal clave). */
   onCampoFicha?: (api: string, valor: string) => void;
   // Objeto contractual: la ayuda de capacidad técnica y experiencia cambia en
@@ -440,6 +452,67 @@ export function RequisitosCalificacionEditor({
                     readOnly={readOnly}
                     value={formacionAcademica ?? ""}
                   />
+                  {/* Cómo se acredita la formación académica: texto fijo del
+                      formato (Anexo N° 19, SUNEDU/MINEDU). */}
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      ¿Cómo se acredita la formación académica?
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => onCampoFicha("formacionAcademicaAcreditacion", ACREDITACION_FORMACION_ACADEMICA)}
+                        title="Rellenar con el texto estándar del formato (Anexo N° 19)"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("formacionAcademicaAcreditacion", ev.target.value)}
+                      placeholder="Pulsa «Redactar con IA» para el texto estándar (Anexo N° 19, SUNEDU/MINEDU)."
+                      rows={filasTextarea(formacionAcademicaAcreditacion ?? "", true)}
+                      value={formacionAcademicaAcreditacion ?? ""}
+                    />
+                  </label>
+
+                  {/* CALIFICACIONES DEL PERSONAL CLAVE · Capacitación (Art. 72.3.b).
+                      Un puesto por fila (heredado del cuadro de experiencia); el
+                      requisito de cada uno se redacta con sus horas, materia y
+                      puesto. La capacitación se exige hasta un máximo de 120 horas. */}
+                  <p className="reqCalPersonalClaveTitulo">Capacitación del personal clave</p>
+                  <p className="reqCalPersonalClaveAyuda">
+                    Horas (máximo 120), materia relacionada con la actividad que realizará el personal clave, y el
+                    puesto del que se acredita.
+                  </p>
+                  <CapacitacionPersonalClaveEditor
+                    actividades={parsePersonalClave(personalClaveExperiencia ?? "").map((f) => f.actividad)}
+                    onChange={(next) => onCampoFicha("capacitacionPersonalClave", next)}
+                    readOnly={readOnly}
+                    value={capacitacionPersonalClave ?? ""}
+                  />
+                  {/* Cómo se acredita la capacitación: texto fijo del formato (Anexo N° 19). */}
+                  <label className="reqCalCampo">
+                    <span className="reqCalSpanConBoton">
+                      ¿Cómo se acredita la capacitación?
+                      <button
+                        className="reqCalRedactar"
+                        disabled={readOnly}
+                        onClick={() => onCampoFicha("capacitacionPersonalClaveAcreditacion", ACREDITACION_CAPACITACION)}
+                        title="Rellenar con el texto estándar del formato (Anexo N° 19)"
+                        type="button"
+                      >
+                        <Sparkles size={12} /> Redactar con IA
+                      </button>
+                    </span>
+                    <textarea
+                      disabled={readOnly}
+                      onChange={(ev) => onCampoFicha("capacitacionPersonalClaveAcreditacion", ev.target.value)}
+                      placeholder="Pulsa «Redactar con IA» para el texto estándar (Anexo N° 19)."
+                      rows={filasTextarea(capacitacionPersonalClaveAcreditacion ?? "", true)}
+                      value={capacitacionPersonalClaveAcreditacion ?? ""}
+                    />
+                  </label>
                 </div>
               ) : null}
 

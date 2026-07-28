@@ -3,7 +3,7 @@ import { componerOtrasPenalidades } from "@/lib/otras-penalidades";
 import { formatRequisitos } from "@/lib/requisitos-calificacion";
 import { ACREDITACION_EXPERIENCIA } from "@/lib/requisitos-experiencia";
 import { ACREDITACION_PERSONAL_CLAVE, formatPersonalClave } from "@/lib/personal-clave";
-import { formatFilasFormacion } from "@/lib/formacion-academica";
+import { ACREDITACION_FORMACION_ACADEMICA, formatFilasFormacion } from "@/lib/formacion-academica";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
 
 /**
@@ -143,6 +143,7 @@ describe("formato del documento", () => {
           formacionAcademica: formatFilasFormacion([
             { actividad: "Estructuras", grado: "Título profesional de Ingeniero Civil", puesto: "Ingeniero residente" },
           ]),
+          formacionAcademicaAcreditacion: ACREDITACION_FORMACION_ACADEMICA,
         },
       }),
     );
@@ -152,6 +153,8 @@ describe("formato del documento", () => {
     // El requisito se compone con los dos campos de la fila.
     expect(xml).toContain("del personal clave requerido como Ingeniero residente");
     expect(xml).not.toContain("1. Grado:"); // no vuelca la serialización cruda
+    // Y tras el cuadro, el texto de cómo se acredita (Anexo N° 19, SUNEDU).
+    expect(xml).toContain("SUNEDU");
   });
 
   it("las penalidades adicionales salen en TABLA", async () => {

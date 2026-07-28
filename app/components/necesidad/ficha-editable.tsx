@@ -320,6 +320,9 @@ export function FichaEditable({
         personalClaveExperiencia={esRequisitos ? (fichaForm.personalClaveExperiencia ?? "") : ""}
         personalClaveAcreditacion={esRequisitos ? (fichaForm.personalClaveAcreditacion ?? "") : ""}
         formacionAcademica={esRequisitos ? (fichaForm.formacionAcademica ?? "") : ""}
+        formacionAcademicaAcreditacion={esRequisitos ? (fichaForm.formacionAcademicaAcreditacion ?? "") : ""}
+        capacitacionPersonalClave={esRequisitos ? (fichaForm.capacitacionPersonalClave ?? "") : ""}
+        capacitacionPersonalClaveAcreditacion={esRequisitos ? (fichaForm.capacitacionPersonalClaveAcreditacion ?? "") : ""}
         onCampoFicha={cambiarCampo}
         obligatorio={campoEsObligatorio(field)}
         obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}

@@ -78,6 +78,12 @@ export type CampoFichaProps = {
   personalClaveAcreditacion: string;
   /** Requisito de formación académica del personal clave (compuesto). */
   formacionAcademica: string;
+  /** Texto de cómo se acredita la formación académica. */
+  formacionAcademicaAcreditacion: string;
+  /** Requisito de capacitación del personal clave (cuadro serializado). */
+  capacitacionPersonalClave: string;
+  /** Texto de cómo se acredita la capacitación. */
+  capacitacionPersonalClaveAcreditacion: string;
   /** Escribe un campo suelto de la ficha; el editor lo usa para el personal clave. */
   onCampoFicha: (api: string, valor: string) => void;
   obligatorio: boolean;
@@ -126,6 +132,9 @@ export const CampoFicha = memo(function CampoFicha({
   personalClaveExperiencia,
   personalClaveAcreditacion,
   formacionAcademica,
+  formacionAcademicaAcreditacion,
+  capacitacionPersonalClave,
+  capacitacionPersonalClaveAcreditacion,
   onCampoFicha,
   obligatorio,
   obsPendiente,
@@ -308,6 +317,9 @@ export const CampoFicha = memo(function CampoFicha({
           personalClaveExperiencia={personalClaveExperiencia}
           personalClaveAcreditacion={personalClaveAcreditacion}
           formacionAcademica={formacionAcademica}
+          formacionAcademicaAcreditacion={formacionAcademicaAcreditacion}
+          capacitacionPersonalClave={capacitacionPersonalClave}
+          capacitacionPersonalClaveAcreditacion={capacitacionPersonalClaveAcreditacion}
           onCampoFicha={onCampoFicha}
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}

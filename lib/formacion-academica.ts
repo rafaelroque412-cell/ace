@@ -13,6 +13,15 @@
  * GRADO o el TÍTULO, no cursos, diplomados ni especializaciones.
  */
 
+/**
+ * Cómo se acredita la formación académica del personal clave, texto literal de
+ * las bases estándar de servicios. Es fijo: acompaña al cuadro de formación.
+ */
+export const ACREDITACION_FORMACION_ACADEMICA = [
+  "El postor debe señalar los nombres y apellidos, documento de identidad, el nombre de la universidad o institución educativa que expidió el grado de título profesional, y el grado o título profesional obtenido en el Anexo N° 19, adjuntando en su oferta copia del grado de bachiller o título profesional. En caso se acredite estudios en el extranjero del personal clave, debe presentarse, adicionalmente, copia simple de la revalidación o reconocimiento del grado o título ante la SUNEDU.",
+  "Los evaluadores o la DEC, según corresponda, verifican los grados o títulos profesionales en el Registro Nacional de Grados Académicos y Títulos Profesionales de la Superintendencia Nacional de Educación Superior Universitaria – SUNEDU, a través del siguiente link: https://enlinea.sunedu.gob.pe/ o en el Registro Nacional de Certificados, Grados y Títulos del Ministerio de Educación, a través del siguiente link: https://titulosinstitutos.minedu.gob.pe/ según corresponda.",
+].join("\n\n");
+
 const HUECO_GRADO =
   "CONSIGNAR EL GRADO DE BACHILLER O TÍTULO PROFESIONAL REQUERIDO, CONSIDERANDO LOS NIVELES " +
   "ESTABLECIDOS POR LA NORMATIVA EN LA MATERIA";

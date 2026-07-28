@@ -25,7 +25,7 @@ import {
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,
 // para leer) con la clave del PATCH (camelCase) y su tipo de control.
-export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "formacionAcademica" | "subcontratacion" | "select";
+export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "formacionAcademica" | "capacitacion" | "subcontratacion" | "select";
 
 // Catálogo del "Tipo de proceso de selección" (referencia inicial del área
 // usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
@@ -563,6 +563,19 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // (lib/formacion-academica.ts). Oculto —lo pinta el editor— pero SÍ al
       // documento; ver la excepción en requerimiento-estructura.ts.
       { col: "formacion_academica", api: "formacionAcademica", label: "Formación académica del personal clave", oculto: true, kind: "formacionAcademica", baseLegal: "Art. 72.3.b Reglamento · un requisito por fila (grado/título + puesto). Como requisito de calificación solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.", ejemplo: "Título profesional de Ingeniero Civil · Ingeniero residente" },
+      // Cómo se acredita la formación académica: texto fijo del formato (Anexo
+      // N° 19, SUNEDU, MINEDU). Oculto —lo pinta el editor, tras el cuadro— pero
+      // SÍ al documento; ver la excepción en requerimiento-estructura.ts.
+      { col: "formacion_academica_acreditacion", api: "formacionAcademicaAcreditacion", label: "Acreditación de la formación académica", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la formación académica (Anexo N° 19). Texto estándar del formato de Concurso Público de servicios.", ejemplo: "El postor debe señalar los nombres y apellidos…" },
+      // CALIFICACIONES DEL PERSONAL CLAVE · Capacitación (Art. 72.3.b). Un
+      // requisito por fila con tres huecos —horas, materia y puesto— que se
+      // compone (lib/capacitacion-personal-clave.ts). El tope es 120 horas.
+      // Oculto —lo pinta el editor, tras la formación académica— pero SÍ va al
+      // documento; ver la excepción en requerimiento-estructura.ts.
+      { col: "capacitacion_personal_clave", api: "capacitacionPersonalClave", label: "Capacitación del personal clave", oculto: true, kind: "capacitacion", baseLegal: "Art. 72.3.b Reglamento · un requisito por fila (horas + materia + puesto); la capacitación se exige hasta un máximo de 120 horas.", ejemplo: "40 horas en seguridad y salud en obra · Ingeniero residente" },
+      // Cómo se acredita la capacitación: texto fijo del formato (Anexo N° 19).
+      // Oculto —lo pinta el editor, tras el cuadro— pero SÍ al documento.
+      { col: "capacitacion_personal_clave_acreditacion", api: "capacitacionPersonalClaveAcreditacion", label: "Acreditación de la capacitación", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la capacitación del personal clave (Anexo N° 19)." },
     ],
   },
   {
