@@ -137,6 +137,8 @@ export type Necesidad = {
   // Equipamiento estratégico (Art. 72.3.b, C.3): requisito + acreditación.
   equipamiento_estrategico: string | null;
   equipamiento_estrategico_acreditacion: string | null;
+  infraestructura_estrategica: string | null;
+  infraestructura_estrategica_acreditacion: string | null;
   gestion_riesgos: string | null;
   // Específicas de obras / consultoría de obra.
   metas_fisicas: string | null;
@@ -320,6 +322,8 @@ export const necesidadCreateSchema = z.object({
   capacitacionPersonalClaveAcreditacion: optionalText(2000),
   equipamientoEstrategico: optionalText(2000),
   equipamientoEstrategicoAcreditacion: optionalText(2000),
+  infraestructuraEstrategica: optionalText(2000),
+  infraestructuraEstrategicaAcreditacion: optionalText(2000),
   gestionRiesgos: optionalText(2000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),

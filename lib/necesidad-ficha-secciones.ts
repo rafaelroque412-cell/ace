@@ -582,6 +582,10 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // la excepción en requerimiento-estructura.ts.
       { col: "equipamiento_estrategico", api: "equipamientoEstrategico", label: "Equipamiento estratégico (requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · solo el equipamiento e infraestructura estratégicos; lo que no sea clave va en las condiciones de la prestación." },
       { col: "equipamiento_estrategico_acreditacion", api: "equipamientoEstrategicoAcreditacion", label: "Acreditación del equipamiento estratégico", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar el equipamiento estratégico. Texto estándar del formato de Concurso Público de servicios." },
+      // INFRAESTRUCTURA ESTRATÉGICA (Art. 72.3.b, C.3). Igual que el equipamiento:
+      // dos textos —el requisito y su acreditación—, ocultos pero SÍ al documento.
+      { col: "infraestructura_estrategica", api: "infraestructuraEstrategica", label: "Infraestructura estratégica (requisito)", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · solo la infraestructura estratégica; lo que no sea clave va en las condiciones de la prestación." },
+      { col: "infraestructura_estrategica_acreditacion", api: "infraestructuraEstrategicaAcreditacion", label: "Acreditación de la infraestructura estratégica", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la infraestructura estratégica. Texto estándar del formato de Concurso Público de servicios." },
     ],
   },
   {

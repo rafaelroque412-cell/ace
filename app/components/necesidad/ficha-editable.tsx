@@ -325,6 +325,8 @@ export function FichaEditable({
         capacitacionPersonalClaveAcreditacion={esRequisitos ? (fichaForm.capacitacionPersonalClaveAcreditacion ?? "") : ""}
         equipamientoEstrategico={esRequisitos ? (fichaForm.equipamientoEstrategico ?? "") : ""}
         equipamientoEstrategicoAcreditacion={esRequisitos ? (fichaForm.equipamientoEstrategicoAcreditacion ?? "") : ""}
+        infraestructuraEstrategica={esRequisitos ? (fichaForm.infraestructuraEstrategica ?? "") : ""}
+        infraestructuraEstrategicaAcreditacion={esRequisitos ? (fichaForm.infraestructuraEstrategicaAcreditacion ?? "") : ""}
         onCampoFicha={cambiarCampo}
         obligatorio={campoEsObligatorio(field)}
         obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}
