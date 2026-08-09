@@ -1,4 +1,4 @@
-import { embeddingDimensions, embeddingModel, getOpenAIClient } from "./openai-server";
+import { embeddingDimensions, embeddingModel, embeddingProvider, embedWithGoogle, getEmbeddingClient } from "./openai-server";
 
 type PineconeIndexInfo = {
   host: string;
@@ -85,6 +85,8 @@ const maxUpsertRetries = 3;
 export type SearchFilters = {
   article?: string;
   documentId?: string;
+  /** Varios documentos a la vez ($in). Un procedimiento puede tener varios modelos. */
+  documentIds?: string[];
   documentType?: string;
   sourceEntity?: string;
   status?: string;
@@ -94,18 +96,22 @@ export type SearchFilters = {
   year?: number;
 };
 
-function compactFilter(filters?: SearchFilters) {
+export function compactFilter(filters?: SearchFilters) {
   if (!filters) {
     return undefined;
   }
 
-  const clauses: Record<string, { $eq: string | number }> = {};
+  const clauses: Record<string, { $eq: string | number } | { $in: string[] }> = {};
 
   if (filters.article) {
     clauses.article = { $eq: filters.article };
   }
 
-  if (filters.documentId) {
+  if (filters.documentIds && filters.documentIds.length > 0) {
+    // Varios modelos para un mismo procedimiento: se ancla en el CONJUNTO y es el
+    // ranking el que elige, en vez de quedarse con uno por fecha.
+    clauses.document_id = { $in: filters.documentIds };
+  } else if (filters.documentId) {
     clauses.document_id = { $eq: filters.documentId };
   }
 
@@ -140,6 +146,23 @@ function compactFilter(filters?: SearchFilters) {
   return Object.keys(clauses).length > 0 ? clauses : undefined;
 }
 
+/**
+ * Namespaces auxiliares de Respuestas, en variables de entorno.
+ *
+ * Estaban fijos en el codigo de sus rutas, y eso los dejaba fuera del cambio de
+ * proveedor de embeddings: al pasar a Gemini, estas rutas habrian seguido
+ * escribiendo en el MISMO namespace donde ya hay vectores de OpenAI. Dos
+ * espacios vectoriales mezclados en un solo namespace no dan error: dan
+ * resultados sin sentido, que es el peor de los fallos posibles.
+ *
+ * El valor por defecto es el nombre actual, asi que sin tocar el entorno nada
+ * cambia.
+ */
+export const respuestaAntecedentesNamespace =
+  process.env.PINECONE_ANTECEDENTES_NAMESPACE ?? "respuesta-antecedentes";
+export const respuestaAdjuntosNamespace =
+  process.env.PINECONE_ADJUNTOS_NAMESPACE ?? "respuesta-adjuntos";
+
 export function getPineconeConfig() {
   const apiKey = process.env.PINECONE_API_KEY;
   const indexName = process.env.PINECONE_INDEX_NAME;
@@ -167,7 +190,20 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
     return [];
   }
 
-  const client = getOpenAIClient();
+  // El proveedor se elige con EMBEDDING_PROVIDER. Con `google` se usa Gemini a
+  // 1536 dimensiones, que es la del índice. Ver el aviso de embeddingProvider en
+  // openai-server: cambiar de proveedor obliga a reindexar, porque los espacios
+  // vectoriales no son intercambiables aunque coincida la dimensión.
+  if (embeddingProvider === "google") {
+    const vectores: number[][] = [];
+    for (let start = 0; start < texts.length; start += maxEmbeddingBatchSize) {
+      const batch = texts.slice(start, start + maxEmbeddingBatchSize).map((text) => text.slice(0, 8000));
+      vectores.push(...(await embedWithGoogle(batch, embeddingDimensions)));
+    }
+    return vectores;
+  }
+
+  const client = getEmbeddingClient();
   const vectors: number[][] = [];
 
   for (let start = 0; start < texts.length; start += maxEmbeddingBatchSize) {
@@ -504,4 +540,185 @@ export async function deleteRecords(ids: string[], namespaceOverride?: string) {
   }
 
   return JSON.parse(text) as unknown;
+}
+
+// Elimina TODOS los chunks de un documento (por documentId) en un namespace.
+// Usa el filtro nativo de Pinecone (no requiere conocer los ids).
+export async function deleteDocuments(
+  documentIds: string[],
+  namespaceOverride?: string,
+): Promise<{ deleted: number }> {
+  if (documentIds.length === 0) {
+    return { deleted: 0 };
+  }
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
+  const index = await describePineconeIndex();
+
+  const response = await fetch(`https://${index.host}/vectors/delete`, {
+    body: JSON.stringify({
+      deleteAll: false,
+      filter: { document_id: { $in: documentIds } },
+      namespace,
+    }),
+    headers: {
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
+      "X-Pinecone-API-Version": pineconeApiVersion,
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pinecone delete-documents ${response.status}: ${await response.text()}`);
+  }
+
+  const text = await response.text();
+  if (!text) return { deleted: documentIds.length };
+  return JSON.parse(text) as { deleted: number };
+}
+
+// === Biblioteca de documentos en Pinecone ===
+// Listado de los documentos unicos disponibles en el namespace legal.
+// Estrategia: query con vector zero + topK alto para traer los primeros N
+// chunks (Pinecone indexa por similitud de coseno; un vector zero no tiene
+// direccion, asi que el orden es por norma L2 ascendente — basicamente los
+// primeros vectores insertados). Luego agrupamos por document_id.
+//
+// Para una biblioteca pequena (<500 docs) este metodo es suficiente y
+// reutiliza la conexion autenticada existente.
+export type DocumentCatalogEntry = {
+  documentId: string;
+  title: string;
+  documentType: string | null;
+  documentNumber: string | null;
+  sourceEntity: string | null;
+  year: number | null;
+  chunkCount: number;
+};
+
+export async function listDocumentCatalog(
+  namespaceOverride?: string,
+  topK: number = 1000,
+): Promise<DocumentCatalogEntry[]> {
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
+  const index = await describePineconeIndex();
+
+  // Vector zero: neutral, no apunta a nada, devuelve los "primeros"
+  // vectores por orden de magnitud. Pinecone ordena por similaridad coseno;
+  // con vector zero todos tienen score ~0, asi que el orden es por id.
+  const zeroVector = new Array<number>(embeddingDimensions).fill(0);
+
+  const response = await fetch(`https://${index.host}/query`, {
+    body: JSON.stringify({
+      includeMetadata: true,
+      includeValues: false,
+      namespace,
+      topK,
+      vector: zeroVector,
+    }),
+    headers: {
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
+      "X-Pinecone-API-Version": pineconeApiVersion,
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pinecone catalog ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as {
+    matches?: Array<{ metadata?: Record<string, unknown> }>;
+  };
+
+  const grouped = new Map<string, DocumentCatalogEntry>();
+  for (const match of payload.matches ?? []) {
+    const metadata = match.metadata ?? {};
+    const documentId = typeof metadata.document_id === "string" ? metadata.document_id : null;
+    if (!documentId) continue;
+    const existing = grouped.get(documentId);
+    if (existing) {
+      existing.chunkCount += 1;
+      continue;
+    }
+    grouped.set(documentId, {
+      chunkCount: 1,
+      documentId,
+      documentNumber: typeof metadata.document_number === "string" ? metadata.document_number : null,
+      documentType: typeof metadata.document_type === "string" ? metadata.document_type : null,
+      sourceEntity: typeof metadata.source_entity === "string" ? metadata.source_entity : null,
+      title: typeof metadata.title === "string"
+        ? metadata.title
+        : typeof metadata.document_title === "string"
+          ? metadata.document_title
+          : documentId,
+      year: typeof metadata.year === "number" ? metadata.year : null,
+    });
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => a.title.localeCompare(b.title, "es"));
+}
+
+// Recupera TODOS los chunks de un documento especifico (por documentId)
+// en un namespace. Ordena por chunk_index y devuelve el texto concatenado.
+export async function fetchDocumentChunks(
+  documentId: string,
+  namespaceOverride?: string,
+  topK: number = 200,
+): Promise<{ documentId: string; text: string; metadata: Record<string, unknown> } | null> {
+  const config = getPineconeConfig();
+  const apiKey = config.apiKey;
+  const namespace = namespaceOverride ?? config.namespace;
+  const index = await describePineconeIndex();
+
+  const zeroVector = new Array<number>(embeddingDimensions).fill(0);
+  const response = await fetch(`https://${index.host}/query`, {
+    body: JSON.stringify({
+      filter: { document_id: { $eq: documentId } },
+      includeMetadata: true,
+      includeValues: false,
+      namespace,
+      topK,
+      vector: zeroVector,
+    }),
+    headers: {
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
+      "X-Pinecone-API-Version": pineconeApiVersion,
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pinecone fetch ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as {
+    matches?: Array<{ metadata?: Record<string, unknown> }>;
+  };
+  const matches = payload.matches ?? [];
+  if (matches.length === 0) return null;
+
+  // Ordena por chunk_index (los PineconeRecord guardan el indice).
+  const sorted = [...matches].sort((a, b) => {
+    const ai = Number(a.metadata?.chunk_index ?? 0);
+    const bi = Number(b.metadata?.chunk_index ?? 0);
+    return ai - bi;
+  });
+
+  const text = sorted
+    .map((m) => (typeof m.metadata?.text === "string" ? m.metadata.text : ""))
+    .filter((t) => t.length > 0)
+    .join("\n\n");
+
+  return {
+    documentId,
+    metadata: sorted[0]?.metadata ?? {},
+    text,
+  };
 }

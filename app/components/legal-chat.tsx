@@ -1163,14 +1163,15 @@ export function LegalChat() {
           <span className="styleSelectorsTitle" title="Cómo quieres que te responda (opcional)">
             Estilo de respuesta
           </span>
-          <div className="modeSelector" role="tablist" aria-label="Tono de respuesta">
+          {/* Ajustes de la respuesta, no pestañas: no cambian de panel, cambian
+              cómo responde el modelo. */}
+          <div className="modeSelector" role="group" aria-label="Tono de respuesta">
             <span className="styleSelectorLabel">Tono</span>
             {toneOptions.map((item) => (
               <button
-                aria-selected={tone === item.value}
+                aria-pressed={tone === item.value}
                 key={item.value}
                 onClick={() => setTone(item.value)}
-                role="tab"
                 title={item.hint}
                 type="button"
               >
@@ -1178,14 +1179,13 @@ export function LegalChat() {
               </button>
             ))}
           </div>
-          <div className="modeSelector" role="tablist" aria-label="Longitud de respuesta">
+          <div className="modeSelector" role="group" aria-label="Longitud de respuesta">
             <span className="styleSelectorLabel">Longitud</span>
             {lengthOptions.map((item) => (
               <button
-                aria-selected={length === item.value}
+                aria-pressed={length === item.value}
                 key={item.value}
                 onClick={() => setLength(item.value)}
-                role="tab"
                 title={item.hint}
                 type="button"
               >

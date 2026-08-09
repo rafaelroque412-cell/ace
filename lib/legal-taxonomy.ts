@@ -112,11 +112,15 @@ export const NECESIDAD_STATUSES: TaxonomyOption[] = [
   { label: "Incorporado al CMN (Derivado)", value: "incorporado_cmn" },
 ];
 
-// Clases de documento que adjunta una Necesidad (Módulo 1).
+// Clases de documento SELECCIONABLES al adjuntar en una Necesidad (Módulo 1).
+//
+// El TDR y las EE.TT. NO están aquí a propósito: su sitio es el panel EETT/TDR del
+// campo 3.4, que sí los indexa al RAG, genera la propuesta con IA y los lista como
+// anexo en el Word. En Adjuntos (que solo guarda) serían un archivo muerto que
+// desvía del panel correcto. Sus ETIQUETAS sí se conservan más abajo, para que los
+// adjuntos antiguos con esos kinds no se muestren como texto crudo.
 export const NECESIDAD_DOC_KINDS: TaxonomyOption[] = [
   { label: "Requerimiento firmado", value: "requerimiento" },
-  { label: "Términos de referencia", value: "tdr" },
-  { label: "Especificaciones técnicas", value: "ee_tt" },
   { label: "Expediente técnico", value: "expediente_tecnico" },
   { label: "Memoria descriptiva", value: "memoria_descriptiva" },
   { label: "Informe de necesidad", value: "informe_necesidad" },
@@ -148,7 +152,14 @@ const objectTypeLabels = new Map(OBJECT_TYPES.map((item) => [item.value, item.la
 const processStatusLabels = new Map(PROCESS_STATUSES.map((item) => [item.value, item.label]));
 const processDocKindLabels = new Map(PROCESS_DOC_KINDS.map((item) => [item.value, item.label]));
 const necesidadStatusLabels = new Map(NECESIDAD_STATUSES.map((item) => [item.value, item.label]));
-const necesidadDocKindLabels = new Map(NECESIDAD_DOC_KINDS.map((item) => [item.value, item.label]));
+// Las etiquetas incluyen las clases seleccionables MÁS las HEREDADAS (tdr/ee_tt),
+// que ya no se ofrecen al adjuntar pero pueden existir en adjuntos antiguos: sin
+// esto se mostrarían como "tdr"/"ee_tt" crudo.
+const necesidadDocKindLabels = new Map<string, string>([
+  ...NECESIDAD_DOC_KINDS.map((item) => [item.value, item.label] as [string, string]),
+  ["tdr", "Términos de referencia"],
+  ["ee_tt", "Especificaciones técnicas"],
+]);
 
 export function necesidadStatusLabel(value?: string | null): string {
   if (!value) return "Sin estado";

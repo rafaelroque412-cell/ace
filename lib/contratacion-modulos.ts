@@ -62,7 +62,7 @@ export const MODULOS: ModuloDefinicion[] = [
   {
     numero: 3,
     label: "Actuaciones Preparatorias",
-    descripcion: "Recepción y validación del requerimiento, interacción con el mercado, valor estimado y estrategia.",
+    descripcion: "Recepción y validación del requerimiento, interacción con el mercado, cuantía de la contratación y estrategia.",
     usuarios: ["dec"],
     transversal: false,
   },
@@ -158,7 +158,15 @@ export const CICLO_CONTRATACION: EtapaCiclo[] = [
     participantes: ["dec"],
     descripcion: "El área usuaria (o ATE) registra la necesidad y formula el requerimiento.",
     entradas: ["Requerimiento firmado (PDF)", "TDR / ET / Expediente técnico", "Memoria descriptiva", "Informe de necesidad"],
-    salidas: [{ nombre: "Ficha de Necesidad", formato: ["pdf"] }],
+    // El entregable de esta etapa es el REQUERIMIENTO del Art. 44, con la
+    // estructura del Capítulo III de las bases estándar (EETT para bienes, TDR
+    // para servicios) — es lo que integra el expediente por el Art. 54.2.a.
+    //
+    // Antes figuraba aquí una "Ficha de Necesidad" en PDF. Se retiró junto con
+    // su exportador: era una consolidación interna de la herramienta, no un
+    // formato exigido por la Ley 32069 ni por su Reglamento, y anunciarla como
+    // salida del ciclo daba a entender que había que emitirla.
+    salidas: [{ nombre: "Requerimiento (EETT / TDR)", formato: ["word", "pdf"] }],
     documentos: [
       { kind: "requerimiento", label: "Requerimiento del área usuaria", obligatorio: true },
       { kind: "tdr", label: "Términos de referencia (servicios/consultoría)", obligatorio: false },
@@ -174,17 +182,17 @@ export const CICLO_CONTRATACION: EtapaCiclo[] = [
     macroFase: "actuaciones_preparatorias",
     responsables: ["dec"],
     participantes: ["aga", "area_usuaria", "ate"],
-    descripcion: "La DEC recepciona y valida el requerimiento, interactúa con el mercado y determina el valor estimado y la estrategia.",
+    descripcion: "La DEC recepciona y valida el requerimiento, interactúa con el mercado y determina la cuantía de la contratación y la estrategia.",
     entradas: ["Requerimiento recepcionado", "Certificación presupuestal", "Cuadro de necesidades"],
     salidas: [
       { nombre: "Estudio de Mercado", formato: ["excel"] },
-      { nombre: "Informe de Valor Estimado", formato: ["pdf"] },
+      { nombre: "Informe de cuantía de la contratación", formato: ["pdf"] },
       { nombre: "Informe técnico de estrategia", formato: ["word", "pdf"] },
     ],
     documentos: [
       {
         kind: "informe",
-        label: "Informe de valor estimado / indagación de mercado",
+        label: "Informe de cuantía de la contratación / indagación de mercado",
         obligatorio: false,
         tituloIncluye: ["valor", "mercado", "indagacion", "estimado", "referencial"],
       },

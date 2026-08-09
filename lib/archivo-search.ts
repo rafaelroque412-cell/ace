@@ -1,12 +1,8 @@
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { type SearchFilters, searchTextRecords } from "./pinecone";
 import { supabaseRest } from "./supabase-server";
-import {
-  type ArchivoChatInput,
-  type ArchivoSearchInput,
-  archivoDocKindLabel,
-  getArchivoNamespace,
-} from "./archivo";
+import { archivoDocKindLabel, getArchivoNamespace } from "./archivo";
+import { type ArchivoChatInput, type ArchivoSearchInput } from "./archivo-schema";
 
 export type ArchivoSearchResult = {
   documentId: string;

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  archivoDocKindLabel,
-  archivoSearchSchema,
-  extractFecha,
-  extractResolutionNumber,
-  normalizeArchivoDocKind,
-} from "@/lib/archivo";
+import { archivoDocKindLabel, extractFecha, extractResolutionNumber, normalizeArchivoDocKind } from "@/lib/archivo";
+import { archivoSearchSchema } from "@/lib/archivo-schema";
 
 describe("extractResolutionNumber", () => {
   it("detecta el número anclado al tipo de acto desde el título", () => {

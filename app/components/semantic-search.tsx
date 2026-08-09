@@ -484,17 +484,20 @@ export function SemanticSearch() {
       </div>
 
       <form className="toolBody" onSubmit={submitSearch}>
-        <div className="sourceTabs" role="tablist" aria-label="Tipo de evidencia">
-          <button aria-selected={sourceTab === "normativa"} disabled={loading} onClick={() => changeTab("normativa")} role="tab" type="button">
+        {/* Acota el ámbito de la búsqueda; los resultados salen abajo, en la
+            misma lista de siempre. Una lista de pestañas dentro de un
+            formulario, además, no es una construcción válida. */}
+        <div className="sourceTabs" role="group" aria-label="Tipo de evidencia">
+          <button aria-pressed={sourceTab === "normativa"} disabled={loading} onClick={() => changeTab("normativa")} type="button">
             Normativa
           </button>
-          <button aria-selected={sourceTab === "directivas"} disabled={loading} onClick={() => changeTab("directivas")} role="tab" type="button">
+          <button aria-pressed={sourceTab === "directivas"} disabled={loading} onClick={() => changeTab("directivas")} type="button">
             Directivas
           </button>
-          <button aria-selected={sourceTab === "opiniones"} disabled={loading} onClick={() => changeTab("opiniones")} role="tab" type="button">
+          <button aria-pressed={sourceTab === "opiniones"} disabled={loading} onClick={() => changeTab("opiniones")} type="button">
             Opiniones
           </button>
-          <button aria-selected={sourceTab === "bases"} disabled={loading} onClick={() => changeTab("bases")} role="tab" type="button">
+          <button aria-pressed={sourceTab === "bases"} disabled={loading} onClick={() => changeTab("bases")} type="button">
             Bases / esquemas
           </button>
         </div>

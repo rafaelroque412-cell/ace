@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { requireDec, requireUser } from "@/lib/auth";
 import { deleteRecords } from "@/lib/pinecone";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import {
   buildStoragePath,
   normalizeDocumentType,
@@ -63,9 +64,21 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    // Sin techo, un editor podia disparar subidas en rafaga y sangrar la cuota
+    // de Storage + OCR (OpenAI Vision) + embeddings sin control. La ventana de
+    // 1 min y el tope de 5 dejan margen para reintentos manuales sin abrir
+    // puerta a abuso.
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "documents-upload"),
+      RATE_LIMITS.upload,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     const formData = await request.formData();
@@ -215,9 +228,20 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    // Borrado masivo toca Storage + Pinecone + Postgres por cada documento del
+    // set filtrado: el costo escala con el tamaño del corpus. Mismo techo que
+    // upload/reindex para acotar el daño si alguien script-ea el endpoint.
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "documents-bulk-delete"),
+      RATE_LIMITS.bulk,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     getSupabaseServerConfig();

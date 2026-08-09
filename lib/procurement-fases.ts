@@ -40,14 +40,21 @@ export type AccionF1 = {
 };
 
 // Las 7 acciones oficiales + la programacion como precondicion, en orden.
+// Las etiquetas usan lenguaje de PROCESO (verbo en infinitivo) para que un
+// usuario no técnico entienda qué se hace en cada bloque, sin reordenar nada:
+// el orden I..VII es el de la Guía y el `numeral` sigue siendo el de la norma.
+// EXCEPCIÓN: la acción I conserva el título literal de la norma, «Segmentación
+// de las contrataciones» (Art. 42 del Reglamento; Art. 125 bienes/servicios,
+// 153 obras), por pedido de fidelidad normativa. Es el nombre que ya usaba su
+// `accionGuia`, así que además evita que A2 apareciera con dos nombres.
 export const ACCIONES_F1: AccionF1[] = [
-  { id: "prog", numeral: "0", label: "Programación (CMN y PAC)", precondicion: true },
+  { id: "prog", numeral: "0", label: "Programar en el CMN y el PAC", precondicion: true },
   { id: "I", numeral: "I", label: "Segmentación de las contrataciones" },
-  { id: "II", numeral: "II", label: "Requerimiento" },
-  { id: "III-IV", numeral: "III–IV", label: "Estrategia e Interacción con el mercado" },
-  { id: "V", numeral: "V", label: "Expediente de Contratación" },
-  { id: "VI", numeral: "VI", label: "Elaboración de Bases" },
-  { id: "VII", numeral: "VII", label: "Anuncio de contratación futura", opcional: true },
+  { id: "II", numeral: "II", label: "Formular el requerimiento" },
+  { id: "III-IV", numeral: "III–IV", label: "Definir la estrategia y consultar al mercado" },
+  { id: "V", numeral: "V", label: "Armar y aprobar el expediente" },
+  { id: "VI", numeral: "VI", label: "Elaborar las bases" },
+  { id: "VII", numeral: "VII", label: "Anunciar la contratación futura", opcional: true },
 ];
 
 export type Fase = {
@@ -84,17 +91,17 @@ export const HITOS: HitoCatalogo[] = [
   // Estructura alineada a la Guía de Actuaciones Preparatorias vigente
   // (R.D. 019-2026-EF/54.01), Ley 32069 y Reglamento D.S. 009-2025-EF mod. por
   // D.S. 001-2026-EF. Las 7 acciones oficiales se desagregan en 10 sub-pasos
-  // (CCP y Designación de Evaluadores se llevan sueltos por trazabilidad).
-  { code: "A1", faseId: "F1", order: 1, accionId: "prog", label: "Programación: CMN y PAC", responsable: "Área usuaria / DEC", docKind: "otros" },
+  // (CCP y designación de evaluadores se llevan sueltos por trazabilidad).
+  { code: "A1", faseId: "F1", order: 1, accionId: "prog", label: "Programar en el CMN y el PAC", responsable: "Área usuaria / DEC", docKind: "otros" },
   { code: "A2", faseId: "F1", order: 2, accionId: "I", label: "Segmentación de las contrataciones", responsable: "DEC" },
-  { code: "A3", faseId: "F1", order: 3, accionId: "II", label: "Formulación del Requerimiento", responsable: "Área usuaria / ATE → DEC (no objeción)", docKind: "requerimiento" },
-  { code: "A4", faseId: "F1", order: 4, accionId: "III-IV", label: "Estrategia de contratación", responsable: "DEC + Área usuaria", docKind: "informe" },
-  { code: "A5", faseId: "F1", order: 5, accionId: "III-IV", label: "Interacción con el mercado", responsable: "DEC", docKind: "informe" },
-  { code: "A6", faseId: "F1", order: 6, accionId: "V", label: "Designación de Evaluadores", responsable: "AGA / DEC", docKind: "otros" },
-  { code: "A7", faseId: "F1", order: 7, accionId: "V", label: "Certificación Presupuestal (CCP)", responsable: "DEC / Presupuesto", docKind: "otros" },
-  { code: "A8", faseId: "F1", order: 8, accionId: "V", label: "Aprobación del Expediente (Anexo N° 2)", responsable: "AGA", docKind: "informe" },
-  { code: "A9", faseId: "F1", order: 9, accionId: "VI", label: "Elaboración de Bases", responsable: "Evaluadores / DEC", docKind: "bases" },
-  { code: "A10", faseId: "F1", order: 10, accionId: "VII", label: "Anuncio de contratación futura (opcional)", responsable: "DEC" },
+  { code: "A3", faseId: "F1", order: 3, accionId: "II", label: "Formular el requerimiento", responsable: "Área usuaria / ATE → DEC (no objeción)", docKind: "requerimiento" },
+  { code: "A4", faseId: "F1", order: 4, accionId: "III-IV", label: "Definir la estrategia de contratación", responsable: "DEC + Área usuaria", docKind: "informe" },
+  { code: "A5", faseId: "F1", order: 5, accionId: "III-IV", label: "Consultar al mercado", responsable: "DEC", docKind: "informe" },
+  { code: "A6", faseId: "F1", order: 6, accionId: "V", label: "Designar a los evaluadores", responsable: "AGA / DEC", docKind: "otros" },
+  { code: "A7", faseId: "F1", order: 7, accionId: "V", label: "Obtener la certificación presupuestal", responsable: "DEC / Presupuesto", docKind: "otros" },
+  { code: "A8", faseId: "F1", order: 8, accionId: "V", label: "Aprobar el expediente de contratación", responsable: "AGA", docKind: "informe" },
+  { code: "A9", faseId: "F1", order: 9, accionId: "VI", label: "Elaborar las bases", responsable: "Evaluadores / DEC", docKind: "bases" },
+  { code: "A10", faseId: "F1", order: 10, accionId: "VII", label: "Anunciar la contratación futura (opcional)", responsable: "DEC" },
 
   // ── FASE 2 · Selección ────────────────────────────────────────────────────
   { code: "B1", faseId: "F2", order: 1, label: "Convocatoria en PLADICOP", responsable: "DEC / Oficial de Compra" },
@@ -118,7 +125,7 @@ export const HITOS: HitoCatalogo[] = [
 ];
 
 // Estado mutable por-expediente de cada hito (lo que se persiste en jsonb).
-/** Etiqueta de un hito por su código ("A4" → "Estrategia de contratación"). */
+/** Etiqueta de un hito por su código ("A4" → "Definir la estrategia de contratación"). */
 export function hitoLabel(code: string): string {
   return HITOS.find((h) => h.code === code)?.label ?? code;
 }

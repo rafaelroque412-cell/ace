@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { TEXTO_NO_CORRESPONDE } from "@/lib/adelanto-directo";
 import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
+import { TEXTO_NO_CORRESPONDE as SUBCON_NO_CORRESPONDE } from "@/lib/subcontratacion";
 import { apisExigidos, estructuraDelRequerimiento, etiquetaDeDocumento } from "@/lib/requerimiento-estructura";
 
 /**
@@ -125,6 +127,50 @@ describe("cada campo sabe cómo se pinta", () => {
       s.campos.map((c) => c.api),
     );
     expect(apis).not.toContain("cmnVerificado");
+  });
+});
+
+describe("adelanto directo · «No corresponde» elimina el numeral (modelo OECE)", () => {
+  it("cuando se otorga, el apartado va al documento", () => {
+    const apis = estructuraDelRequerimiento([], {
+      adelantoDirecto: "La entidad otorgará 1 adelanto directo por el 30% del monto del contrato original.",
+    }).flatMap((s) => s.campos.map((c) => c.api));
+    expect(apis).toContain("adelantoDirecto");
+  });
+
+  it("cuando es «No corresponde», el apartado se omite", () => {
+    const apis = estructuraDelRequerimiento([], { adelantoDirecto: TEXTO_NO_CORRESPONDE })
+      .flatMap((s) => s.campos.map((c) => c.api));
+    expect(apis).not.toContain("adelantoDirecto");
+  });
+
+  it("se omite aunque el modelo declare el apartado exigible", () => {
+    // El propio modelo indica «eliminar el numeral» cuando no hay adelanto, así
+    // que su exigibilidad no debe forzar un apartado con «No corresponde».
+    const apis = estructuraDelRequerimiento(["Adelanto directo"], { adelantoDirecto: TEXTO_NO_CORRESPONDE })
+      .flatMap((s) => s.campos.map((c) => c.api));
+    expect(apis).not.toContain("adelantoDirecto");
+  });
+
+  it("la subcontratación «No corresponde» también omite su numeral", () => {
+    const conValor = estructuraDelRequerimiento([], {
+      subcontratacion: "Se encuentra prohibida la subcontratación de las prestaciones objeto del contrato.",
+    }).flatMap((s) => s.campos.map((c) => c.api));
+    expect(conValor).toContain("subcontratacion");
+
+    const noCorresponde = estructuraDelRequerimiento([], { subcontratacion: SUBCON_NO_CORRESPONDE })
+      .flatMap((s) => s.campos.map((c) => c.api));
+    expect(noCorresponde).not.toContain("subcontratacion");
+  });
+
+  it("la fórmula de reajuste «No corresponde» también omite su numeral", () => {
+    const conValor = estructuraDelRequerimiento([], { formulaReajuste: "K = 0.3·IPC + 0.7" })
+      .flatMap((s) => s.campos.map((c) => c.api));
+    expect(conValor).toContain("formulaReajuste");
+
+    const noCorresponde = estructuraDelRequerimiento([], { formulaReajuste: TEXTO_NO_CORRESPONDE })
+      .flatMap((s) => s.campos.map((c) => c.api));
+    expect(noCorresponde).not.toContain("formulaReajuste");
   });
 });
 

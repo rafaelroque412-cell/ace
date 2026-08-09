@@ -33,6 +33,8 @@ export type ChatAuthContext = {
 const legalSearchFiltersSchema = z.object({
   article: z.string().trim().optional().or(z.literal("")),
   documentId: z.string().trim().optional().or(z.literal("")),
+  /** Varios documentos a la vez: un procedimiento puede tener varios modelos. */
+  documentIds: z.array(z.string().trim().min(1)).max(20).optional(),
   documentType: z.string().trim().optional().or(z.literal("")),
   sourceEntity: z.string().trim().optional().or(z.literal("")),
   status: z.string().trim().optional().or(z.literal("")),
@@ -164,6 +166,7 @@ function normalizeFilters(filters?: z.infer<typeof legalSearchFiltersSchema>): S
   return {
     article: filters?.article?.trim() || undefined,
     documentId: filters?.documentId?.trim() || undefined,
+    documentIds: filters?.documentIds?.length ? filters.documentIds : undefined,
     documentType: filters?.documentType?.trim() || undefined,
     sourceEntity: filters?.sourceEntity?.trim() || undefined,
     status: filters?.status?.trim() || undefined,
@@ -499,7 +502,9 @@ function sourceMatchesFilters(source: LegalSource, filters: SearchFilters) {
     return false;
   }
 
-  if (filters.documentId && source.documentId !== filters.documentId) {
+  if (filters.documentIds && filters.documentIds.length > 0) {
+    if (!filters.documentIds.includes(source.documentId)) return false;
+  } else if (filters.documentId && source.documentId !== filters.documentId) {
     return false;
   }
 
@@ -605,6 +610,8 @@ function isLikelyLegalProcurementQuestion(question: string) {
     "buena pro",
     "valor referencial",
     "valor estimado",
+    "cuantia de la contratacion",
+    "cuantia",
     "uit",
     "desierto",
     "nulidad",
@@ -1174,7 +1181,7 @@ function chunkToSource(
 
 export async function searchLegalSources(
   input: z.infer<typeof semanticSearchRequestSchema>,
-): Promise<{ assessment: SourceAssessment; sources: LegalSource[] }> {
+): Promise<{ assessment: SourceAssessment; sources: LegalSource[]; semanticaCaida: boolean }> {
   const filters = normalizeFilters(input.filters);
   const pineconeFilters = {
     ...filters,
@@ -1183,8 +1190,18 @@ export async function searchLegalSources(
   const queryUsed = normalizeQuestionForSearch(input.query);
   const expandedQuery = expandQueryForRecall(queryUsed);
   const semanticTopK = Math.min(30, Math.max(input.topK * 2, 10));
+  // Si el embedding/semántico falla (p. ej. sin cuota para embeddings), la
+  // búsqueda NO se cae: degrada al modo léxico (SQL). Pero el fallo se REPORTA en
+  // `semanticaCaida` en vez de tragarse: el respaldo léxico es un `ilike` con OR
+  // entre palabras y sin orden por relevancia, así que devuelve fragmentos casi
+  // arbitrarios. Presentarlos como fundamento normativo, sin decir que la
+  // búsqueda real está caída, es peor que no citar nada.
+  let semanticaCaida = false;
   const [hits, lexicalChunks] = await Promise.all([
-    searchTextRecords(expandedQuery, semanticTopK, pineconeFilters),
+    searchTextRecords(expandedQuery, semanticTopK, pineconeFilters).catch(() => {
+      semanticaCaida = true;
+      return [];
+    }),
     searchLexicalChunks(queryUsed, Math.min(50, semanticTopK * 2)).catch(() => []),
   ]);
   const vectorIds = uniqueValues(hits.map((hit) => hit._id));
@@ -1196,6 +1213,7 @@ export async function searchLegalSources(
         queryUsed,
         scope: isLikelyLegalProcurementQuestion(input.query) ? "legal" : "unknown",
       }),
+      semanticaCaida,
       sources: [],
     };
   }
@@ -1241,6 +1259,7 @@ export async function searchLegalSources(
   const sources = rerankSources(combined, queryUsed, input.topK);
 
   return {
+    semanticaCaida,
     assessment: assessSources(sources, {
       processType: filters.processType,
       queryUsed,
@@ -1293,7 +1312,7 @@ async function persistChatExchange(input: {
         model: null,
         role: "user",
         session_id: sessionId,
-        sources: [],
+      sources: [],
       },
       {
         content: input.answer,

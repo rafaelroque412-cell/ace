@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { archivoChatSchema } from "@/lib/archivo";
+import { archivoChatSchema } from "@/lib/archivo-schema";
 import { answerArchivoQuestion } from "@/lib/archivo-search";
 import { writeAuditLog } from "@/lib/supabase-server";
 

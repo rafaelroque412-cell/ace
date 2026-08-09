@@ -16,8 +16,9 @@
 //   - {ENTIDAD}   : codigo de la institucion (1er segmento del sufijo)
 //   - {AREA}      : codigo del area (segmentos restantes, opcionales)
 //
-// El sufijo se descompone por "/" o "-" y se re-une con "/" (estandar peruano).
-// Si no hay sufijo, el formato se trunca en el anio: OFICIO N° 001-2026
+// El sufijo se descompone SOLO por "/" (entidad / area) y se re-une con "/",
+// conservando los "-" internos del area ("JRM-UA-OGA/MDCH" queda igual). Si no
+// hay sufijo, el formato se trunca en el anio: OFICIO N° 001-2026
 //
 // Caracteristicas por tipo (referencia):
 //   - OFICIO:     numerado + sello + protocolo formal
@@ -27,23 +28,55 @@
 
 export const TIPOS_DOCUMENTO = [
   "OFICIO",
+  "OFICIO MULTIPLE",
   "INFORME",
   "CARTA",
   "MEMORANDUM",
+  "MEMORANDUM MULTIPLE",
+  "CONTRATO",
 ] as const;
 
 export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];
+
+// Etiquetas legibles para la UI (el valor almacenado sigue siendo el codigo).
+export const TIPO_DOCUMENTO_LABELS: Record<TipoDocumento, string> = {
+  OFICIO: "Oficio",
+  "OFICIO MULTIPLE": "Oficio múltiple",
+  INFORME: "Informe",
+  CARTA: "Carta",
+  MEMORANDUM: "Memorándum simple",
+  "MEMORANDUM MULTIPLE": "Memorándum múltiple",
+  CONTRATO: "Contrato",
+};
+
+export function tipoDocumentoLabel(tipo: string): string {
+  return TIPO_DOCUMENTO_LABELS[tipo as TipoDocumento] ?? tipo;
+}
+
+// Tipos con los que se siembra una oficina nueva (los mas comunes).
+// Cada oficina habilita/deshabilita los suyos en Configuracion → Numeracion.
+export const TIPOS_DOCUMENTO_DEFAULT = [
+  "OFICIO",
+  "INFORME",
+  "CARTA",
+  "MEMORANDUM",
+  "CONTRATO",
+] as const;
 
 export function isTipoDocumento(value: unknown): value is TipoDocumento {
   return typeof value === "string" && (TIPOS_DOCUMENTO as readonly string[]).includes(value);
 }
 
-// Convierte "MDCH/GM" o "MDCH-GM" en ["MDCH", "GM"].
-// Espacios y segmentos vacios se ignoran.
+// Convierte "MDCH/GM" en ["MDCH", "GM"], CONSERVANDO los guiones internos:
+// "JRM-UA-OGA/MDCH" -> ["JRM-UA-OGA", "MDCH"]. El "/" separa entidad y área; el
+// "-" une sub-segmentos DENTRO del área (p. ej. "UA-OGA") y es parte del código
+// que la entidad configuró, así que no se toca. Espacios y segmentos vacíos se
+// ignoran. Antes se partía también por "-", lo que colapsaba "JRM-UA-OGA/MDCH"
+// en "JRM/UA/OGA/MDCH" y cambiaba el número tal como lo emite la entidad.
 export function splitSufijo(sufijo: string | null | undefined): string[] {
   if (!sufijo) return [];
   return sufijo
-    .split(/[\/\-]/)
+    .split("/")
     .map((s) => s.trim())
     .filter(Boolean);
 }

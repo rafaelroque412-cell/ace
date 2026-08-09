@@ -1,4 +1,3 @@
-import { z } from "zod";
 
 // Archivo administrativo municipal: documentos propios de la entidad (resoluciones
 // de alcaldia, acuerdos de concejo, ordenanzas, oficios, informes). Es un corpus
@@ -58,21 +57,6 @@ export type ArchivoDocumento = {
   updated_at: string;
 };
 
-export const archivoSearchSchema = z.object({
-  query: z.string().trim().min(2, "Escribe al menos 2 caracteres").max(500),
-  docKind: z.string().trim().optional(),
-  documentNumber: z.string().trim().optional(),
-  topK: z.number().int().min(1).max(20).optional(),
-});
-
-export type ArchivoSearchInput = z.infer<typeof archivoSearchSchema>;
-
-export const archivoChatSchema = z.object({
-  query: z.string().trim().min(3, "Escribe una pregunta").max(800),
-  docKind: z.string().trim().optional(),
-});
-
-export type ArchivoChatInput = z.infer<typeof archivoChatSchema>;
 
 const monthIndex: Record<string, number> = {
   enero: 1,

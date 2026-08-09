@@ -275,7 +275,7 @@ export function mapPedidoRowToNecesidad(
     // La fila entera, para persistirla sin perder las 28 columnas que el mapeo
     // de arriba no usa (todavía).
     out.crudo = row;
-    out.summary = `pedido de ${sustantivoPedido(out.tipoObjeto)} SIGA N° ${nroPedido}.`;
+    out.summary = `Pedido de ${sustantivoPedido(out.tipoObjeto)} SIGA N° ${nroPedido}.`;
   }
 
   return out;
@@ -394,7 +394,7 @@ function fusionarPedido(arr: PedidoNecesidadImport[]): PedidoNecesidadImport {
     // comprobar el tope del contrato menor y empaquetarlos.
     items: itemsDePedido(arr),
     nroPedido: base.nroPedido,
-    summary: `pedido de ${sustantivoPedido(base.tipoObjeto)} SIGA N° ${base.nroPedido} (${arr.length} ítems).`,
+    summary: `Pedido de ${sustantivoPedido(base.tipoObjeto)} SIGA N° ${base.nroPedido} (${arr.length} ítems).`,
   };
   // Datos de cabecera compartidos por el pedido (primero con valor).
   const areaUsuaria = primero("areaUsuaria");

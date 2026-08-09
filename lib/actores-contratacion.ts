@@ -104,7 +104,7 @@ export const ACTORES: ActorDefinicion[] = [
     label: "Dependencia Encargada de las Contrataciones",
     sigla: "DEC",
     descripcion:
-      "Órgano especializado (antes OEC). Organiza, conduce y administra los procedimientos: interacción con el mercado, valor estimado, bases, expediente de contratación y administración del contrato.",
+      "Órgano especializado (antes OEC). Organiza, conduce y administra los procedimientos: interacción con el mercado, cuantía de la contratación, bases, expediente de contratación y administración del contrato.",
     participacion: {
       planificacion: "Programa las contrataciones",
       actuaciones_preparatorias: "Conduce y gestiona el expediente",

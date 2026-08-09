@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { estructuraDelRequerimiento } from "@/lib/requerimiento-estructura";
-import { ACREDITACION_CAPACITACION, formatFilasCapacitacion } from "@/lib/capacitacion-personal-clave";
+import {
+  ACREDITACION_CAPACITACION,
+  filasCapacitacionParaDocumento,
+  formatFilasCapacitacion,
+} from "@/lib/capacitacion-personal-clave";
 
 /**
  * La capacitación del personal clave está `oculto` en la ficha (la pinta el
@@ -35,5 +39,29 @@ describe("el texto de acreditación de la capacitación es el del formato", () =
   it("las tres advertencias van en viñetas: el Word las convierte en bullets", () => {
     const bullets = ACREDITACION_CAPACITACION.split("\n").filter((l) => l.startsWith("- "));
     expect(bullets).toHaveLength(3);
+  });
+});
+
+describe("una fila de capacitación vacía no viaja al Word", () => {
+  it("filasCapacitacionParaDocumento descarta las filas que solo llevan la actividad heredada", () => {
+    // El cuadro hereda una fila por puesto del cuadro de experiencia; la del
+    // MONTAJISTA se dejó sin horas/materia/puesto (se serializa como [POR DEFINIR]).
+    const texto = formatFilasCapacitacion([
+      { actividad: "JEFE DE EQUIPO", horas: "40", materia: "BIM", puesto: "residente" },
+      { actividad: "MONTAJISTA", horas: "", materia: "", puesto: "" },
+    ]);
+    const filas = filasCapacitacionParaDocumento(texto);
+    expect(filas.map((f) => f.actividad)).toEqual(["JEFE DE EQUIPO"]);
+  });
+
+  it("una capacitación con solo filas heredadas no genera apartado en el requerimiento", () => {
+    const ficha: Record<string, string> = {
+      capacitacionPersonalClave: formatFilasCapacitacion([
+        { actividad: "JEFE DE EQUIPO", horas: "", materia: "", puesto: "" },
+        { actividad: "MONTAJISTA", horas: "", materia: "", puesto: "" },
+      ]),
+    };
+    const campos = estructuraDelRequerimiento([], ficha).flatMap((s) => s.campos);
+    expect(campos.find((c) => c.api === "capacitacionPersonalClave")).toBeUndefined();
   });
 });

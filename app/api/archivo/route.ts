@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { requireDec, requireUser } from "@/lib/auth";
 import {
   type ArchivoDocumento,
   normalizeArchivoDocKind,
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }

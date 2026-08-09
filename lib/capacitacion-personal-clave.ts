@@ -70,11 +70,19 @@ function algoEscrito(f: FilaCapacitacion): boolean {
 
 export function parseFilasCapacitacion(texto: string | null | undefined): FilaCapacitacion[] {
   if (!texto) return [];
+  // «[POR DEFINIR]» es el marcador que `formatFilasCapacitacion` deja en un hueco
+  // al serializar: al LEER vuelve a ser vacio, para que no se muestre como si
+  // fuera un dato —ni en el editor ni en el Word— y en su lugar salga el hueco
+  // guia del formato OECE (que compone `componerRequisitoCapacitacion`).
+  const dato = (v: string) => {
+    const t = v.trim();
+    return t === "[POR DEFINIR]" ? "" : t;
+  };
   const salida: FilaCapacitacion[] = [];
   for (const linea of texto.split(/\r?\n/)) {
     const m = linea.match(LINEA);
     if (!m) continue;
-    const fila = { actividad: m[1].trim(), horas: m[2].trim(), materia: m[3].trim(), puesto: m[4].trim() };
+    const fila = { actividad: dato(m[1]), horas: dato(m[2]), materia: dato(m[3]), puesto: dato(m[4]) };
     if (algoEscrito(fila)) salida.push(fila);
   }
   return salida;
@@ -121,4 +129,29 @@ export function capacitacionExcedeHoras(filas: FilaCapacitacion[]): number[] {
       return Number.isFinite(n) && n > 120 ? i + 1 : 0;
     })
     .filter((n) => n > 0);
+}
+
+/**
+ * ¿La fila aporta un requisito de capacitacion?
+ *
+ * La actividad viene HEREDADA del cuadro de experiencia, asi que no cuenta: para
+ * que haya requisito hace falta al menos horas, materia o puesto. El «[POR
+ * DEFINIR]» que `formatFilasCapacitacion` deja en los huecos es un marcador, no
+ * un dato, asi que tambien cuenta como vacio.
+ */
+function esRequisitoCapacitacion(f: FilaCapacitacion): boolean {
+  // `parseFilasCapacitacion` ya normaliza «[POR DEFINIR]» a vacio, asi que basta
+  // comprobar que haya contenido en horas, materia o puesto.
+  return Boolean(f.horas.trim() || f.materia.trim() || f.puesto.trim());
+}
+
+/**
+ * Filas que de verdad aportan un requisito, para el DOCUMENTO.
+ *
+ * Una fila heredada del cuadro de experiencia que solo lleva la actividad no es
+ * un requisito de capacitacion: en el Word saldria como una fila entera de
+ * huecos. Se descarta, y si no queda ninguna, el apartado no aparece.
+ */
+export function filasCapacitacionParaDocumento(texto: string | null | undefined): FilaCapacitacion[] {
+  return parseFilasCapacitacion(texto).filter(esRequisitoCapacitacion);
 }

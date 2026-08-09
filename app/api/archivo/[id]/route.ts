@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { requireDec, requireUser } from "@/lib/auth";
 import { type ArchivoDocumento, getArchivoNamespace } from "@/lib/archivo";
 import { processArchivoDocument } from "@/lib/archivo-processing";
 import { deleteRecords } from "@/lib/pinecone";
@@ -62,7 +62,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -117,7 +117,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }

@@ -1,7 +1,8 @@
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { requireDec, requireUser } from "@/lib/auth";
 import { deleteRecords } from "@/lib/pinecone";
 import { processPdfForSearch } from "@/lib/pdf-processing";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import {
   type DocumentRecord,
   deleteStorageObjects,
@@ -84,14 +85,24 @@ export async function GET(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
     // Reindexar modifica el corpus compartido: editor o admin.
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
+    }
+
+    // Reindexar vuelve a pasar el PDF por OCR + IA + embeddings: mismo costo
+    // que subirlo. Techo propio para no mezclar con subidas ni con bulk reindex.
+    const rl = checkRateLimit(
+      getRateLimitKey(request, auth.user.id, "documents-reindex"),
+      RATE_LIMITS.reindex,
+    );
+    if (!rl.allowed) {
+      return rateLimitResponse(rl);
     }
 
     getSupabaseServerConfig();
@@ -165,7 +176,7 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }

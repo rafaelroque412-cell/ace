@@ -23,6 +23,8 @@ import type { ObjetoFilter } from "./procesos-seleccion";
 import { parseOtrasPenalidades, textoLibrePenalidades } from "./otras-penalidades";
 import { parsePersonalClave } from "./personal-clave";
 import { componerRequisitoFormacion, parseFilasFormacion } from "./formacion-academica";
+import { componerRequisitoCapacitacion, parseFilasCapacitacion } from "./capacitacion-personal-clave";
+import { segmentarParrafoMd } from "./markdown-tabla";
 import { parseRequisitos } from "./requisitos-calificacion";
 import {
   type CampoRequerimiento,
@@ -67,6 +69,12 @@ export type RequerimientoDocInput = {
    * la cuantía que corresponde es la sumatoria (Art. 53.3).
    */
   items?: NecesidadItem[];
+  /**
+   * Nombres de los EETT/TDR adjuntos a la necesidad. Se listan como anexo al
+   * cerrar el 3.4; el PDF no se incrusta (es un documento que se firma, el
+   * archivo va aparte). Vacío/ausente ⇒ no se añade nada.
+   */
+  anexosTdr?: string[];
   alcance: string;
   condicionesEjecucion: string;
   plazoEjecucion: string;
@@ -284,6 +292,39 @@ function tablaFormacion(filas: ReturnType<typeof parseFilasFormacion>): Table {
   });
 }
 
+/** Cuadro de la capacitación del personal clave (Art. 72.3.b): un requisito por fila. */
+function tablaCapacitacion(filas: ReturnType<typeof parseFilasCapacitacion>): Table {
+  const cabecera = new TableRow({
+    children: [
+      celda("N°", { ancho: 4, bold: true }),
+      celda("Actividad", { ancho: 14, bold: true }),
+      celda("Horas", { ancho: 7, bold: true }),
+      celda("Materia o área de capacitación", { ancho: 24, bold: true }),
+      celda("Personal clave del cual acreditar el requisito", { ancho: 22, bold: true }),
+      celda("Requisito", { ancho: 29, bold: true }),
+    ],
+    tableHeader: true,
+  });
+  return new Table({
+    rows: [
+      cabecera,
+      ...filas.map((f, i) =>
+        new TableRow({
+          children: [
+            celda(String(i + 1)),
+            celda(f.actividad ?? ""),
+            celda(f.horas ?? ""),
+            celda(f.materia ?? ""),
+            celda(f.puesto ?? ""),
+            celda(componerRequisitoCapacitacion(f)),
+          ],
+        }),
+      ),
+    ],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
 /** Cuadro de la experiencia del personal clave (Art. 72.3.b): un puesto por fila. */
 function tablaPersonalClave(filas: ReturnType<typeof parsePersonalClave>): Table {
   const cabecera = new TableRow({
@@ -345,6 +386,39 @@ function tablaPenalidades(filas: ReturnType<typeof parseOtrasPenalidades>): Tabl
   });
 }
 
+/** Tabla del Word a partir de filas Markdown; la primera fila es la cabecera. */
+function tablaMarkdown(filas: string[][]): Table {
+  const ncols = Math.max(1, ...filas.map((f) => f.length));
+  const ancho = Math.max(1, Math.floor(100 / ncols));
+  const norm = (f: string[]) => {
+    const c = [...f];
+    while (c.length < ncols) c.push("");
+    return c;
+  };
+  const [cabecera, ...cuerpo] = filas;
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        tableHeader: true,
+        children: norm(cabecera ?? []).map((txt) => celda(txt, { ancho, bold: true })),
+      }),
+      ...cuerpo.map((fila) => new TableRow({ children: norm(fila).map((txt) => celda(txt, { ancho })) })),
+    ],
+  });
+}
+
+/**
+ * Renderiza el texto de un campo, convirtiendo las tablas Markdown embebidas en
+ * tablas nativas del Word (la matriz de riesgos) y el resto en párrafos/viñetas.
+ */
+function renderParrafoConTablas(valor: string): Array<Paragraph | Table> {
+  const out = segmentarParrafoMd(valor).map((s) =>
+    s.tipo === "tabla" ? tablaMarkdown(s.filas) : s.tipo === "vineta" ? vineta(s.texto) : contenido(s.texto),
+  );
+  return out.length > 0 ? out : [contenido(valor)];
+}
+
 /**
  * Pinta un campo según lo que es, no según lo que parece.
  *
@@ -363,6 +437,11 @@ function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Ta
   if (c.formato === "tablaFormacion") {
     const filas = parseFilasFormacion(c.valor);
     return filas.length > 0 ? [tablaFormacion(filas)] : [contenido(c.valor)];
+  }
+
+  if (c.formato === "tablaCapacitacion") {
+    const filas = parseFilasCapacitacion(c.valor);
+    return filas.length > 0 ? [tablaCapacitacion(filas)] : [contenido(c.valor)];
   }
 
   if (c.formato === "tabla") {
@@ -408,12 +487,35 @@ function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Ta
   }
 
   // Párrafo: una linea del campo, un parrafo del documento. Las que empiezan por
-  // guion o punto se convierten en viñeta, que es como el area usuaria las
-  // escribe y como el modelo las pide.
-  return c.valor.split(/\r?\n/).filter((x) => x.trim()).map((x) => {
-    const limpio = x.trim();
-    return /^[-•*]\s+/.test(limpio) ? vineta(limpio.replace(/^[-•*]\s+/, "")) : contenido(limpio);
-  });
+  // guion o punto se convierten en viñeta; y una tabla Markdown embebida (la
+  // matriz de riesgos del Art. 44.3 que redacta el copiloto) se renderiza como
+  // TABLA nativa del Word en vez de texto con pipes.
+  return renderParrafoConTablas(c.valor);
+}
+
+/**
+ * Las líneas del anexo de EETT/TDR: encabezado + intro + un nombre por línea.
+ * Pura (sin `docx`) para poder probarla; `bloqueAnexosTdr` la envuelve en párrafos.
+ */
+export function lineasAnexoTdr(nombres: string[]): string[] {
+  const utiles = nombres.map((n) => n.trim()).filter(Boolean);
+  if (utiles.length === 0) return [];
+  return [
+    "Anexos",
+    "Se adjuntan como anexo los siguientes términos de referencia / especificaciones técnicas:",
+    ...utiles,
+  ];
+}
+
+/** El bloque de anexos como párrafos del Word: encabezado en negrita + viñetas. */
+function bloqueAnexosTdr(nombres: string[]): Paragraph[] {
+  const [titulo, intro, ...archivos] = lineasAnexoTdr(nombres);
+  if (!titulo) return [];
+  return [
+    new Paragraph({ spacing: { before: 120, after: 40 }, children: [run(titulo, { bold: true })] }),
+    new Paragraph({ spacing: { after: 40 }, children: [run(intro)] }),
+    ...archivos.map((nombre) => new Paragraph({ bullet: { level: 0 }, children: [run(nombre)] })),
+  ];
 }
 
 export async function generarRequerimientoDocx(input: RequerimientoDocInput): Promise<Buffer> {
@@ -499,11 +601,17 @@ export async function generarRequerimientoDocx(input: RequerimientoDocInput): Pr
             new Paragraph({
               alignment: AlignmentType.RIGHT,
               spacing: { before: 60 },
-              children: [run(`Valor estimado por sumatoria: ${importeTexto(cuantia)}`, { bold: true })],
+              children: [run(`Cuantía de la contratación por sumatoria: ${importeTexto(cuantia)}`, { bold: true })],
             }),
           );
         }
       }
+    }
+    // Anexos EETT/TDR: al cerrar el 3.4 (la sección del TDR, detectada por su
+    // campo `descripcionDetallada`) y antes del 3.5.1, se listan los documentos
+    // adjuntos por nombre. Solo si hay.
+    if ((input.anexosTdr ?? []).length > 0 && s.campos.some((c) => c.api === "descripcionDetallada")) {
+      children.push(...bloqueAnexosTdr(input.anexosTdr ?? []));
     }
   }
 

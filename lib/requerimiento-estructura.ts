@@ -1,6 +1,11 @@
+import { parseAdelantoDirecto } from "./adelanto-directo";
+import { parseFormulaReajuste } from "./formula-reajuste";
 import { APARTADOS_MODELO } from "./modelo-apartados";
 import { campoAplica, FICHA_SECCIONES, type FichaField, objetosEfectivosDe } from "./necesidad-ficha-secciones";
+import { parseSubcontratacion } from "./subcontratacion";
 import type { ObjetoFilter } from "./procesos-seleccion";
+import { filasCapacitacionParaDocumento, formatFilasCapacitacion } from "./capacitacion-personal-clave";
+import { desdeMatrizRiesgos } from "./matriz-riesgos";
 
 /**
  * Qué lleva el Word del requerimiento, y cómo se pinta cada cosa.
@@ -64,7 +69,13 @@ function formatoDe(field: FichaField): FormatoCampo {
   if (field.kind === "formacionAcademica") return "tablaFormacion";
   if (field.kind === "capacitacion") return "tablaCapacitacion";
   if (field.kind === "requisitos") return "vinetas";
-  if (field.kind === "textarea" || field.kind === "controversias" || field.kind === "subcontratacion") {
+  if (
+    field.kind === "textarea" ||
+    field.kind === "controversias" ||
+    field.kind === "subcontratacion" ||
+    field.kind === "adelanto" ||
+    field.kind === "reajuste"
+  ) {
     return "parrafo";
   }
   return "linea";
@@ -143,7 +154,35 @@ export function estructuraDelRequerimiento(
         field.api === "infraestructuraEstrategica" ||
         field.api === "infraestructuraEstrategicaAcreditacion";
       if ((field.oculto && !soloEnDocumento) || NO_VAN_SOLOS.has(field.api)) continue;
-      const valor = (ficha[field.api] ?? "").trim();
+      let valor = (ficha[field.api] ?? "").trim();
+      // Una fila de capacitación heredada del cuadro de experiencia, sin horas,
+      // materia ni puesto, no es un requisito: solo lleva la actividad. No viaja
+      // al documento —ni como fila del cuadro ni, si no queda ninguna útil, como
+      // apartado con título huérfano, porque el valor queda vacío y se descarta
+      // abajo—.
+      if (field.kind === "capacitacion") {
+        valor = formatFilasCapacitacion(filasCapacitacionParaDocumento(valor));
+      }
+      // Gestión de riesgos (Art. 44.3): el Word imprime SOLO la matriz, desde el
+      // encabezado «MATRIZ DE GESTIÓN DE RIESGOS», sin el párrafo de sustento
+      // introductorio (misma decisión que la vista previa y el modo lectura).
+      if (field.api === "gestionRiesgos") {
+        valor = desdeMatrizRiesgos(valor);
+      }
+      // «No corresponde» en apartados de selección (adelanto Art. 137,
+      // subcontratación Art. 108): el área usuaria declara que el apartado no
+      // aplica, así que el numeral se OMITE del documento en vez de imprimir la
+      // constancia —fiel al modelo, que en el adelanto manda «eliminar el
+      // numeral»—. Se omite aunque el modelo lo declare exigible.
+      if (field.kind === "adelanto" && parseAdelantoDirecto(valor).modalidad === "no_corresponde") {
+        continue;
+      }
+      if (field.kind === "subcontratacion" && parseSubcontratacion(valor).modalidad === "no_corresponde") {
+        continue;
+      }
+      if (field.kind === "reajuste" && parseFormulaReajuste(valor).modalidad === "no_corresponde") {
+        continue;
+      }
       const exigido = exigidos.has(field.api);
       // Lo que no aplica a este objeto o procedimiento no entra, aunque haya
       // quedado un valor: el documento describe ESTA contratación.
@@ -166,7 +205,13 @@ export function estructuraDelRequerimiento(
       });
     }
     if (campos.length === 0) continue;
-    salida.push({ campos, nota: seccion.fields[0]?.baseLegal, titulo: seccion.title.toUpperCase() });
+    // La nota legal de la sección sale del baseLegal del primer campo VISIBLE, no
+    // de `seccion.fields[0]`: ese primero DEFINIDO puede estar oculto para este
+    // objeto (p. ej. «especialidad» de 3.2 solo aplica a obras), y entonces el
+    // Word rotulaba «3.2 Descripción general» con el Art. 72.3.b del personal
+    // clave. `campos` ya está filtrado a lo visible y conserva el orden.
+    const primerCampoVisible = seccion.fields.find((f) => f.api === campos[0]!.api);
+    salida.push({ campos, nota: primerCampoVisible?.baseLegal, titulo: seccion.title.toUpperCase() });
   }
   return salida;
 }
