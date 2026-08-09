@@ -63,7 +63,7 @@ describe("filas a medio declarar", () => {
 });
 
 describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
-  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!;
+  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5 Requisitos de calificación y/o precalificación")!;
   const campo = seccion.fields.find((f) => f.api === "personalClaveExperiencia");
 
   it("existe, es oculta y su kind la pinta como cuadro", () => {

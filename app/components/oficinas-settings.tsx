@@ -1,114 +1,90 @@
 "use client";
 
-import { Building2 } from "lucide-react";
 import { useState } from "react";
 import { AreasTab } from "./oficinas/areas-tab";
 import { MembreteTab } from "./oficinas/membrete-tab";
 import { NumeracionTab } from "./oficinas/numeracion-tab";
-import { ErrorLine, LoadingLine, useOficinas } from "./oficinas/use-oficinas";
+import { ErrorLine, LoadingLine, type Oficina } from "./oficinas/use-oficinas";
 
 type Tab = "areas" | "numeracion" | "membrete";
 
-// Gestión de OFICINAS emisoras (admin) en 3 pestañas:
-//   1) Áreas       — CRUD de oficinas (nombre, entidad, RUC, responsable, siglas)
-//   2) Numeración  — correlativo por tipo (OFICIO/INFORME/CARTA/MEMORANDUM)
-//   3) Membrete    — PDF de fondo que se usa al exportar respuestas
-// Regla: para configurar numeración y membrete primero hay que tener el área
-// registrada. La pestaña "Numeración" está habilitada cuando hay al menos
-// 1 oficina, y "Membrete" cuando la oficina activa ya tiene numeración
-// configurada.
-export function OficinasSettings() {
-  const { oficinas, loading, error, reload, setOficinas } = useOficinas();
-  const [tab, setTab] = useState<Tab>("areas");
+// Contenido de las tres secciones de OFICINAS:
+//   1) Áreas      - CRUD de oficinas (nombre, entidad, responsable, siglas)
+//   2) Numeración - correlativo por tipo (OFICIO/INFORME/CARTA/MEMORÁNDUM)
+//   3) Membrete   - PDF de fondo que se usa al exportar respuestas
+// Regla: numeración y membrete necesitan al menos un área registrada.
+//
+// La navegación, el encabezado y el estado los gobierna ConfiguracionWorkspace:
+// este componente solo pinta la sección que le indican. Antes traía además su
+// propio hero y su propia barra de pestañas para funcionar suelto, pero nunca se
+// usó así —el workspace siempre lo montaba en modo `chromeless`—, de modo que
+// eran ~40 líneas que no llegaban a la pantalla.
+export function OficinasSettings({
+  section,
+  oficinas,
+  loading,
+  error,
+  reload,
+  setOficinas,
+  aplicarDelServidor,
+}: {
+  /** Sección a pintar. Si no es una de las suyas, no pinta nada. */
+  section: Tab | null;
+  // El estado de oficinas lo posee el workspace (una sola carga para toda la
+  // página): antes este componente y AdminSettings pedían `/oficinas` cada uno
+  // por su cuenta, duplicando la petición —y la de aquí trae las 57 oficinas con
+  // sus contadores— en cada apertura y en cada cambio de año.
+  oficinas: Oficina[];
+  loading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
+  setOficinas: (v: Oficina[]) => void;
+  /** Aplica la lista del servidor tras guardar (actualiza la copia de referencia). */
+  aplicarDelServidor: (v: Oficina[]) => void;
+}) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const hasOficinas = oficinas.length > 0;
-  const numeracionConfigurada = hasOficinas
-    ? oficinas.some((o) => o.counters.some((c) => c.siguiente > 0))
-    : false;
+
+  if (!section) return null;
+  const shownTab: Tab = section;
 
   return (
-    <section className="toolPanel" style={{ marginTop: 24 }}>
-      <div className="userSectionTitle" style={{ marginBottom: 12 }}>
-        <h2>
-          <Building2 size={18} style={{ verticalAlign: "-3px" }} /> Oficinas y
-          numeración
-        </h2>
-        <p style={{ color: "var(--muted, #667)", fontSize: 13, margin: "4px 0 0" }}>
-          Configura en orden: 1) registra el área, 2) define la numeración
-          correlativa, 3) sube la hoja membretada. La pestaña "Responder" usa esta
-          configuración.
-        </p>
-      </div>
-
-      <nav
-        role="tablist"
-        style={{
-          display: "flex",
-          gap: 4,
-          borderBottom: "1px solid var(--line, #e2e4ea)",
-          marginBottom: 16,
-        }}
-      >
-        <TabButton
-          active={tab === "areas"}
-          onClick={() => setTab("areas")}
-          step={1}
-          label="Áreas"
-          enabled
-        />
-        <TabButton
-          active={tab === "numeracion"}
-          onClick={() => setTab("numeracion")}
-          step={2}
-          label="Numeración"
-          enabled={hasOficinas}
-          badge={hasOficinas ? undefined : "Pendiente"}
-        />
-        <TabButton
-          active={tab === "membrete"}
-          onClick={() => setTab("membrete")}
-          step={3}
-          label="Membrete"
-          enabled={hasOficinas}
-          badge={hasOficinas && !numeracionConfigurada ? "Después" : undefined}
-        />
-      </nav>
-
+    <section>
       {localError ? <ErrorLine message={localError} /> : null}
       {error ? <ErrorLine message={error} /> : null}
 
       {loading ? (
-        <LoadingLine message="Cargando oficinas…" />
-      ) : tab === "areas" ? (
+        <LoadingLine message="Cargando oficinas..." />
+      ) : !hasOficinas && shownTab !== "areas" ? (
+        // Numeración y membrete necesitan al menos un área registrada.
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line bg-surface px-5 py-10 text-center text-[14px] text-muted">
+          <p className="m-0 max-w-[360px]">Primero registra un área en la pestaña &ldquo;Áreas&rdquo; para configurar la {shownTab === "numeracion" ? "numeración correlativa" : "hoja membretada"}.</p>
+        </div>
+      ) : shownTab === "areas" ? (
         <AreasTab
+          oficinas={oficinas}
+          setOficinas={setOficinas}
+          aplicarDelServidor={aplicarDelServidor}
+          busyId={busyId}
+          setBusyId={setBusyId}
+          // Se pasa el error real: con `null` fijo, el bloque de alerta que la
+          // pestaña pinta junto a la lista era código muerto y el fallo solo se
+          // veía arriba del panel, fuera de vista al final de una lista larga.
+          error={localError}
+          setError={setLocalError}
+          reload={reload}
+        />
+      ) : shownTab === "numeracion" ? (
+        <NumeracionTab
           oficinas={oficinas}
           setOficinas={setOficinas}
           busyId={busyId}
           setBusyId={setBusyId}
-          error={null}
           setError={setLocalError}
           reload={reload}
         />
-      ) : tab === "numeracion" ? (
-        !hasOficinas ? (
-          <NumeracionTab
-            oficinas={[]}
-            setOficinas={setOficinas}
-            busyId={busyId}
-            setBusyId={setBusyId}
-            setError={setLocalError}
-          />
-        ) : (
-          <NumeracionTab
-            oficinas={oficinas}
-            setOficinas={setOficinas}
-            busyId={busyId}
-            setBusyId={setBusyId}
-            setError={setLocalError}
-          />
-        )
       ) : (
         <MembreteTab
           oficinas={oficinas}
@@ -120,82 +96,5 @@ export function OficinasSettings() {
         />
       )}
     </section>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  step,
-  label,
-  enabled,
-  badge,
-}: {
-  active: boolean;
-  onClick: () => void;
-  step: number;
-  label: string;
-  enabled: boolean;
-  badge?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      disabled={!enabled}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "10px 14px",
-        background: "transparent",
-        border: 0,
-        borderBottom: active ? "2px solid var(--brand, #0f766e)" : "2px solid transparent",
-        color: !enabled
-          ? "var(--muted, #94a3b8)"
-          : active
-            ? "var(--brand, #0f766e)"
-            : "var(--ink, #1f2937)",
-        fontWeight: active ? 600 : 500,
-        fontSize: 14,
-        cursor: enabled ? "pointer" : "not-allowed",
-        opacity: enabled ? 1 : 0.6,
-        marginBottom: -1,
-      }}
-    >
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 22,
-          height: 22,
-          borderRadius: 999,
-          background: active ? "var(--brand, #0f766e)" : "var(--line, #e2e4ea)",
-          color: active ? "#fff" : "var(--muted, #667)",
-          fontSize: 11,
-          fontWeight: 700,
-        }}
-      >
-        {step}
-      </span>
-      {label}
-      {badge ? (
-        <span
-          style={{
-            fontSize: 10,
-            padding: "1px 6px",
-            borderRadius: 999,
-            background: "#fef3c7",
-            color: "#92400e",
-            fontWeight: 600,
-          }}
-        >
-          {badge}
-        </span>
-      ) : null}
-    </button>
   );
 }

@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
+import { seedCounters } from "@/lib/oficinas";
 import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+import { getYearFromRequest } from "@/lib/year-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const TIPOS = ["OFICIO", "INFORME", "CARTA", "MEMORANDUM"] as const;
-type Tipo = (typeof TIPOS)[number];
 
 // Esquema de cada fila del Excel. Valido nombre obligatorio; el resto es opcional.
 const OficinaRowSchema = z.object({
@@ -122,6 +121,9 @@ function asBool(value: unknown): boolean {
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {
     const v = value.trim().toLowerCase();
+    // En archivos SIAF/MEF, "A" = Activo, "I" = Inactivo.
+    if (v === "a") return true;
+    if (v === "i") return false;
     return v === "true" || v === "1" || v === "si" || v === "sí" || v === "activo" || v === "x";
   }
   return true;
@@ -130,14 +132,6 @@ function asBool(value: unknown): boolean {
 function asInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : fallback;
-}
-
-async function seedCounters(oficinaId: string) {
-  await supabaseRest("expedientes_doc_counters", {
-    body: JSON.stringify(TIPOS.map((tipo) => ({ oficina_id: oficinaId, tipo, siguiente: 1 }))),
-    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-    method: "POST",
-  }).catch(() => undefined);
 }
 
 // POST /api/configuracion/oficinas/import
@@ -150,6 +144,7 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
   try {
     getSupabaseServerConfig();
+    const year = getYearFromRequest(request);
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -317,62 +312,120 @@ export async function POST(request: Request) {
       });
     }
 
-    if (mode === "replace") {
-      await supabaseRest("expedientes_oficinas", {
-        method: "DELETE",
-        headers: { Prefer: "return=minimal" },
-      });
-    }
-
+    // `replace` NO borra antes de importar.
+    //
+    // Antes se hacía `DELETE expedientes_oficinas` sin filtro y DESPUÉS se
+    // insertaba: si el archivo fallaba a mitad, el rollback solo deshacía las
+    // creaciones —lo borrado no se recuperaba— y la entidad se quedaba sin
+    // ninguna oficina (y sin sus correlativos, que cuelgan de ellas).
+    //
+    // Ahora el reemplazo es: importar todo primero (creando o actualizando por
+    // nombre) y, SOLO si todo fue bien, borrar las que no venían en el archivo.
+    // Un fallo a mitad deja el registro intacto, y las oficinas que siguen
+    // existiendo conservan su numeración en vez de perderla y recrearse.
     type OfficeRow = { id: string; nombre: string };
-    let existing: OfficeRow[] = [];
-    if (mode === "merge") {
-      existing = await supabaseRest<OfficeRow[]>(
-        `expedientes_oficinas?select=id,nombre`,
-      ).catch(() => []);
-    }
+    const existing = await supabaseRest<OfficeRow[]>(
+      `expedientes_oficinas?select=id,nombre`,
+    ).catch(() => []);
     const nameToId = new Map(existing.map((o) => [o.nombre.trim().toLowerCase(), o.id]));
 
     const created: string[] = [];
     const updated: string[] = [];
     const failed: RowError[] = [...errors];
+    let rolledBack = false;
 
-    for (const row of parsed) {
-      const id = nameToId.get(row.nombre.trim().toLowerCase());
-      const payload = {
-        nombre: row.nombre,
-        entidad: asText(row.entidad),
-        ruc: asText(row.ruc, 20),
-        responsable_nombre: asText(row.responsable_nombre),
-        responsable_cargo: asText(row.responsable_cargo),
-        sufijo: asText(row.sufijo, 60),
-        ancho: asInt(row.ancho, 1, 6, 3),
-        activo: asBool(row.activo),
-        updated_at: new Date().toISOString(),
-      };
-      try {
-        if (id) {
-          await supabaseRest(`expedientes_oficinas?id=eq.${id}`, {
-            body: JSON.stringify(payload),
-            method: "PATCH",
-          });
-          updated.push(id);
-        } else {
+    // Rollback: elimina las oficinas creadas si falla la importación.
+    async function rollbackCreated() {
+      if (created.length === 0) return;
+      const ids = created.map((id) => encodeURIComponent(id)).join(",");
+      await supabaseRest(`expedientes_oficinas?id=in.(${ids})`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+      rolledBack = true;
+    }
+
+    // Antes era fila a fila con un `await` por iteración (~57 PATCH/POST + un
+    // seedCounters por creada, todo en SERIE → varios segundos de pared). Ahora se
+    // procesa en TANDAS PARALELAS. Se conserva la semántica de reemplazo: si
+    // CUALQUIER fila falla, se revierten las creaciones y NO se purga nada; solo un
+    // import completo purga los sobrantes al final. `Promise.allSettled` deja que
+    // el resto del lote termine para recoger todos los errores, no solo el primero.
+    const CHUNK = 15;
+    let huboFallo = false;
+    for (let i = 0; i < parsed.length && !huboFallo; i += CHUNK) {
+      const lote = parsed.slice(i, i + CHUNK);
+      const resultados = await Promise.allSettled(
+        lote.map(async (row) => {
+          const id = nameToId.get(row.nombre.trim().toLowerCase());
+          const payload = {
+            nombre: row.nombre,
+            entidad: asText(row.entidad),
+            ruc: asText(row.ruc, 20),
+            responsable_nombre: asText(row.responsable_nombre),
+            responsable_cargo: asText(row.responsable_cargo),
+            sufijo: asText(row.sufijo, 60),
+            ancho: asInt(row.ancho, 1, 6, 3),
+            activo: asBool(row.activo),
+            updated_at: new Date().toISOString(),
+          };
+          if (id) {
+            await supabaseRest(`expedientes_oficinas?id=eq.${id}`, {
+              body: JSON.stringify(payload),
+              method: "PATCH",
+            });
+            return { tipo: "updated" as const, id };
+          }
           const [inserted] = await supabaseRest<Array<{ id: string }>>(
             "expedientes_oficinas?select=id",
-            {
-              body: JSON.stringify({ ...payload, created_by: auth.user.id }),
-              method: "POST",
-            },
+            { body: JSON.stringify({ ...payload, created_by: auth.user.id }), method: "POST" },
           );
-          if (inserted?.id) {
-            created.push(inserted.id);
-            await seedCounters(inserted.id);
-          }
+          if (!inserted?.id) return { tipo: "noop" as const };
+          // seedCounters va DENTRO de la tarea: al paralelizar las filas, los
+          // sembrados de contadores de las creadas también corren en paralelo.
+          await seedCounters(inserted.id, year);
+          return { tipo: "created" as const, id: inserted.id };
+        }),
+      );
+      for (let j = 0; j < resultados.length; j++) {
+        const r = resultados[j];
+        if (r.status === "fulfilled") {
+          if (r.value.tipo === "created") created.push(r.value.id);
+          else if (r.value.tipo === "updated") updated.push(r.value.id);
+        } else {
+          huboFallo = true;
+          const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+          failed.push({ row: lote[j]._row, error: msg });
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        failed.push({ row: row._row, error: msg });
+      }
+    }
+
+    if (huboFallo) {
+      // Cualquier fallo revierte las creaciones y aborta SIN purgar (las oficinas
+      // existentes no se tocan). `rolledBack` refleja si de hecho se borró algo.
+      await rollbackCreated().catch(() => undefined);
+      const sampleErrors = failed.slice(0, 3).map((e) => `Fila ${e.row}: ${e.error}`).join(" | ");
+      return NextResponse.json({ error: `Importación interrumpida y revertida. No se eliminó ninguna oficina existente. ${failed.length} error(es). Ej: ${sampleErrors}`, failed, rolledBack }, { status: 500 });
+    }
+
+    // Reemplazo: ahora que la importación terminó bien, se retiran las oficinas
+    // que no venían en el archivo. Se hace por lista explícita de ids (nunca un
+    // DELETE sin filtro) y no bloquea la respuesta si falla.
+    let eliminadas = 0;
+    if (mode === "replace") {
+      const conservadas = new Set([...created, ...updated]);
+      const sobrantes = existing.filter((o) => !conservadas.has(o.id)).map((o) => o.id);
+      if (sobrantes.length > 0) {
+        const ids = sobrantes.map((id) => encodeURIComponent(id)).join(",");
+        await supabaseRest(`expedientes_oficinas?id=in.(${ids})`, {
+          method: "DELETE",
+          headers: { Prefer: "return=minimal" },
+        })
+          .then(() => {
+            eliminadas = sobrantes.length;
+          })
+          .catch(() => {
+            // Se informa como no eliminadas; los datos importados ya están.
+          });
       }
     }
 
@@ -386,6 +439,7 @@ export async function POST(request: Request) {
         created: created.length,
         updated: updated.length,
         failed: failed.length,
+        eliminadas,
       },
       entityType: "oficina",
       module: "configuracion",
@@ -398,6 +452,7 @@ export async function POST(request: Request) {
         totalRows: parsed.length,
         created: created.length,
         updated: updated.length,
+        eliminadas,
         failed: failed.length,
         errors: failed,
       },

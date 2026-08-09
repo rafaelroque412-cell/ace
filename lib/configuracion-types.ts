@@ -17,6 +17,15 @@ export type EntitySettings = {
   managerPosition: string;
   managerResolutionDate: string;
   managerResolutionNumber: string;
+  // Autoridad de Gestión Administrativa (AGA): aprueba el expediente (Art. 54.2;
+  // Ley 32069 Art. 25.1.b). Autoridad designada por resolución, con los mismos
+  // datos que el gerente. Se guarda aparte por si no coincide con el gerente.
+  agaDegree: string;
+  agaDni: string;
+  agaFullName: string;
+  agaPosition: string;
+  agaResolutionDate: string;
+  agaResolutionNumber: string;
   name: string;
   // PIA y PAC del ejercicio: datos anuales que se citan como antecedentes en
   // los informes y definen la linea de corte por cuantia (Art. 125).
@@ -36,6 +45,13 @@ export type EntitySettings = {
   // Reglamento exige para agrupar por items, lotes o tramos.
   uitAnio: string;
   uitValor: string;
+  // Rango de cuantia (soles) de la "Licitacion Publica abreviada para bienes".
+  // Dato anual editable: la modalidad abreviada depende de la cuantia y su umbral
+  // no esta en la norma publicada. Sirve para saber que items de un requerimiento
+  // por relacion de items caen en esa banda. Texto en el formulario; el API normaliza.
+  lpAbreviadaBienesMin: string;
+  lpAbreviadaBienesMax: string;
+  lpAbreviadaBienesAnio: string;
   updatedAt: string | null;
 };
 
@@ -176,6 +192,12 @@ export const emptyEntity: EntitySettings = {
   managerPosition: "",
   managerResolutionDate: "",
   managerResolutionNumber: "",
+  agaDegree: "",
+  agaDni: "",
+  agaFullName: "",
+  agaPosition: "",
+  agaResolutionDate: "",
+  agaResolutionNumber: "",
   name: "",
   pacAnio: "",
   pacMontoBienesServicios: "",
@@ -188,6 +210,9 @@ export const emptyEntity: EntitySettings = {
   ruc: "",
   uitAnio: "",
   uitValor: "",
+  lpAbreviadaBienesMin: "",
+  lpAbreviadaBienesMax: "",
+  lpAbreviadaBienesAnio: "",
   updatedAt: null,
 };
 
