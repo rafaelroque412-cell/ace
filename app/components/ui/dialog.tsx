@@ -48,7 +48,18 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="tw fixed inset-0 z-50 bg-ink/45 backdrop-blur-[2px] animate-overlay-in" />
       <DialogPrimitive.Content
-        aria-describedby={description ? undefined : undefined}
+        // Radix enlaza Content con Description por contexto: pone en Content un
+        // `aria-describedby` que apunta al id de la Description. Cuando NO hay
+        // descripcion, ese enlace apunta a un id inexistente y Radix avisa por
+        // consola; lo suyo es pasar `aria-describedby={undefined}` para anularlo.
+        //
+        // Pero cuando SI la hay, ese mismo `undefined` PISA el enlace que Radix
+        // acaba de poner, y la descripcion se ve en pantalla sin anunciarse. La
+        // version anterior lo pasaba en los dos casos (`description ? undefined
+        // : undefined`, las dos ramas iguales), asi que ningun dialogo con
+        // descripcion la comunicaba. Por eso se pasa la propiedad solo en el
+        // caso sin descripcion, en vez de calcular su valor.
+        {...(description ? {} : { "aria-describedby": undefined })}
         className={cn(
           "tw fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col",
           "overflow-hidden rounded-[16px] border border-line bg-panel shadow-pop animate-content-in",

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { MunicipalidadTab } from "./configuracion/municipalidad-tab";
 import { ConfirmDialog } from "./confirm-dialog";
+import { SaveStatus, type SaveStatusType } from "./configuracion/save-status";
 import {
   type CreatedCredential,
   type EntitySettings,
@@ -27,7 +28,7 @@ const UsuariosTab = dynamic(() => import("./configuracion/usuarios-tab").then((m
   loading: () => (
     <div className="grid gap-3" aria-busy="true">
       <div className="h-9 w-64 animate-pulse rounded-lg bg-line/70" />
-      <div className="h-52 animate-pulse rounded-[10px] bg-line/70" />
+      <div className="h-52 animate-pulse rounded-lg bg-line/70" />
     </div>
   ),
   ssr: false,
@@ -36,7 +37,7 @@ const FeriadosTab = dynamic(() => import("./configuracion/feriados-tab").then((m
   loading: () => (
     <div className="grid gap-3" aria-busy="true">
       <div className="h-9 w-64 animate-pulse rounded-lg bg-line/70" />
-      <div className="h-52 animate-pulse rounded-[10px] bg-line/70" />
+      <div className="h-52 animate-pulse rounded-lg bg-line/70" />
     </div>
   ),
   ssr: false,
@@ -85,6 +86,7 @@ export function AdminSettings({
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
   const [creatingUser, setCreatingUser] = useState(false);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatusType>('idle');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmSeed, setConfirmSeed] = useState(false);
@@ -104,27 +106,37 @@ export function AdminSettings({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [settingsResp, usersResp] = await Promise.all([
-      fetch(`/api/configuracion/settings?${yearParam}`, { cache: "no-store" }),
-      fetch("/api/configuracion/users?limit=200", { cache: "no-store" }),
-    ]);
-    const settingsPayload = (await settingsResp.json().catch(() => ({}))) as
-      Partial<SettingsPayload> & { error?: string };
-    if (!settingsResp.ok) {
-      setError(settingsPayload.error ?? "No se pudo cargar la configuración");
-      setLoading(false);
-      return;
-    }
-    const usersPayload = (await usersResp.json().catch(() => ({}))) as
-      Partial<SettingsPayload> & { error?: string };
+    try {
+      const [settingsResp, usersResp] = await Promise.all([
+        fetch(`/api/configuracion/settings?${yearParam}`, { cache: "no-store" }),
+        fetch("/api/configuracion/users?limit=500", { cache: "no-store" }),
+      ]);
+      const settingsPayload = (await settingsResp.json().catch(() => ({}))) as
+        Partial<SettingsPayload> & { error?: string };
+      if (!settingsResp.ok) {
+        setError(settingsPayload.error ?? "No se pudo cargar la configuración");
+        return;
+      }
+      const usersPayload = (await usersResp.json().catch(() => ({}))) as
+        Partial<SettingsPayload> & { error?: string };
 
-    const nextEntity = { ...emptyEntity, ...(settingsPayload.entity ?? {}) };
-    setEntity(nextEntity);
-    setGovernmentLevels(settingsPayload.governmentLevels ?? []);
-    setRoles(settingsPayload.roles ?? []);
-    setRolePermissions(settingsPayload.rolePermissions ?? []);
-    setUsers(usersPayload.users ?? []);
-    setLoading(false);
+      const nextEntity = { ...emptyEntity, ...(settingsPayload.entity ?? {}) };
+      setEntity(nextEntity);
+      setGovernmentLevels(settingsPayload.governmentLevels ?? []);
+      setRoles(settingsPayload.roles ?? []);
+      setRolePermissions(settingsPayload.rolePermissions ?? []);
+      // Si usersResp falló (status no-ok o red), usersPayload será {} y la lista
+      // quedará vacía. El resto de la pestaña sigue usable: mejor mostrar la
+      // configuración sin usuarios que colgar la pantalla entera.
+      setUsers(usersPayload.users ?? []);
+    } catch {
+      // Antes este Promise.all no tenía try/catch: si fetch lanzaba (red caída),
+      // setLoading(false) no se ejecutaba y la pantalla quedaba colgada en
+      // "Cargando configuración…" para siempre.
+      setError("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
+    }
   }, [yearParam]);
 
   useEffect(() => {
@@ -155,6 +167,7 @@ export function AdminSettings({
       toastError("Usuario inválido", `El usuario es el DNI: ${USUARIO_LONGITUD} dígitos.`);
       return;
     }
+    setSaveStatus('saving');
     setCreatingUser(true);
     setError(null);
 
@@ -184,6 +197,7 @@ export function AdminSettings({
 
     if (!response.ok) {
       toastError("Error al crear usuario", payload.error ?? "No se pudo crear usuario");
+      setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 5000);
       setCreatingUser(false);
       return;
     }
@@ -207,6 +221,7 @@ export function AdminSettings({
     }
     void load();
     toastSuccess("Usuario creado", `${payload.usuario} agregado correctamente`);
+    setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 3000);
     setCreatingUser(false);
   }
 
@@ -267,12 +282,14 @@ export function AdminSettings({
 
     if (!response.ok) {
       toastError("Error al actualizar", payload.error ?? "No se pudo actualizar usuario");
+      setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 5000);
       setSavingUserId(null);
       return;
     }
 
     void load();
     toastSuccess("Usuario actualizado", `${user.email} guardado correctamente`);
+    setSaveStatus('saved'); setTimeout(() => setSaveStatus('idle'), 3000);
     setSavingUserId(null);
   }
 
@@ -346,7 +363,7 @@ export function AdminSettings({
 
   if (loading && !entity.name) {
     return (
-      <div className="emptyState" role="status" aria-live="polite">
+      <div className="rounded-lg border border-line p-3 text-muted" role="status" aria-live="polite">
         <span>Cargando configuración…</span>
       </div>
     );
@@ -355,8 +372,8 @@ export function AdminSettings({
   const shownTab: Tab = section;
 
   return (
-    <div className="settingsLayout">
-      {error ? <p className="evalError">{error}</p> : null}
+    <div className="grid gap-[18px]">
+      {error ? <p className="rounded-lg border border-[#f1b8b1] bg-[#fff1ef] px-3 py-2 text-sm text-danger">{error}</p> : null}
 
       {shownTab === "municipalidad" ? (
         <MunicipalidadTab
@@ -390,16 +407,17 @@ export function AdminSettings({
 
       {shownTab === "feriados" ? <FeriadosTab /> : null}
 
-      <div className="settingsFooter">
+      <div className="sticky bottom-0 z-[2] flex items-center justify-between gap-3.5 rounded-xl border border-line bg-white/94 px-4 py-3.5 shadow-[0_-16px_42px_rgba(23,32,51,0.08)] backdrop-blur-[10px]">
         <div>
           {shownTab === "municipalidad" ? (
-            <span>Los datos se guardan automáticamente mientras escribes. RUC: 11 dígitos. Unidad ejecutora: 6 dígitos.</span>
+            <span className="text-base text-muted">Los datos se guardan automáticamente mientras escribes. RUC: 11 dígitos. Unidad ejecutora: 6 dígitos.</span>
           ) : shownTab === "usuarios" ? (
-            <span>El rol define los permisos; la oficina y la jefatura definen qué expedientes ve cada usuario.</span>
+            <span className="text-base text-muted">El rol define los permisos; la oficina y la jefatura definen qué expedientes ve cada usuario.</span>
           ) : (
-            <span>Calendario de feriados y días no laborables, usado para calcular plazos.</span>
+            <span className="text-base text-muted">Calendario de feriados y días no laborables, usado para calcular plazos.</span>
           )}
         </div>
+        {saveStatus !== 'idle' && <SaveStatus status={saveStatus} />}
       </div>
 
       <ConfirmDialog

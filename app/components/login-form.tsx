@@ -4,6 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  credencialAIdentificador,
+  esUsuarioValido,
+  normalizarUsuario,
+  USUARIO_LONGITUD,
+} from "@/lib/usuario-credencial";
 
 type LoginFormProps = {
   next: string;
@@ -12,7 +18,7 @@ type LoginFormProps = {
 export function LoginForm({ next }: LoginFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -22,11 +28,19 @@ export function LoginForm({ next }: LoginFormProps) {
     event.preventDefault();
     setError(null);
     setInfo(null);
+
+    if (!usuario.includes("@") && !esUsuarioValido(usuario)) {
+      setError(`El usuario es tu DNI: ${USUARIO_LONGITUD} dígitos.`);
+      return;
+    }
     setLoading(true);
 
     const supabase = createClient();
 
     try {
+      // Auth solo entiende de correos: el usuario de ocho dígitos se traduce a su
+      // correo interno aquí, en el único punto donde se habla con Supabase.
+      const email = credencialAIdentificador(usuario);
       if (mode === "signin") {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
@@ -58,11 +72,13 @@ export function LoginForm({ next }: LoginFormProps) {
 
   return (
     <form className="authForm" onSubmit={handleSubmit}>
-      <div className="authTabs" role="tablist">
+      {/* No son pestañas aunque lo parezcan: los dos modos comparten los mismos
+          campos. Lo único que cambia es a dónde se envía el formulario, así que
+          esto elige el modo, no un panel. */}
+      <div className="authTabs" role="group" aria-label="Modo de acceso">
         <button
           type="button"
-          role="tab"
-          aria-selected={mode === "signin"}
+          aria-pressed={mode === "signin"}
           className={mode === "signin" ? "active" : undefined}
           onClick={() => setMode("signin")}
         >
@@ -70,8 +86,7 @@ export function LoginForm({ next }: LoginFormProps) {
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={mode === "signup"}
+          aria-pressed={mode === "signup"}
           className={mode === "signup" ? "active" : undefined}
           onClick={() => setMode("signup")}
         >
@@ -80,15 +95,27 @@ export function LoginForm({ next }: LoginFormProps) {
       </div>
 
       <label className="authField">
-        <span>Correo</span>
+        <span>Usuario</span>
         <input
-          type="email"
-          autoComplete="email"
+          type="text"
+          autoComplete="username"
+          inputMode={usuario.includes("@") ? "text" : "numeric"}
           required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="tu@correo.com"
+          value={usuario}
+          onChange={(event) => {
+            // Se dejan pasar los correos tal cual: las cuentas anteriores a este
+            // cambio siguen entrando por aquí y filtrar a dígitos las borraría
+            // letra a letra mientras se escriben.
+            const v = event.target.value;
+            setUsuario(v.includes("@") ? v.trim() : normalizarUsuario(v));
+          }}
+          placeholder={`${USUARIO_LONGITUD} dígitos (tu DNI)`}
         />
+        {usuario && !usuario.includes("@") && !esUsuarioValido(usuario) ? (
+          <small className="authHint">
+            Faltan {USUARIO_LONGITUD - usuario.length} de {USUARIO_LONGITUD} dígitos.
+          </small>
+        ) : null}
       </label>
 
       <label className="authField">

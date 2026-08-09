@@ -1443,6 +1443,19 @@ textarea:focus,
   opacity: 1;
 }
 
+/* El cronograma de presentación de requerimientos llega como lista (área →
+   fecha) dentro del banner: es la comunicación del Art. 42.2, no solo el aviso
+   de que existe. En columna porque las fechas son lo que el área usuaria lee. */
+.notifBannerCrono {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0 22px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
 .authShell {
   background:
     radial-gradient(circle at 50% 0%, rgba(15, 118, 110, 0.12), transparent 36%),
@@ -6800,6 +6813,62 @@ textarea {
   border-radius: 13px;
 }
 
+/* ── Refinamiento del sidebar: jerarquía, estados y ritmo ──────────────────
+   Ajustes acumulativos sobre las capas de arriba (ganan por ir después). Solo
+   AÑADEN pulido —transiciones, tracking de rótulos, marca del ítem activo,
+   hover más definido—; no tocan posición ni flex, para no alterar el layout ni
+   el modo colapsado/móvil. La audacia se gasta en un solo sitio: la barra de
+   acento del ítem activo (mismo gesto de "estás aquí" que Configuración). */
+.nav a {
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+/* Rótulos de grupo: más tracking y algo más de aire arriba para que los seis
+   grupos se separen de un vistazo, sin subir la densidad. */
+.navSection {
+  gap: 8px;
+}
+
+.navSection + .navSection {
+  margin-top: 2px;
+}
+
+.navSectionLabel {
+  letter-spacing: 0.08em;
+}
+
+/* Ítem activo: barra de acento a la izquierda sobre el degradado ya existente,
+   con el texto y el icono realzados. Es la señal de página actual. */
+.nav a.active {
+  box-shadow: inset 3px 0 0 #65d6ca;
+  color: #ffffff;
+}
+
+.nav a.active svg {
+  color: #7fe3d8;
+}
+
+/* Hover (solo si NO está activo): un punto más claro que el reposo, sin
+   competir con el activo. La especificidad (:not) gana a la regla base. */
+.nav a:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+}
+
+.nav a:hover:not(.active) svg {
+  color: #c4e6e8;
+}
+
+/* Bloque de usuario: separación clara del menú con una línea sutil arriba, para
+   que "quién soy / qué veo" se lea como un bloque aparte del listado. */
+.userBox {
+  border-top: 1px solid var(--nav-line);
+  padding-top: 14px;
+}
+
 /* La columna de contenido ocupa TODO el ancho disponible a la derecha de la
    barra lateral. Antes iba topada a 1480px y centrada con `margin: 0 auto`, lo
    que en pantallas anchas dejaba un pasillo vacio a cada lado y despegaba el
@@ -11736,20 +11805,24 @@ textarea:focus,
   margin-bottom: 8px;
 }
 
+/* Los numerales de la Guía (0, I, II, III–IV…) son jerga para un usuario no
+   técnico. No se quitan —quien conoce la Guía los referencia—, pero dejan de
+   dominar: pasan de pill de marca a una etiqueta discreta y contorneada en color
+   de apoyo, para que lo que lidere sea el nombre llano de la acción. */
 .accionNumeral {
   flex: none;
-  min-width: 34px;
-  height: 22px;
-  padding: 0 7px;
+  min-width: 26px;
+  padding: 1px 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: var(--soft);
-  color: var(--brand);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .accionGroup[data-precondicion="true"] .accionNumeral {
@@ -12415,6 +12488,96 @@ textarea:focus,
   margin-top: 1px;
 }
 
+/* Resumen de completitud del editor: cuántos requisitos hay y qué falta, de un
+   vistazo. Es una guía, no un bloqueo (los requisitos definitivos los establece
+   la DEC, Art. 72.1); por eso lo que falta se avisa, no impide guardar. */
+.reqCalResumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.reqCalResumen .reqCalResumenCuenta {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.reqCalResumen .reqCalResumenFalta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning, #d97706);
+}
+
+.reqCalResumen .reqCalResumenFalta svg {
+  flex: none;
+}
+
+/* Distintivo de modo del editor: encuadra quién actúa. El área usuaria PROPONE
+   (Necesidad / A3, tono neutro) y la DEC DECIDE (A4, tono de marca). El mismo
+   componente, dos roles legales distintos (Art. 44.2.b vs 72.1). */
+.reqCalModo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 8px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.reqCalModo[data-modo="decision"] {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.reqCalModo svg {
+  flex: none;
+}
+
+/* Divulgación progresiva del bloque de capacidad técnica: es el más largo del
+   editor (cinco sub-cuadros), así que arranca plegado tras un encabezado
+   pulsable para no enterrar el resto de tipos del Art. 72.3. */
+.reqCalCapTecnica {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.reqCalCapTecnicaToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.reqCalCapTecnicaToggle small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.reqCalCapTecnicaToggle svg {
+  flex: none;
+  color: var(--muted);
+}
+
 .reqCalRow{
   display: flex;
   align-items: center;
@@ -12509,6 +12672,50 @@ textarea:focus,
   color: var(--warning);
 }
 
+/* Cabecera plegable del contexto de A4 (régimen, modificación del PAC). Ese
+   contexto es permanente —no un aviso que pida acción— y apilado como cajas
+   sueltas sepultaba los avisos decisivos, así que se pliega bajo una sola
+   cabecera. Reutiliza el look de `.pasoGating` (mismo fondo, borde y tipografía)
+   para no romper la gramática visual del paso; es un `button`, de ahí el reset
+   de `text-align`/`cursor`. */
+.pasoContextoToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--soft);
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, var(--line));
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pasoContextoToggle svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--brand);
+}
+
+.pasoContextoToggle:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+}
+
+/* Cuando la modificación del PAC está sin determinar, la cabecera se tiñe como
+   un aviso para que ese punto siga señalando aunque el contexto esté plegado. */
+.pasoContextoToggle.pasoContextoAviso {
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+}
+
+.pasoContextoToggle.pasoContextoAviso svg {
+  color: var(--warning);
+}
+
 /* "No corresponde" no es una advertencia más: es la respuesta a si hay que
    trabajar este paso. Se le da el peso visual que tenía el aviso genérico, y a
    la nota de método el de un consejo, que es lo que es. */
@@ -12580,6 +12787,100 @@ textarea:focus,
   border: 1px solid var(--line);
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* Ruta crítica: el «qué cerrar YA» que desatasca la cuantía. Se tiñe con el
+   color de marca —no es un error ni una advertencia, es la guía del siguiente
+   paso decisivo— y va algo más marcada que el perfil para que se lea primero. */
+.faseRutaCritica {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 12px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand) 34%, var(--line));
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.faseRutaCritica > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--brand);
+}
+
+.faseRutaCriticaIr {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 6px;
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.faseRutaCriticaIr:hover {
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+/* Chat del copiloto del expediente (iteración 4). Se abre desde este botón y se
+   presenta en el panel lateral `.copiloto` (mismo patrón que el copiloto del
+   requerimiento en Necesidades); las clases de abajo dan estilo al formulario y
+   la respuesta DENTRO de ese panel. */
+.faseCopilotoBtn { margin: 2px 0 12px; }
+
+.expedienteChatForm { display: flex; gap: 8px; margin-top: 2px; }
+
+.expedienteChatInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.expedienteChatInput:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+.expedienteChatSend {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.expedienteChatSend:disabled { opacity: .55; cursor: default; }
+
+.expedienteChatAnswer {
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 12.8px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  white-space: pre-wrap;
 }
 
 .fasePerfilQue {
@@ -12670,16 +12971,32 @@ textarea:focus,
   text-align: center;
 }
 
-.pasoLabel {
-  /* Con la cabecera envolviendo, el título necesita un suelo de ancho: dejarlo
-     en `flex: 1 1 0` lo estrangulaba a unos pocos caracteres y la cabecera
-     crecía hasta 500px de alto partiendo la palabra letra a letra. Con una base
-     del 55% son los CHIPS los que bajan de línea, que es lo correcto —ocupan
-     poco y se leen igual en la segunda fila—. */
+/* El título y su resumen llano van apilados. La base flex vive AQUÍ (antes en
+   `.pasoLabel`): dejarla en `flex: 1 1 0` estrangulaba el bloque a unos pocos
+   caracteres y la cabecera crecía partiendo la palabra letra a letra. Con una
+   base del 55% son los CHIPS los que bajan de línea, que es lo correcto —ocupan
+   poco y se leen igual en la segunda fila—. */
+.pasoLabelWrap {
   flex: 1 1 55%;
   min-width: 11ch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.pasoLabel {
   font-size: 13.5px;
   font-weight: 600;
+}
+
+/* El «para qué» en lenguaje llano: peso y color de apoyo para que no compita con
+   el título, pero legible sin abrir el paso. */
+.pasoResumen {
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .pasoStatusChip {
@@ -12728,6 +13045,90 @@ textarea:focus,
   font-size: 13px;
   line-height: 1.5;
   color: var(--ink);
+}
+
+/* Orientación del paso (copiloto · iteración 1): «qué falta aquí» y «qué sigue».
+   Tratamiento sobrio de AYUDA —fondo neutro, no el tinte de aviso—: aparece en
+   casi todos los pasos con obligatorios pendientes, así que no debe leerse como
+   una alarma, sino como la guía de qué hacer a continuación. */
+.pasoOrienta {
+  margin: 10px 0 6px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pasoOrientaTitulo {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.pasoOrientaLista {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.pasoOrientaLista li {
+  margin: 2px 0;
+  color: var(--ink-soft);
+}
+
+.pasoOrientaSigue {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.pasoOrientaSigue svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--brand);
+}
+
+/* Botón del copiloto (redactar con IA) + su nota. Acción de marca, con la nota
+   al lado explicando que solo rellena huecos y que hay que revisar: el usuario
+   debe saber que la IA propone, no decide. */
+.pasoCopiloto {
+  display: flex;
+  align-items: center;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+}
+
+.pasoCopilotoBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pasoCopilotoBtn:hover:not(:disabled) { filter: brightness(1.07); }
+.pasoCopilotoBtn:disabled { opacity: .6; cursor: default; }
+
+.pasoCopilotoNota {
+  flex: 1 1 200px;
+  min-width: 180px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .pasoBaseLegal {
@@ -12793,20 +13194,111 @@ textarea:focus,
   grid-column: 1 / -1;
 }
 
-/* Subtítulo de agrupación de campos (solo A4: variables del Art. 46.1). */
+/* Un select de una línea junto a un campo más alto (su sustento en h)/i)) se
+   ancla arriba en vez de estirarse a la altura de la fila. */
+.pasoFieldTop {
+  align-self: start;
+}
+
+/* Fija un campo a la columna 1 o 2 del grid de dos columnas. Sirve para apilar
+   varios campos en una columna dejando la otra con uno solo. Se resetea en móvil
+   (el grid pasa a una sola columna). */
+.pasoFieldCol1 {
+  grid-column: 1;
+}
+
+.pasoFieldCol2 {
+  grid-column: 2;
+}
+
+/* Cabecera de sección de A4 (variables del Art. 46.1, agrupadas a–t).
+   Antes era un fino subrayado en mayúsculas, indistinguible de una etiqueta más en
+   un muro de ~46 campos. Ahora cada bloque es una barra con acento de marca y un
+   INDICADOR DE PROGRESO (barra + "llenos/total", o un check "completo"): en un
+   formato de cumplimiento tan largo, saber "qué falta por sección" es la tarea, no
+   un adorno. El progreso cuenta solo los campos que la norma pide —obligatorios y
+   "de corresponder"— porque son los que alimentan el documento firmado. */
 .pasoGrupo {
   grid-column: 1 / -1;
-  margin-top: 6px;
-  padding-bottom: 3px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 6px 10px 6px 11px;
+  border-radius: var(--radio-sm, 8px);
+  background: color-mix(in srgb, var(--brand, #12695d) 5%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--brand, #12695d) 14%, transparent);
+  border-left: 3px solid var(--brand, #12695d);
+}
+.pasoGrupo:first-child {
+  margin-top: 0;
+}
+
+.pasoGrupoTitulo {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
-.pasoGrupo:first-child {
-  margin-top: 0;
+
+.pasoGrupoProgreso {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pasoGrupoBarra {
+  width: 46px;
+  height: 4px;
+  border-radius: var(--radio-pill, 999px);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  overflow: hidden;
+}
+.pasoGrupoBarra > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand, #12695d);
+  transition: width 0.2s ease;
+}
+
+.pasoGrupoCuenta {
+  min-width: 24px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pasoGrupoCheck {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok, #16a34a);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Sección con todos sus campos exigibles llenos: el acento pasa a verde y el
+   contador se sustituye por el check "completo". */
+.pasoGrupo[data-completo="si"] {
+  background: color-mix(in srgb, var(--ok, #16a34a) 7%, var(--panel));
+  border-color: color-mix(in srgb, var(--ok, #16a34a) 22%, transparent);
+  border-left-color: var(--ok, #16a34a);
+}
+.pasoGrupo[data-completo="si"] .pasoGrupoCheck {
+  display: inline-flex;
+}
+.pasoGrupo[data-completo="si"] .pasoGrupoBarra,
+.pasoGrupo[data-completo="si"] .pasoGrupoCuenta {
+  display: none;
 }
 
 .pasoField input,
@@ -12825,6 +13317,38 @@ textarea:focus,
   resize: vertical;
 }
 
+/* Campo con prefijo fijo (p. ej. "Memorándum N° "): el contenedor imita al input
+   y el prefijo va dentro en gris; el input real pierde su borde propio para que se
+   vea como un solo campo. Va DESPUÉS de «.pasoField input» para ganarle. */
+.pasoFieldConPrefijo {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: var(--panel);
+}
+
+.pasoFieldConPrefijo .pasoFieldPrefijo {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pasoFieldConPrefijo input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 7px 0;
+  background: transparent;
+}
+
+.pasoFieldConPrefijo input:focus {
+  outline: none;
+}
+
 .pasoCheck {
   grid-template-columns: auto 1fr;
   align-items: start;
@@ -12840,6 +13364,20 @@ textarea:focus,
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
+}
+
+/* Enlace de verificación de un campo (p. ej. las bases estándar vigentes):
+   comparte el tamaño de la ayuda pero se distingue como enlace. */
+.pasoFieldEnlace {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--link, #2563eb);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pasoFieldEnlace:hover {
+  opacity: 0.8;
 }
 
 /* Relación entre lo que el área usuaria propuso en el requerimiento (A3) y lo
@@ -12925,6 +13463,26 @@ textarea:focus,
   margin-top: 6px;
   padding-top: 10px;
   border-top: 1px dashed var(--line);
+}
+
+/* Explica, bajo la fila de acciones, por qué "Guardar" está gris al elegir
+   "Hecho". Tono discreto (no es un error nuevo: repite en el punto del bloqueo
+   lo que ya detallan las listas de arriba) pero con el color de aviso para que
+   se lea como la causa del botón deshabilitado. */
+.pasoStatusMotivo {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.pasoStatusMotivo svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warning);
 }
 
 .pasoStatusSelect {
@@ -13022,24 +13580,6 @@ textarea:focus,
 }
 
 /* A7 · fecha de la solicitud de certificación (editable antes de exportar). */
-.pasoFechaSolicitud {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 280px;
-  margin-top: 4px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.pasoFechaSolicitud input {
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font: inherit;
-  color: var(--ink);
-}
-
 /* Stepper del flujo del requerimiento (C). */
 .flujoStepper { margin: 6px 0 14px; }
 .flujoPasos {
@@ -14376,6 +14916,12 @@ textarea:focus,
   .segResultGrid {
     grid-template-columns: 1fr;
   }
+
+  /* Con una sola columna, fijar a la 1 o la 2 no tiene sentido (la 2 no existe). */
+  .pasoFieldCol1,
+  .pasoFieldCol2 {
+    grid-column: auto;
+  }
 }
 
 /* ===== Mejoras NecesidadDetail ===== */
@@ -15149,6 +15695,47 @@ textarea:focus,
   font-weight: 600;
   padding: 2px 8px;
   white-space: nowrap;
+}
+
+/* Progreso de obligatorios en la cabecera del paso (todas las fases A1–A8). Mismo
+   lenguaje visual que las secciones de A4: una barra de marca con la proporción de
+   obligatorios llenos mientras falta algo, y un estado "listo" en verde cuando no
+   queda ninguno por llenar —la señal, sin abrir el paso, de que ya se puede marcar
+   como hecho—. El conteo sale del mismo helper de visibilidad, así que vale igual
+   para un paso con dos obligatorios que para A4 con veinte. */
+.pasoProgreso {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.pasoProgresoBarra {
+  width: 42px;
+  height: 4px;
+  border-radius: var(--radio-pill, 999px);
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  overflow: hidden;
+}
+.pasoProgresoBarra > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand, #12695d);
+  transition: width 0.2s ease;
+}
+.pasoProgresoCuenta {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.pasoProgresoListo {
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radio-pill, 999px);
+  background: color-mix(in srgb, var(--ok, #16a34a) 13%, transparent);
+  color: var(--ok, #16a34a);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* Avance de la Fase 1 del expediente, visto desde la necesidad. */
@@ -16329,10 +16916,14 @@ a.panelOrigen:hover {
   color: #111;
 }
 
+/* El número del informe encabeza a la IZQUIERDA, en negrita y subrayado, igual
+   que en el .docx (membrete de la entidad). Antes salía centrado sin subrayar,
+   así que la previa no coincidía con el documento exportado. */
 .hojaTitulo {
   margin: 0 0 18px;
-  text-align: center;
+  text-align: left;
   font-weight: 700;
+  text-decoration: underline;
 }
 
 .hojaSubtitulo {
@@ -16384,6 +16975,14 @@ a.panelOrigen:hover {
   height: 9px;
 }
 
+/* Regla de la cabecera (bajo la Fecha): de borde a borde del área de escritura,
+   igual que el borde inferior del párrafo en el .docx. */
+.hojaLinea {
+  border: 0;
+  border-top: 1px solid #000;
+  margin: 4px 0 8px;
+}
+
 .hojaTabla {
   width: 100%;
   border-collapse: collapse;
@@ -16419,5 +17018,201 @@ a.panelOrigen:hover {
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--ink);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Sidebar unificado (colapso + drawer móvil)
+   ────────────────────────────────────────────────────────────────────────────
+   Llega aquí al final de la hoja para GANAR por cascada sobre los bloques
+   previos del shell (hay varias copias del sidebar en este archivo; la última
+   definición es la que manda). Complementa el `<Sidebar>` cliente: colapso
+   persistido en localStorage, atajos de teclado y drawer para móvil.
+   El colapso es SOLO escritorio (>= 981px): en pantallas angostas el sidebar
+   se convierte en drawer y el ancho colapsado no aplica.                        */
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.sidebarTop .brand {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.sidebarCollapseBtn,
+.sidebarMobileClose {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--nav-line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #9fc0c5;
+  cursor: pointer;
+}
+
+.sidebarCollapseBtn:hover,
+.sidebarMobileClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.sidebarMobileClose {
+  display: none;
+}
+
+.sidebarMobileToggle {
+  display: none;
+}
+
+.sidebarMobileScrim {
+  display: none;
+}
+
+@media (min-width: 981px) {
+  .shell:has(.sidebar.collapsed) {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    transition: width 0.18s ease;
+  }
+
+  .sidebar.collapsed {
+    padding: 20px 10px;
+  }
+
+  .sidebar.collapsed .sidebarTop {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sidebar.collapsed .brand {
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .sidebar.collapsed .brandText {
+    display: none;
+  }
+
+  .sidebar.collapsed .navSectionLabel {
+    display: none;
+  }
+
+  .sidebar.collapsed .nav a {
+    justify-content: center;
+    position: relative;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .nav a .navLabel {
+    display: none;
+  }
+
+  .sidebar.collapsed .navBadge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    margin-left: 0;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    line-height: 17px;
+    text-align: center;
+    font-size: 10px;
+  }
+
+  .sidebar.collapsed .userBox {
+    align-items: center;
+  }
+
+  .sidebar.collapsed .userIdentity {
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .userIdentityText,
+  .sidebar.collapsed .userContext,
+  .sidebar.collapsed .userBox form {
+    display: none;
+  }
+}
+
+/* ── Drawer móvil ─────────────────────────────────────────────────────────── */
+@media (max-width: 980px) {
+  .shell,
+  .shell:has(.sidebar.collapsed) {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    width: 280px;
+    z-index: 1110;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+  }
+
+  .sidebar.mobileOpen {
+    transform: translateX(0);
+  }
+
+  .sidebarMobileToggle {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1120;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    background: rgba(18, 33, 44, 0.9);
+    color: #e6f0f3;
+    box-shadow: 0 8px 20px rgba(8, 15, 22, 0.3);
+    cursor: pointer;
+  }
+
+  .sidebarMobileToggle.isHidden {
+    display: none;
+  }
+
+  .sidebarMobileScrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: block;
+    background: rgba(8, 15, 22, 0.55);
+  }
+
+  .sidebarCollapseBtn {
+    display: none;
+  }
+
+  .sidebarMobileClose {
+    display: grid;
+  }
+
+  /* La media query de abajo (max-width: 980px) convertía los items del nav en
+     una rejilla de varias columnas pensada para un sidebar estático arriba; en
+     un drawer vertical de 280px eso se ve mal. Se vuelve a una columna. */
+  .sidebar .navSectionItems {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    padding-left: 54px;
+  }
 }
 

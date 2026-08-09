@@ -33,9 +33,44 @@
 @source "./components/necesidad-traslado-panel.tsx";
 @source "./components/necesidad-eett-tdr-modal.tsx";
 @source "./components/necesidad-eett-campo.tsx";
+@source "./components/necesidad-eett-analiza-modal.tsx";
 @source "./components/ui";
+@source "./components/necesidad";
 @source "./components/necesidades";
 @source "./necesidades";
+/* Expedientes — migración a Tailwind por fases. Fase 1: la lista. Fase 2: el
+   shell del detalle (cabecera, estado, grid); el resto del detalle sigue en
+   styles.css hasta las fases siguientes. */
+@source "./components/process-list.tsx";
+@source "./components/process-detail.tsx";
+/* Fase 3: subcomponentes del detalle. */
+@source "./components/global-progress.tsx";
+@source "./components/fase-preparatoria/notification-banner.tsx";
+@source "./components/phase-tracker.tsx";
+/* Fase 4: fase-panel (el grande) — migración por clústeres. */
+@source "./components/fase-panel.tsx";
+/* Fase 5: sub-editores del detalle. `tabla-editor-estilos.ts` lleva las cadenas
+   de clases compartidas (PROV_TABLA…), así que también debe escanearse. */
+@source "./components/tabla-editor-estilos.ts";
+@source "./components/proveedores-consultados-editor.tsx";
+@source "./components/evaluadores-editor.tsx";
+@source "./components/cronograma-roles-editor.tsx";
+@source "./components/requisitos-calificacion-editor.tsx";
+@source "./components/modal-shell.tsx";
+@source "./components/hoja-preview.tsx";
+@source "./configuracion/page.tsx";
+@source "./components/configuracion-workspace.tsx";
+@source "./components/configuracion/municipalidad-tab.tsx";
+@source "./components/configuracion/save-status.tsx";
+@source "./components/configuracion/empty-state.tsx";
+@source "./components/admin-settings.tsx";
+@source "./components/configuracion/feriados-tab.tsx";
+@source "./components/configuracion/usuarios-tab.tsx";
+@source "./components/oficinas/areas-tab.tsx";
+@source "./components/oficinas/numeracion-tab.tsx";
+@source "./components/oficinas/membrete-tab.tsx";
+@source "./components/oficinas/modelos-requerimiento.tsx";
+@source "./components/oficinas/procesos-modal.tsx";
 
 /* ── Tokens de marca ────────────────────────────────────────────────────────
    REFERENCIAN las variables CSS efectivas del sistema (el :root ganador de
@@ -67,8 +102,22 @@
   --color-success: var(--success);
   --color-success-soft: color-mix(in srgb, var(--success) 13%, var(--surface));
 
-  /* Forma: se conserva la escala del sistema (card 14). */
+  /* Forma: se conserva la escala del sistema. */
   --radius-card: 14px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* Tipografía: escala definida para el módulo Configuración. Reemplaza
+     progresivamente los `text-[12.5px]` y similares. */
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-base: 13.5px;
+  --text-md: 14.5px;
+  --text-lg: 16px;
+  --text-xl: 18px;
 
   /* Elevación (reusa las sombras del sistema). */
   --shadow-card: 0 1px 2px rgba(23, 32, 51, 0.05);
