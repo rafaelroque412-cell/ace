@@ -22,6 +22,24 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   productionBrowserSourceMaps: false,
+  // Cabeceras de seguridad para TODAS las respuestas. Antes vivían solo en
+  // netlify.toml (atadas a Netlify); aquí son portables y se aplican también en
+  // Vercel. El cacheo inmutable de /_next/static/* lo hace Vercel por su cuenta,
+  // así que no se replica.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains; preload" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
