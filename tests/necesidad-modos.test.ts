@@ -20,9 +20,11 @@ describe("reparto de bloques por modo", () => {
     expect(panelesDelModo("revisar").length).toBeGreaterThan(0);
   });
 
-  it("el flujo y la ficha viven en los dos modos", () => {
-    // Quien revisa necesita leer lo que juzga sin cambiar de modo.
-    for (const id of ["sec-flujo", "sec-ficha"]) {
+  it("el flujo, la ficha y la derivacion viven en los dos modos", () => {
+    // Quien revisa necesita leer lo que juzga sin cambiar de modo; y la
+    // derivacion —«Abrir expediente» sobre todo— debe llegarse desde «Redactar»
+    // (modo por defecto) sin descubrir el interruptor de modo.
+    for (const id of ["sec-flujo", "sec-ficha", "sec-derivacion"]) {
       expect(modoParaSeccion(id), id).toBe(null);
       expect(panelesDelModo("redactar"), id).toContain(id);
       expect(panelesDelModo("revisar"), id).toContain(id);
@@ -31,8 +33,8 @@ describe("reparto de bloques por modo", () => {
 
   it("cada modo tiene bloques que le son propios", () => {
     // Si todo estuviera en ambos, el interruptor no separaria nada.
-    expect(modoParaSeccion("sec-eett")).toBe("redactar");
-    expect(modoParaSeccion("sec-derivacion")).toBe("revisar");
+    expect(modoParaSeccion("sec-adjuntos")).toBe("redactar");
+    expect(modoParaSeccion("sec-admisibilidad")).toBe("revisar");
   });
 
   it("un id desconocido devuelve null en vez de lanzar", () => {

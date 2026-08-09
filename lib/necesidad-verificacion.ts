@@ -19,6 +19,7 @@
 // una exigencia que la norma no hace.
 
 import type { Necesidad } from "./necesidades";
+import type { NecesidadItem } from "./necesidad-items";
 
 export type NivelVerificacion = "ok" | "warn" | "stop";
 
@@ -66,7 +67,7 @@ function art441(n: Necesidad): GrupoVerificacion {
   return { articulo: "Art. 44.1 · Finalidad pública", items };
 }
 
-function art4410(n: Necesidad): GrupoVerificacion {
+function art4410(n: Necesidad, desagregado: NecesidadItem[] = []): GrupoVerificacion {
   const items: ItemVerificacion[] = [];
   items.push(
     vacio(n.tipo_objeto)
@@ -74,20 +75,39 @@ function art4410(n: Necesidad): GrupoVerificacion {
       : { etiqueta: "Objeto de la contratación", nivel: "ok" },
   );
   items.push(
-    vacio(n.descripcion_detallada)
+    vacio(n.descripcion_general)
       ? {
-          etiqueta: "Especificaciones técnicas o TDR",
+          // Bloqueo (stop), no aviso: la descripción general es el NÚCLEO del
+          // requerimiento —Art. 44.2, "el requerimiento describe la prestación"— y
+          // está marcada `obligatorio` en la ficha. A diferencia del detalle técnico
+          // del 3.4 (que puede ir como PDF adjunto), esto no tiene vía alterna: sin
+          // ella no hay qué contratar y remitir enviaría a la DEC un requerimiento en
+          // blanco. El gate de remisión solo cuenta `stop`, así que un campo
+          // `obligatorio` que no figure aquí no bloquea nada (era el caso).
+          etiqueta: "Descripción general del requerimiento",
           nivel: "stop",
-          porque:
-            "El Art. 126.1 exige describir qué se contrata. Sin esto, el expediente no puede elaborar bases ni el mercado puede cotizar.",
-          campo: "descripcionDetallada",
+          porque: "El Art. 44.2 exige que el requerimiento describa la prestación. Es su contenido nuclear; sin él no se puede remitir a la DEC.",
+          campo: "descripcionGeneral",
         }
-      : { etiqueta: "Especificaciones técnicas o TDR", nivel: "ok" },
+      : { etiqueta: "Descripción general del requerimiento", nivel: "ok" },
   );
-  const sinCantidad = !Number(n.cantidad) || vacio(n.unidad_medida);
+  // Los Términos de referencia / EETT del 3.4 son OPCIONALES en la necesidad y no
+  // figuran en el checklist. El detalle técnico (Art. 126.1) puede escribirse en la
+  // ficha O adjuntarse como PDF en el panel de EETT/TDR, y esta función solo ve el
+  // texto `descripcion_detallada`, no los adjuntos: encendía el aviso en amarillo
+  // aunque el PDF ya estuviera subido, y el área usuaria lo leía como «es obligatorio
+  // adjuntar el PDF». Como es opcional, no debe aparecer como pendiente al remitir.
+  // La cantidad y la unidad viven en el desagregado por ítems (Art. 52), no en la
+  // cabecera: mirar `n.cantidad` encendía el aviso siempre y su botón "Ir al
+  // campo" apuntaba a un control que ya no existe. Solo se cae a la cabecera para
+  // necesidades antiguas sin desglose.
+  const sinCantidad =
+    desagregado.length > 0
+      ? desagregado.some((it) => !Number(it.cantidad) || vacio(it.unidadMedida))
+      : !Number(n.cantidad) || vacio(n.unidad_medida);
   items.push(
     sinCantidad
-      ? { etiqueta: "Cantidad y unidad de medida", nivel: "warn", porque: "Sin cantidad, el mercado no puede cotizar y la cuantía no se sostiene.", campo: "cantidad" }
+      ? { etiqueta: "Cantidad y unidad de medida", nivel: "warn", porque: "Sin cantidad, el mercado no puede cotizar y la cuantía no se sostiene.", campo: desagregado.length > 0 ? "items" : "cantidad" }
       : { etiqueta: "Cantidad y unidad de medida", nivel: "ok" },
   );
   return { articulo: "Art. 44.10 · Objeto y descripción", items };
@@ -112,13 +132,13 @@ function art442(n: Necesidad): GrupoVerificacion {
   );
   items.push(
     vacio(n.modalidad_pago)
-      ? { etiqueta: "c) Propuesta de modalidad de pago", nivel: "warn", porque: "De corresponder. Si no aplica, déjalo dicho: en blanco no se distingue de «no lo he mirado».", campo: "modalidadPago" }
-      : { etiqueta: "c) Propuesta de modalidad de pago", nivel: "ok" },
+      ? { etiqueta: "c.1) Propuesta de modalidad de pago", nivel: "warn", porque: "De corresponder. Si no aplica, déjalo dicho: en blanco no se distingue de «no lo he mirado».", campo: "modalidadPago" }
+      : { etiqueta: "c.1) Propuesta de modalidad de pago", nivel: "ok" },
   );
   items.push(
     vacio(n.sistema_entrega)
-      ? { etiqueta: "c) Propuesta de sistema de entrega", nivel: "warn", porque: "De corresponder. Si no aplica, déjalo dicho: en blanco no se distingue de «no lo he mirado».", campo: "sistemaEntrega" }
-      : { etiqueta: "c) Propuesta de sistema de entrega", nivel: "ok" },
+      ? { etiqueta: "c.2) Propuesta de sistema de entrega", nivel: "warn", porque: "De corresponder. Si no aplica, déjalo dicho: en blanco no se distingue de «no lo he mirado».", campo: "sistemaEntrega" }
+      : { etiqueta: "c.2) Propuesta de sistema de entrega", nivel: "ok" },
   );
   return { articulo: "Art. 44.2 · Condiciones de contratación (de corresponder)", items };
 }
@@ -255,8 +275,8 @@ function coherencia(n: Necesidad, hoy?: string): GrupoVerificacion {
  * Los grupos, en el orden del Art. 44: por qué → qué → en qué condiciones, y al
  * final lo que mirará el expediente (Art. 54) y la coherencia de la ficha.
  */
-export function verificarNecesidad(n: Necesidad, hoy?: string): GrupoVerificacion[] {
-  return [art441(n), art4410(n), art442(n), art54(n), coherencia(n, hoy)];
+export function verificarNecesidad(n: Necesidad, desagregado: NecesidadItem[] = [], hoy?: string): GrupoVerificacion[] {
+  return [art441(n), art4410(n, desagregado), art442(n), art54(n), coherencia(n, hoy)];
 }
 
 export type ResumenVerificacion = {
@@ -269,8 +289,8 @@ export type ResumenVerificacion = {
   lista: boolean;
 };
 
-export function resumenNecesidad(n: Necesidad, hoy?: string): ResumenVerificacion {
-  const grupos = verificarNecesidad(n, hoy);
+export function resumenNecesidad(n: Necesidad, desagregado: NecesidadItem[] = [], hoy?: string): ResumenVerificacion {
+  const grupos = verificarNecesidad(n, desagregado, hoy);
   const items = grupos.flatMap((g) => g.items);
   const bloquean = items.filter((i) => i.nivel === "stop").length;
   return {

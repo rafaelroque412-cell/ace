@@ -25,6 +25,12 @@ export type FiltrosNecesidades = {
   fechaRequeridaHasta?: string;
   /** Portafolio: "estancadas" (sin cambios desde antes de este timestamp ISO). */
   updatedAntesDe?: string;
+  /**
+   * Fragmento `order=` de PostgREST ya validado por el llamador (p. ej.
+   * `monto_estimado.desc.nullslast`). NUNCA es texto libre del cliente: el route
+   * lo deriva de una clave del catálogo con `ordenPostgrest`. Ausente → recientes.
+   */
+  orden?: string;
   limit: number;
   offset: number;
   select: string;
@@ -69,7 +75,7 @@ function igual(columna: string, valor: string): string {
 export function construirQueryNecesidades(f: FiltrosNecesidades): string {
   const partes = [
     `select=${f.select}`,
-    "order=created_at.desc",
+    `order=${f.orden?.trim() || "created_at.desc"}`,
     `limit=${f.limit}`,
     `offset=${f.offset}`,
   ];

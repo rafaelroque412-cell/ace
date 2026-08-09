@@ -26,7 +26,7 @@ export function CoherenciaNecesidad({
     <section aria-label="Coherencia del requerimiento" className="cohNec">
       <header className="cohNecHead">
         <ShieldAlert size={15} aria-hidden />
-        <strong>Coherencia del requerimiento</strong>
+        <h3 className="panelTitle">Coherencia del requerimiento</h3>
         {hay ? (
           <span className="cohNecPill" data-stop={bloquean > 0 ? "true" : undefined}>
             {tarjetas.length === 1 ? "1 cosa que revisar" : `${tarjetas.length} cosas que revisar`}

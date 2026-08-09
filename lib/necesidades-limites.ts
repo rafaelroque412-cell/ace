@@ -21,6 +21,24 @@
 export const NOMBRE_MAX = 500;
 
 /**
+ * Acota un número al rango del schema, redondeando a entero.
+ *
+ * Es el equivalente numérico de capar el texto a su tope: el cliente lo usa al
+ * construir el PATCH para que un número fuera de rango —tecleado, insertado por
+ * el copiloto o heredado de un borrador— no deje la ficha imposible de guardar
+ * (PATCH 400 en CADA autoguardado, que es como se cuelan estos bloqueos). Solo se
+ * aplica a los campos que DECLARAN min/max en la ficha; esos son días o periodos,
+ * que el schema define `.int()`. La cantidad y los importes no declaran rango y
+ * conservan sus decimales, así que no pasan por aquí.
+ */
+export function acotarNumero(n: number, min?: number, max?: number): number {
+  let v = Math.round(n);
+  if (min !== undefined) v = Math.max(v, min);
+  if (max !== undefined) v = Math.min(v, max);
+  return v;
+}
+
+/**
  * Tope de caracteres por campo de texto de la Necesidad (debe reflejar los
  * `optionalText(n)` del schema de arriba). El cliente lo usa para CAPAR el valor
  * en la entrada, en la inserción del copiloto IA y al restaurar el borrador, de
@@ -88,7 +106,7 @@ export const LIMITES_TEXTO: Record<string, number> = {
   normasTecnicas: 2000,
   prestacionesAccesorias: 2000,
   otrasPenalidades: 3000,
-  solucionControversias: 1500,
+  solucionControversias: 8000,
   // `plazoRespuestas` NO esta aqui: paso a ser un numero de dias, no texto.
   // Aqui solo viven los campos de texto, que es lo que el formulario capa.
   plazoRespuestasTexto: 1200,
@@ -128,7 +146,7 @@ export const LIMITES_TEXTO: Record<string, number> = {
   equipamientoEstrategicoAcreditacion: 2000,
   infraestructuraEstrategica: 2000,
   infraestructuraEstrategicaAcreditacion: 2000,
-  gestionRiesgos: 2000,
+  gestionRiesgos: 20000,
   metasFisicas: 2000,
   disponibilidadTerreno: 2000,
   seguros: 2000,

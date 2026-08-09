@@ -21,3 +21,15 @@ export const CAMPOS_SIN_REDACCION_IA: ReadonlySet<string> = new Set([
   "descripcionDetallada",
   "lugarEntrega",
 ]);
+
+// Campos cuyo botón NO llama al modelo: COMPONE el texto del formato con datos ya
+// registrados (Art. 67 forma de pago; apartado j) plazo de respuestas). El botón
+// se rotula "Redactar del formato" en ellos, para no llamar "IA" a un compositor
+// de plantilla —coherente con el principio del producto: los textos legales salen
+// del formato/código, no de un modelo—. La lógica vive en `pedirRedactarIA`
+// (necesidad-detail.tsx); mantener ambas en sincronía.
+//
+// `recepcionConformidad` queda FUERA a propósito: compone, pero cae al copiloto
+// (IA real) cuando el compositor no cubre el caso, así que "Redactar con IA" no
+// miente en él.
+export const CAMPOS_COMPOSICION_LOCAL: ReadonlySet<string> = new Set(["formaPago", "plazoRespuestasTexto"]);

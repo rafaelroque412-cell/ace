@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   AlertTriangle,
@@ -9,6 +10,7 @@ import {
   CheckCircle2,
   CircleDot,
   Download,
+  FileSearch,
   FileText,
   Loader,
   Pencil,
@@ -38,7 +40,7 @@ import {
   modoParaSeccion,
   panelesDelModo,
 } from "@/lib/necesidad-modos";
-import type { Necesidad, NecesidadDocumento, ObservacionNecesidad, RiesgoNecesidad } from "@/lib/necesidades";
+import type { Necesidad, NecesidadDocumento, ObservacionNecesidad } from "@/lib/necesidades";
 import { VerificacionNecesidad } from "./necesidad-verificacion-panel";
 import { HistorialNecesidad } from "./historial-necesidad";
 import { ObservacionesNecesidad } from "./observaciones-necesidad";
@@ -68,10 +70,16 @@ const EettTdrModal = dynamic(
   () => import("./necesidad-eett-tdr-modal").then((m) => m.EettTdrModal),
   { ssr: false },
 );
+const NecesidadEettAnalizaModal = dynamic(
+  () => import("./necesidad-eett-analiza-modal").then((m) => m.NecesidadEettAnalizaModal),
+  { ssr: false },
+);
 import {
   Alert,
   Badge,
   Button,
+  Dialog,
+  DialogContent,
   EmptyState,
   IconButton,
 } from "./ui";
@@ -108,8 +116,8 @@ const FichaEditable = dynamic(() => importarFichaEditable().then((m) => m.FichaE
   ssr: false,
 });
 import { FichaLectura } from "./necesidad/ficha-lectura";
+import { BarraObligatorios } from "./necesidad/ficha-progreso";
 import { PanelAdjuntos } from "./necesidad/panel-adjuntos";
-import { PanelRiesgos } from "./necesidad/panel-riesgos";
 import { useCallbackEstable } from "./necesidad/usar-callback-estable";
 import {
   NO_OBJECION_LABEL,
@@ -137,6 +145,20 @@ import {
   type FichaSection,
   objetosEfectivosDe,
 } from "@/lib/necesidad-ficha-secciones";
+// Las reglas que deciden QUE campos ve el area usuaria viven en este modulo
+// puro (probado sin React). El componente las envuelve con el mismo nombre de
+// siempre para no reescribir el centenar de referencias del JSX.
+import {
+  avanceDeObligatorios,
+  camposAplicables,
+  camposVisiblesDeSeccion,
+  type EjesFicha,
+  esCampoExigible,
+  esCampoObligatorio,
+  obligatoriosDelProceso as obligatoriosDelProcesoDeEjes,
+  tieneValorEnForm,
+  tieneValorGuardado,
+} from "@/lib/necesidad-ficha-derivar";
 import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { componerFormaPago } from "@/lib/forma-pago";
 import { componerPlazoRespuestas } from "@/lib/plazo-respuestas";
@@ -228,14 +250,17 @@ export function NecesidadDetail({
   necesidadId,
   permisos,
   role,
+  usuarioId,
 }: {
   necesidadId: string;
   permisos: Permisos;
   role: string;
+  /** Id del usuario en sesión: para saber si es el propietario (borrar). */
+  usuarioId: string | null;
 }) {
+  const router = useRouter();
   const [necesidad, setNecesidad] = useState<NecesidadExt | null>(null);
   const [documentos, setDocumentos] = useState<NecesidadDocumento[]>([]);
-  const [riesgos, setRiesgos] = useState<RiesgoNecesidad[]>([]);
 
   // Módulo EETT/TDR: PDFs de especificaciones técnicas / términos de referencia
   // subidos a la necesidad (indexados en RAG) + modal de revisión/edición.
@@ -266,7 +291,10 @@ export function NecesidadDetail({
     initialRevision?: EettRevision | null;
     initialPropuesta?: EettPropuesta | null;
   } | null>(null);
+  const [analizaTdrAbierta, setAnalizaTdrAbierta] = useState<{ doc: EettDocRow } | null>(null);
   const eettFileRef = useRef<HTMLInputElement | null>(null);
+  // Modal de gestión del PDF de EETT/TDR, abierto desde el botón de la sección 3.4.
+  const [gestionTdrAbierta, setGestionTdrAbierta] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -291,15 +319,23 @@ export function NecesidadDetail({
   // Se pide a `parametros-segmentacion`, que la expone a cualquier autenticado
   // (entity_settings es solo-admin por RLS y quien formula no lo es).
   const [uitValor, setUitValor] = useState<number | null>(null);
+  // Rango de la LP abreviada para bienes (Configuración anual): decide qué ítems
+  // llevan requisito de experiencia por ítem. Del mismo endpoint que la UIT.
+  const [lpAbreviadaMin, setLpAbreviadaMin] = useState<number | null>(null);
+  const [lpAbreviadaMax, setLpAbreviadaMax] = useState<number | null>(null);
   useEffect(() => {
     let cancelado = false;
     void (async () => {
       try {
         const r = await fetch("/api/configuracion/parametros-segmentacion", { cache: "no-store" });
         const d = await r.json();
-        if (!cancelado && r.ok) setUitValor(typeof d.uitValor === "number" ? d.uitValor : null);
+        if (!cancelado && r.ok) {
+          setUitValor(typeof d.uitValor === "number" ? d.uitValor : null);
+          setLpAbreviadaMin(typeof d.lpAbreviadaBienesMin === "number" ? d.lpAbreviadaBienesMin : null);
+          setLpAbreviadaMax(typeof d.lpAbreviadaBienesMax === "number" ? d.lpAbreviadaBienesMax : null);
+        }
       } catch {
-        // Sin UIT el cuadro lo dice y no bloquea nada.
+        // Sin estos parámetros el cuadro lo dice y no bloquea nada.
       }
     })();
     return () => {
@@ -339,23 +375,13 @@ export function NecesidadDetail({
     return out;
   }, [eettDocs]);
 
-  /**
-   * La matriz de riesgos aplica a TODA contratación.
-   *
-   * Estuvo limitada a obras porque no se le encontraba anclaje normativo. Lo
-   * tiene, y es directo — Art. 44.3, literal: "Al elaborar el requerimiento se
-   * inicia la identificación y evaluación de riesgos asociados al proceso de
-   * contratación, así como su asignación a alguna de las partes, lo cual sirve
-   * de insumo para la elaboración de la estrategia de contratación". El
-   * artículo no distingue por objeto, así que la ficha tampoco.
-   *
-   * (El campo de texto `gestion_riesgos` sí sigue siendo de obras: ese pertenece
-   * a las condiciones específicas de obra de las bases estándar, no al 44.3.)
-   */
-  const riesgosAplica = Boolean(necesidad);
 
   const [confirmDeleteNecesidad, setConfirmDeleteNecesidad] = useState(false);
   const [deletingNecesidad, setDeletingNecesidad] = useState(false);
+  // Borrar un EETT/TDR es irreversible y además lo quita del RAG y del
+  // requerimiento: se confirma (como en PanelAdjuntos) y se bloquea el doble clic.
+  const [confirmDeleteEettId, setConfirmDeleteEettId] = useState<string | null>(null);
+  const [deletingEettId, setDeletingEettId] = useState<string | null>(null);
   // Campo al que llevar el foco tras un guardado fallido. En una ref y no en
   // estado: es un dato de un solo uso que no debe provocar un render por si
   // mismo. Quien dispara el efecto es `fieldErrors`, que cambia de identidad en
@@ -388,6 +414,7 @@ export function NecesidadDetail({
     fieldErrors,
     focoPendiente,
     guardar: saveFicha,
+    reconciliarCamposExternos,
     savingFicha,
     setCamposTocados,
     setFichaEdit,
@@ -404,7 +431,15 @@ export function NecesidadDetail({
     necesidadId,
     onAntesDeEditar: () => cambiarModo("redactar"),
     onError: setError,
-    onRecargar: () => reload(),
+    // Tras guardar no se recarga todo: se aplican la necesidad fresca del PATCH y,
+    // si el cuadro cambió, los ítems del PUT (misma forma que el GET combinado).
+    onGuardado: (nec, guardadoItems) => {
+      setNecesidad(nec as NecesidadExt);
+      if (guardadoItems) {
+        setItems(guardadoItems);
+        setItemsGuardados(JSON.stringify(guardadoItems));
+      }
+    },
     onSalirDelPasoAPaso: () => setWizardMode(false),
     year,
   });
@@ -445,6 +480,9 @@ export function NecesidadDetail({
   // El nonce hace que pulsar el mismo campo dos veces vuelva a disparar.
   const [copilotoRedactar, setCopilotoRedactar] = useState<{ key: string; nonce: number } | null>(null);
   const pedirRedactarIA = (api: string) => {
+    // Los campos que COMPONEN (sin copiloto) están en CAMPOS_COMPOSICION_LOCAL
+    // (campos-sin-redaccion-ia.ts), que rotula su botón "Redactar del formato".
+    // Si añades una rama compositora "pura" abajo, añádela también a ese set.
     // FORMA DE PAGO no pasa por el copiloto: su texto lo fija el Art. 67 de la
     // Ley y solo tiene cinco huecos, asi que se COMPONE con los datos que el
     // area usuaria ya registro. Pedirselo a un modelo de lenguaje seria
@@ -553,6 +591,11 @@ export function NecesidadDetail({
   });
   const subirEettEstable = useCallbackEstable((archivo: File, tipo: "eett" | "tdr") => {
     void subirEett(archivo, tipo);
+  });
+  const gestionarTdr = useCallbackEstable(() => setGestionTdrAbierta(true));
+  const analizarEett = useCallbackEstable((d: EettDocRow) => {
+    setGestionTdrAbierta(false);
+    setAnalizaTdrAbierta({ doc: d });
   });
   // Trae el formulario antes de que haga falta: al pasar el raton por «Editar»
   // o al enfocarlo con el teclado. Si ya esta, no hace nada.
@@ -677,20 +720,15 @@ export function NecesidadDetail({
   }
 
   // Autocompletado con IA desde EETT/TDR.
-  const [extracting, setExtracting] = useState(false);
   const [extractResult, setExtractResult] = useState<
     {
       campos: Record<string, string | number>;
-      // Origen del resultado: documento subido (EETT/TDR) o modelo del proceso.
-      origen?: "documento" | "modelo";
-      // Campos que el proceso EXIGE (solo origen "modelo"), para marcarlos.
+      // Único origen ya: la propuesta del modelo del proceso (el atajo de leer un
+      // EETT/TDR suelto se retiró; esa vía es el panel EETT/TDR del campo 3.4).
+      origen?: "modelo";
+      // Campos que el proceso EXIGE, para marcarlos.
       exigidos?: string[];
       resumen?: string | null;
-      method?: string;
-      extractionMethod?: string;
-      pageCount?: number;
-      textLength?: number;
-      textPreview?: string;
     } | null
   >(null);
   const [extractSelected, setExtractSelected] = useState<Set<string>>(new Set());
@@ -701,7 +739,6 @@ export function NecesidadDetail({
   const [exigidosModelo, setExigidosModelo] = useState<ReadonlySet<string>>(new Set());
   // Tipos de requisito de calificacion que declara el modelo del procedimiento.
   const [requisitosModelo, setRequisitosModelo] = useState<ReadonlySet<string>>(new Set());
-  const extractFileRef = useRef<HTMLInputElement | null>(null);
 
 
   /**
@@ -719,7 +756,25 @@ export function NecesidadDetail({
   const ejeProceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
   const ejeObjeto = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
   /** Objetos que el procedimiento admite (Art. 44.10), acotados por el elegido. */
-  const objetosEfectivos = objetosEfectivosDe(ejeProceso, ejeObjeto || undefined);
+  const objetosEfectivos = useMemo(
+    () => objetosEfectivosDe(ejeProceso, ejeObjeto || undefined),
+    [ejeProceso, ejeObjeto],
+  );
+  /**
+   * Los cinco ejes que deciden que ficha se pinta, en un solo objeto memoizado.
+   * Las funciones puras de `necesidad-ficha-derivar` lo reciben tal cual; asi el
+   * catalogo se decide UNA vez por render y no una por cada predicado.
+   */
+  const ejesFicha = useMemo<EjesFicha>(
+    () => ({
+      proceso: ejeProceso,
+      objeto: ejeObjeto,
+      objetosEfectivos,
+      exigidosModelo,
+      hayItems: items.length > 0,
+    }),
+    [ejeProceso, ejeObjeto, objetosEfectivos, exigidosModelo, items.length],
+  );
 
 
   /**
@@ -844,6 +899,13 @@ export function NecesidadDetail({
   // depender del estado compartido hacía que subir desde un sitio usara el tipo
   // elegido en el otro.
   async function subirEett(file: File, tipo: "eett" | "tdr" = eettTipo) {
+    // Rechazo en cliente, como en PanelAdjuntos: sin esto el usuario espera a
+    // subir el fichero entero para que el servidor lo rechace por tamaño.
+    if (file.size > 20 * 1024 * 1024) {
+      setError("El archivo no puede superar los 20 MB.");
+      if (eettFileRef.current) eettFileRef.current.value = "";
+      return;
+    }
     setEettUploading(true);
     setError("");
     try {
@@ -858,6 +920,7 @@ export function NecesidadDetail({
       }
       await loadEett();
       // Abre el modal con el texto extraído del PDF para revisarlo/editarlo.
+      setGestionTdrAbierta(false);
       setEettModal({
         doc: { id: data.document.id, tipo: data.document.tipo, file_name: data.document.file_name },
         initialText: data.text ?? "",
@@ -886,12 +949,16 @@ export function NecesidadDetail({
 
   async function borrarEett(docId: string) {
     setError("");
+    setDeletingEettId(docId);
     try {
       const res = await fetch(`/api/necesidades/${necesidadId}/eett-tdr?docId=${docId}`, { method: "DELETE" });
       if (res.ok) await loadEett();
       else setError("No se pudo eliminar el EETT/TDR.");
     } catch {
       setError("No se pudo conectar para eliminar el EETT/TDR.");
+    } finally {
+      setDeletingEettId(null);
+      setConfirmDeleteEettId(null);
     }
   }
 
@@ -912,32 +979,16 @@ export function NecesidadDetail({
    *  obligatorio incondicional, el condicional por objeto (`obligatorioPara`) y
    *  el condicional por procedimiento (`obligatorioEnProceso`). */
   function campoEsObligatorio(field: FichaField): boolean {
-    // Con el requerimiento desagregado, los campos que describen UNA prestación
-    // dejan de exigirse: el dato vive en cada ítem. Se comprueba antes que nada
-    // porque manda sobre cualquier otro criterio de obligatoriedad.
-    if (field.noExigibleConItems && items.length > 0) return false;
-    return campoObligatorio(field, objetosEfectivos, ejeProceso);
+    return esCampoObligatorio(field, ejesFicha);
   }
 
   function camposParaObjeto(fields: FichaField[]): FichaField[] {
-    // Los `oculto` (p. ej. Centro de costo) no se muestran ni se validan; su
-    // valor se guarda igual desde `construirPayload`, que recorre section.fields.
-    // El procedimiento ACOTA los objetos posibles (Art. 44.10) y además puede
-    // acotar campos concretos por sí mismo (`mostrarEnProceso`).
-    const efectivos = objetosEfectivos;
-    const proc = ejeProceso;
-    return fields.filter((f) => !f.oculto && campoAplica(f, efectivos, proc));
+    return camposAplicables(fields, ejesFicha);
   }
 
   /** ¿El campo tiene un valor capturado en el formulario? */
   function tieneValor(field: FichaField): boolean {
-    const v = fichaForm[field.api];
-    return v !== undefined && v !== null && String(v).trim() !== "" && v !== "false";
-  }
-
-  /** Prioridad de orden: obligatorio (0) → recomendado (1) → opcional (2). */
-  function prioridadCampo(f: FichaField): number {
-    return campoEsObligatorio(f) ? 0 : f.recomendado ? 1 : 2;
+    return tieneValorEnForm(fichaForm, field);
   }
 
   /** Campos a mostrar en una sección según el modo (obligatorios vs todos).
@@ -946,51 +997,12 @@ export function NecesidadDetail({
    *  las Bases dentro de cada grupo. En modo "solo obligatorios" se conservan
    *  además los opcionales ya rellenados para no ocultar datos del usuario. */
   function camposVisibles(section: FichaSection): { visibles: FichaField[]; ocultosOpcionales: number } {
-    // Los SUBGRUPOS no se reordenan: son los apartados a), b), c)… del modelo
-    // oficial, y su orden es el del documento que se va a firmar. Antes se
-    // ordenaba la seccion entera por prioridad, y eso los partia: «Penalidad por
-    // mora» (recomendado) se iba con los recomendados y «Otras penalidades»
-    // (opcional) al final, con lo que «f) Penalidades» se pintaba DOS veces y el
-    // apartado quedaba roto en dos trozos distantes.
-    //
-    // Dentro de cada subgrupo si manda la prioridad, que es lo que se buscaba:
-    // primero lo obligatorio. `sort` es estable, asi que a igual prioridad se
-    // conserva la secuencia de las Bases.
-    const declarados = camposParaObjeto(section.fields);
-    const posSubgrupo = new Map<string, number>();
-    declarados.forEach((f, idx) => {
-      const clave = f.subgrupo ?? "";
-      if (!posSubgrupo.has(clave)) posSubgrupo.set(clave, idx);
+    return camposVisiblesDeSeccion(section, ejesFicha, {
+      // «Todos los campos», o la sección desplegada a mano, muestran todo; si no,
+      // manda el criterio (modelo u objeto) que decide el módulo puro.
+      mostrarTodos: !obligatoriosOnly || optionalExpanded.has(section.title),
+      tieneValor,
     });
-    const all = [...declarados].sort((a, b) => {
-      const sa = posSubgrupo.get(a.subgrupo ?? "") ?? 0;
-      const sb = posSubgrupo.get(b.subgrupo ?? "") ?? 0;
-      return sa !== sb ? sa - sb : prioridadCampo(a) - prioridadCampo(b);
-    });
-    if (!obligatoriosOnly || optionalExpanded.has(section.title)) {
-      return { visibles: all, ocultosOpcionales: 0 };
-    }
-    // Con el MODELO del proceso cargado, manda el modelo: enseña exactamente lo
-    // que ese procedimiento exige para ese objeto, ni un campo más. Es la
-    // respuesta que el formato oficial ya da, y ahorra al área usuaria decidir
-    // campo por campo si le toca.
-    //
-    // Sin modelo (no hay PDF cargado para ese proceso) se cae al criterio por
-    // objeto: obligatorios + el contenido que el Art. 44.2 pide en todo
-    // requerimiento. Degradar así es mejor que enseñar los ~70 campos.
-    //
-    // En ambos casos se conserva lo YA RELLENADO: ocultar un dato que alguien
-    // escribió sería hacerlo desaparecer sin avisar.
-    const visibles =
-      exigidosModelo.size > 0
-        ? all.filter((f) => campoEsObligatorio(f) || exigidosModelo.has(f.api) || tieneValor(f))
-        : all.filter((f) => campoEsObligatorio(f) || f.recomendado || tieneValor(f));
-    // Los acompañantes entran con su pareja, no por su cuenta.
-    const apisVisibles = new Set(visibles.map((f) => f.api));
-    const conAcompanantes = all.filter(
-      (f) => apisVisibles.has(f.api) || (f.juntoA ? apisVisibles.has(f.juntoA) : false),
-    );
-    return { visibles: conAcompanantes, ocultosOpcionales: all.length - conAcompanantes.length };
   }
 
   /**
@@ -1008,8 +1020,7 @@ export function NecesidadDetail({
    * «14/16 obligatorios»—, sobre conjuntos distintos y sin nada que los separara.
    */
   function campoExigible(field: FichaField): boolean {
-    const efectivos = objetosEfectivos;
-    return campoObligatorio(field, efectivos, ejeProceso) || exigidosModelo.has(field.api);
+    return esCampoExigible(field, ejesFicha);
   }
 
   /**
@@ -1020,34 +1031,15 @@ export function NecesidadDetail({
    * obligatorios y la barra de edicion no pueden discrepar entre si.
    */
   function avanceRequerimiento(modo: "edicion" | "lectura") {
-    const campos = obligatoriosDelProceso();
-    const hecho = (f: FichaField) => {
-      if (modo === "edicion") return tieneValor(f);
-      const v = necesidad?.[f.col];
-      return v !== null && v !== undefined && String(v).trim() !== "" && v !== false;
-    };
-    const total = campos.length;
-    const done = campos.filter(hecho).length;
-    return { done, faltan: total - done, pct: total > 0 ? Math.round((done / total) * 100) : 0, total };
+    return avanceDeObligatorios(obligatoriosDelProceso(), (f) =>
+      modo === "edicion" ? tieneValor(f) : tieneValorGuardado(necesidad, f),
+    );
   }
 
 
   function obligatoriosDelProceso(): FichaField[] {
-    const efectivos = objetosEfectivos;
-    const items: FichaField[] = [];
-    for (const section of FICHA_SECCIONES) {
-      if (section.mostrarPara && !(ejeObjeto && section.mostrarPara.includes(ejeObjeto as ObjetoFilter))) continue;
-      for (const f of section.fields) {
-        if (f.oculto || !campoAplica(f, efectivos, ejeProceso)) continue;
-        // El modelo SUMA, no resta. La lista que sale del PDF marca lo que ese
-        // procedimiento exige DE MÁS; no puede degradar un campo que la ficha —y con
-        // ella la norma— ya declara obligatorio. Antes la sustituía por completo: con
-        // el modelo cargado, «Finalidad pública» o «Área usuaria» dejaban de contar
-        // como obligatorios si la IA no los había listado.
-        if (campoExigible(f)) items.push(f);
-      }
-    }
-    return items;
+    // El modelo SUMA, no resta (ver lib/necesidad-ficha-derivar.ts).
+    return obligatoriosDelProcesoDeEjes(ejesFicha);
   }
 
   /**
@@ -1059,11 +1051,8 @@ export function NecesidadDetail({
   function renderPanelObligatorios(modo: "edicion" | "lectura"): React.ReactNode {
     const items = obligatoriosDelProceso();
     if (items.length === 0) return null;
-    const hechoDe = (f: FichaField): boolean => {
-      if (modo === "edicion") return tieneValor(f);
-      const v = necesidad?.[f.col];
-      return v !== null && v !== undefined && String(v).trim() !== "" && v !== false;
-    };
+    const hechoDe = (f: FichaField): boolean =>
+      modo === "edicion" ? tieneValor(f) : tieneValorGuardado(necesidad, f);
     // Del calculo compartido: el panel no puede contar distinto que la cabecera.
     const { done } = avanceRequerimiento(modo);
     const proceso = ejeProceso;
@@ -1122,20 +1111,23 @@ export function NecesidadDetail({
     );
   }
 
-  async function reload() {
+  // Devuelve la necesidad recargada para que quien escribe «por fuera» del
+  // formulario (traslado EETT/TDR, aplicar campos de IA) pueda reconciliar el
+  // formulario abierto con los valores frescos y evitar que el autoguardado los
+  // revierta. Los demás llamantes ignoran el retorno sin problema.
+  async function reload(): Promise<Necesidad | null> {
     try {
-      // Una sola petición combinada: necesidad + documentos + riesgos +
-      // observaciones + versiones + admisibilidad. Antes cada uno tenía su fetch
+      // Una sola petición combinada: necesidad + documentos + observaciones +
+      // versiones + admisibilidad. Antes cada uno tenía su fetch
       // (y su round-trip) al abrir; ahora el servidor los resuelve en paralelo.
       const response = await fetch(`/api/necesidades/${necesidadId}`);
       const payload = await response.json();
       if (!response.ok) {
         setError(payload.error ?? "No se pudo cargar la necesidad.");
-        return;
+        return null;
       }
       setNecesidad(payload.necesidad);
       setDocumentos(payload.documentos ?? []);
-      setRiesgos(payload.riesgos ?? []);
       setObservaciones(payload.observaciones ?? []);
       setVersiones(payload.versiones ?? []);
       if (payload.admisibilidad) setAdmisibilidadInicial(payload.admisibilidad);
@@ -1145,16 +1137,22 @@ export function NecesidadDetail({
       // Copia para saber si el cuadro tiene cambios sin guardar.
       setItemsGuardados(JSON.stringify(itemsCargados));
       setError("");
+      return (payload.necesidad as Necesidad | undefined) ?? null;
     } catch {
       setError("No se pudo conectar con el servidor.");
+      return null;
     } finally {
       setLoading(false);
     }
   }
 
   // `reload` se declara de nuevo en cada render; los paneles memoizados
-  // necesitan una identidad fija.
-  const recargar = useCallbackEstable(reload);
+  // necesitan una identidad fija. El envoltorio descarta el retorno (la
+  // necesidad recargada), que solo consume la reconciliación de la ficha vía
+  // `reload` directo; los paneles esperan `() => void | Promise<void>`.
+  const recargar = useCallbackEstable(async () => {
+    await reload();
+  });
   // Tras una transición hay que recargar la necesidad Y refrescar la línea de
   // tiempo: el historial es una petición aparte que no viaja en la recarga.
   const trasTransicion = useCallbackEstable(async () => {
@@ -1253,35 +1251,6 @@ export function NecesidadDetail({
   }
 
 
-  async function handleExtract(file: File) {
-    setExtracting(true);
-    setError("");
-    setExtractResult(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`/api/necesidades/${necesidadId}/documentos/extraer`, { method: "POST", body: fd });
-      const payload = await res.json();
-      if (!res.ok) {
-        setError(payload.error ?? "No se pudo leer el documento con IA.");
-        return;
-      }
-      const campos: Record<string, string | number> = payload.campos ?? {};
-      // Marca por defecto los campos que la necesidad tiene vacíos (no pisar lo lleno).
-      const sel = new Set<string>();
-      for (const key of Object.keys(campos)) {
-        const col = API_TO_COL[key];
-        const cur = col ? necesidad?.[col] : undefined;
-        if (cur === null || cur === undefined || String(cur).trim() === "") sel.add(key);
-      }
-      setExtractResult(payload);
-      setExtractSelected(sel);
-    } catch {
-      setError("No se pudo conectar para leer el documento.");
-    } finally {
-      setExtracting(false);
-    }
-  }
 
   function toggleExtractSel(key: string) {
     setExtractSelected((prev) => {
@@ -1302,10 +1271,10 @@ export function NecesidadDetail({
   function camposObjetivoDelProceso(
     proceso: string,
     objeto?: string | null,
-  ): Array<{ api: string; label: string; seccion: string; baseLegal: string; obligatorio: boolean }> {
+  ): Array<{ api: string; label: string; seccion: string; baseLegal: string; obligatorio: boolean; plantilla: string }> {
     const obj = (objeto ?? undefined) as ObjetoFilter | undefined;
     const efectivos = objetosEfectivosDe(proceso, obj);
-    const out: Array<{ api: string; label: string; seccion: string; baseLegal: string; obligatorio: boolean }> = [];
+    const out: Array<{ api: string; label: string; seccion: string; baseLegal: string; obligatorio: boolean; plantilla: string }> = [];
     for (const section of FICHA_SECCIONES) {
       for (const f of section.fields) {
         if (f.oculto) continue;
@@ -1317,6 +1286,9 @@ export function NecesidadDetail({
           seccion: section.title,
           baseLegal: f.baseLegal ?? "",
           obligatorio: campoObligatorio(f, efectivos, proceso),
+          // El molde del campo, para que el autocompletado desde el modelo respete
+          // la estructura que exige su artículo (mismo criterio que "Redactar con IA").
+          plantilla: f.plantilla ?? "",
         });
       }
     }
@@ -1461,7 +1433,10 @@ export function NecesidadDetail({
         setError(payload.error ?? "No se pudieron aplicar los campos.");
         return;
       }
-      await reload();
+      // Reconcilia el formulario abierto con lo aplicado: sin esto el
+      // autoguardado reenviaría el formulario viejo y revertiría estos campos.
+      const fresca = await reload();
+      if (fresca) reconciliarCamposExternos(fresca, Object.keys(body));
       setExtractResult(null);
       setExtractSelected(new Set());
     } catch {
@@ -1482,7 +1457,9 @@ export function NecesidadDetail({
         setConfirmDeleteNecesidad(false);
         return;
       }
-      window.location.href = "/necesidades";
+      // Navegación SPA en vez de `window.location.href`: evita el reload
+      // completo que descartaba el estado de la lista (filtros/orden en la URL).
+      router.push("/necesidades");
     } catch {
       setError("No se pudo conectar para eliminar la necesidad.");
       setConfirmDeleteNecesidad(false);
@@ -1533,7 +1510,7 @@ export function NecesidadDetail({
   // ¿Está lista para remitirse? Se calcula sobre lo GUARDADO, no sobre el
   // borrador: remitir envía a la DEC lo que hay en la base, no lo que se ve en
   // pantalla —que puede ser trabajo sin guardar de este navegador—.
-  const verificacion = resumenNecesidad(necesidad);
+  const verificacion = resumenNecesidad(necesidad, items);
   // Observaciones por campo (D2): lista para el desplegable de alta, mapa de las
   // pendientes por campo (para el badge) y una etiqueta legible por `api`.
   const camposObservables = FICHA_SECCIONES.flatMap((s) => s.fields)
@@ -1572,6 +1549,11 @@ export function NecesidadDetail({
   const acciones = permisos.manage
     ? accionesDisponibles(necesidad.status, lado, { tieneExpediente: Boolean(necesidad.process_id) })
     : [];
+  // Borrar es destructivo y el servidor lo restringe (DELETE de la ruta): solo el
+  // propietario que la registró, la DEC (órgano central) o admin. Se refleja aquí
+  // para no ofrecer un botón que acabaría en 403 a quien no puede.
+  const puedeBorrarNecesidad =
+    permisos.manage && (role === "dec" || role === "admin" || necesidad.owner_id === usuarioId);
   // Acción recomendada para avanzar el requerimiento (la primaria si existe).
   const siguienteAccion = acciones.find((a) => a.variante === "primary") ?? acciones[0];
   const noObjecion = necesidad.no_objecion as NoObjecionEstado;
@@ -1680,24 +1662,12 @@ export function NecesidadDetail({
             <span aria-hidden className="text-line">·</span>
             <span>{tipoAreaLabel(necesidad.tipo_area)}</span>
           </div>
-          {avanceOblig.total > 0 ? (
-            <div
-              className="mt-3 flex max-w-md items-center gap-2.5"
-              title={`${avanceOblig.done} de ${avanceOblig.total} campos que exige este procedimiento`}
-            >
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
-                <div
-                  className={cn("h-full rounded-full transition-[width] duration-500", avanceOblig.faltan === 0 ? "bg-success" : "bg-brand")}
-                  style={{ width: `${avanceOblig.pct}%` }}
-                />
-              </div>
-              <span className={cn("shrink-0 text-[12px] font-semibold", avanceOblig.faltan === 0 ? "text-success" : "text-muted")}>
-                {avanceOblig.faltan === 0
-                    ? "Requerimiento completo"
-                    : `${avanceOblig.done}/${avanceOblig.total} · faltan ${avanceOblig.faltan}`}
-              </span>
-            </div>
-          ) : null}
+          <BarraObligatorios
+            className="mt-3 max-w-md"
+            done={avanceOblig.done}
+            total={avanceOblig.total}
+            textoCompleto="Requerimiento completo"
+          />
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           {/* El estado NO se elige a dedo: se mueve con las acciones del flujo
@@ -1727,7 +1697,7 @@ export function NecesidadDetail({
               <><AlertTriangle size={12} aria-hidden /> Faltan {verificacion.bloquean} para remitir</>
             )}
           </button>
-          {permisos.manage ? (
+          {puedeBorrarNecesidad ? (
             necesidad.process_id ? (
               <span className="text-[11.5px] text-muted" title="Elimina primero el expediente derivado.">
                 Derivada a un expediente
@@ -1757,8 +1727,8 @@ export function NecesidadDetail({
       >
         {/* Del catalogo, no de una lista propia: dos listas que dicen lo mismo
             acaban discrepando, y el chip que sobra lleva a un bloque que no existe
-            en ese modo. Los riesgos solo cuando aplican. */}
-        {BLOQUES_FICHA.filter((t) => t.id !== "sec-riesgos" || riesgosAplica).map((t) => (
+            en ese modo. */}
+        {BLOQUES_FICHA.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -1930,64 +1900,71 @@ export function NecesidadDetail({
 
       </Panel>
 
-      {/* ===== EETT / TDR (1.ª versión del área usuaria) ===== */}
-      {permisos.manage && panelesDelModo(modo).includes("sec-eett") ? (
-        <section id="sec-eett" className="grid grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-[14px] border border-line bg-panel p-3.5 shadow-card">
-          <div className="flex flex-wrap items-center gap-2 text-ink">
-            <FileText size={17} />
-            <h3 className="panelTitle">Especificaciones Técnicas (EETT) / Términos de Referencia (TDR)</h3>
-          </div>
-          <p className="text-xs font-semibold text-muted">
-            Sube el PDF del <strong>EETT</strong> (bienes) o <strong>TDR</strong> (servicios) — la 1.ª versión que
-            propone el área usuaria. Se indexa en el buscador con IA y podrás <strong>revisarlo contra el modelo
-            oficial del OECE</strong> del proceso elegido y editarlo en un editor profesional.
-          </p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={eettTipo} onChange={(e) => setEettTipo(e.target.value as "eett" | "tdr")}>
-              <option value="tdr">TDR — Términos de Referencia (servicios)</option>
-              <option value="eett">EETT — Especificaciones Técnicas (bienes)</option>
-            </select>
-            <input
-              ref={eettFileRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void subirEett(f);
-              }}
-            />
-            <Button
-              variant="primary"
-              type="button"
-              disabled={eettUploading}
-              onClick={() => eettFileRef.current?.click()}
-            >
-              {eettUploading ? <Loader size={15} /> : <UploadCloud size={15} />} Subir {eettTipo === "eett" ? "EETT" : "TDR"} (PDF)
-            </Button>
-          </div>
-          {eettDocs.length > 0 ? (
-            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" style={{ marginTop: 12 }}>
-              {eettDocs.map((d) => (
-                <li className="flex items-center gap-2.5 rounded-[9px] border border-line bg-panel px-2.5 py-2" key={d.id}>
-                  <FileText size={16} className="flex-none text-brand" />
-                  <div className="flex min-w-0 flex-1 flex-col [&_strong]:truncate [&_strong]:text-[13px] [&_strong]:font-semibold [&_strong]:text-ink [&_small]:truncate [&_small]:text-[11px] [&_small]:text-muted" style={{ flex: 1 }}>
-                    <strong>{d.metadata?.tipo === "eett" ? "EETT" : "TDR"} · {d.title}</strong>
-                    <small>{d.file_name}</small>
-                  </div>
-                  <Button type="button" onClick={() => abrirEett(d)}>
-                    <Pencil size={13} /> Revisar / editar
-                  </Button>
-                  <IconButton destructive type="button" aria-label="Eliminar" onClick={() => void borrarEett(d.id)}>
-                    <Trash2 size={15} />
-                  </IconButton>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs font-semibold text-muted" style={{ marginTop: 8 }}>Aún no has subido un EETT/TDR para esta necesidad.</p>
-          )}
-        </section>
+      {/* ===== EETT / TDR — gestión del PDF (modal, abierto desde 3.4) =====
+          Antes era un panel suelto en la página; ahora vive detrás del botón
+          «Revisar TDR» de la sección 3.4, en su propia ventana, que es donde el
+          área usuaria espera gestionar el documento del requerimiento. */}
+      {permisos.manage ? (
+        <Dialog open={gestionTdrAbierta} onOpenChange={setGestionTdrAbierta}>
+          <DialogContent
+            title="Revisar TDR — Especificaciones Técnicas (EETT) / Términos de Referencia (TDR)"
+            description="Sube el PDF (o .docx) del EETT (bienes) o TDR (servicios): la 1.ª versión que propone el área usuaria. Se indexa en el buscador con IA y podrás revisarlo contra el modelo oficial del OECE del proceso elegido y editarlo en un editor profesional."
+            size="lg"
+          >
+            <div className="flex flex-col gap-3">
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} value={eettTipo} onChange={(e) => setEettTipo(e.target.value as "eett" | "tdr")}>
+                  <option value="tdr">TDR — Términos de Referencia (servicios)</option>
+                  <option value="eett">EETT — Especificaciones Técnicas (bienes)</option>
+                </select>
+                <input
+                  ref={eettFileRef}
+                  type="file"
+                  accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void subirEett(f, eettTipo);
+                  }}
+                />
+                <Button
+                  variant="primary"
+                  type="button"
+                  disabled={eettUploading}
+                  onClick={() => eettFileRef.current?.click()}
+                >
+                  {eettUploading ? <Loader size={15} /> : <UploadCloud size={15} />} Subir {eettTipo === "eett" ? "EETT" : "TDR"} (PDF o .docx)
+                </Button>
+              </div>
+              {eettDocs.length > 0 ? (
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+                  {eettDocs.map((d) => (
+                    <li className="flex items-center gap-2.5 rounded-[9px] border border-line bg-panel px-2.5 py-2" key={d.id}>
+                      <FileText size={16} className="flex-none text-brand" />
+                      <div className="flex min-w-0 flex-1 flex-col [&_strong]:truncate [&_strong]:text-[13px] [&_strong]:font-semibold [&_strong]:text-ink [&_small]:truncate [&_small]:text-[11px] [&_small]:text-muted" style={{ flex: 1 }}>
+                        <strong>{d.metadata?.tipo === "eett" ? "EETT" : "TDR"} · {d.title}</strong>
+                        <small>{d.file_name}</small>
+                      </div>
+                      {/* Al abrir el editor se cierra este modal: dos ventanas apiladas
+                          confunden y el editor es de pantalla completa. */}
+                      <Button type="button" onClick={() => { setGestionTdrAbierta(false); abrirEett(d); }}>
+                        <Pencil size={13} /> Revisar / editar
+                      </Button>
+                      <Button type="button" onClick={() => analizarEett(d)}>
+                        <FileSearch size={13} /> Analiza
+                      </Button>
+                      <IconButton destructive type="button" aria-label="Eliminar" disabled={deletingEettId === d.id} onClick={() => setConfirmDeleteEettId(d.id)}>
+                        {deletingEettId === d.id ? <Loader size={15} /> : <Trash2 size={15} />}
+                      </IconButton>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs font-semibold text-muted">Aún no has subido un EETT/TDR para esta necesidad.</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {eettModal ? (
@@ -2003,10 +1980,26 @@ export function NecesidadDetail({
           camposObjetivo={camposTrasladables()}
           valoresActuales={valoresActualesTrasladables()}
           onClose={() => setEettModal(null)}
-          onSaved={() => {
-            void reload();
-            void loadEett();
+          onSaved={(apisTrasladados) => {
+            void (async () => {
+              // Reconcilia el formulario abierto con lo trasladado: sin esto el
+              // autoguardado reenviaría el formulario viejo y lo revertiría.
+              const fresca = await reload();
+              if (fresca && apisTrasladados?.length) {
+                reconciliarCamposExternos(fresca, apisTrasladados);
+              }
+              void loadEett();
+            })();
           }}
+        />
+      ) : null}
+
+      {analizaTdrAbierta ? (
+        <NecesidadEettAnalizaModal
+          necesidadId={necesidadId}
+          docId={analizaTdrAbierta.doc.id}
+          fileName={analizaTdrAbierta.doc.file_name}
+          onClose={() => setAnalizaTdrAbierta(null)}
         />
       ) : null}
 
@@ -2025,10 +2018,13 @@ export function NecesidadDetail({
                 <span className="flex items-center gap-1.5 rounded-lg bg-brand-soft px-3 py-2 text-xs text-muted">No tienes permisos para editar</span>
               )
             ) : null}
-            {/* Descarga el requerimiento (Art. 44) en Word con los datos GUARDADOS. */}
+            {/* Descarga el requerimiento (Art. 44) en Word con los datos GUARDADOS.
+                Estilado como acción secundaria: convivía sin clase junto al botón
+                «Editar ficha» y se pintaba como un enlace suelto del navegador. */}
             <a
-                            href={`/api/necesidades/${necesidadId}/requerimiento-docx`}
+              href={`/api/necesidades/${necesidadId}/requerimiento-docx`}
               title="Descargar el requerimiento (Art. 44) en Word, con los datos guardados de la ficha"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] font-semibold text-ink outline-none transition-colors hover:border-brand/40 hover:bg-brand-soft hover:text-brand focus-visible:shadow-[var(--shadow-focus)]"
             >
               <Download size={14} /> Requerimiento (Word)
             </a>
@@ -2072,7 +2068,7 @@ export function NecesidadDetail({
                 setAbierto: setCopilotoAbierto,
                 setMontado: setCopilotoMontado,
               }}
-              eett={{ abrir: abrirEettEstable, docs: eettDocs, subiendo: eettUploading, subir: subirEettEstable }}
+              eett={{ abrir: abrirEettEstable, docs: eettDocs, subiendo: eettUploading, subir: subirEettEstable, gestionar: gestionarTdr }}
               ficha={{
                 autoguardado,
                 camposBorrador,
@@ -2096,6 +2092,8 @@ export function NecesidadDetail({
               permisos={permisos}
               setItems={setItems}
               uitValor={uitValor}
+              lpAbreviadaBienesMin={lpAbreviadaMin}
+              lpAbreviadaBienesMax={lpAbreviadaMax}
               vista={{
                 cambiarModo,
                 modo,
@@ -2184,90 +2182,42 @@ export function NecesidadDetail({
                     <h3 className="panelTitle">Autocompletar la ficha</h3>
                   </div>
                   {puedeAdjuntar ? (
-                    <>
-                      <input
-                        ref={extractFileRef}
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        style={{ display: "none" }}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handleExtract(f);
-                          e.target.value = "";
-                        }}
-                      />
-                      <Button
-                        className="mt-2"
-                        disabled={extracting}
-                        onClick={() => extractFileRef.current?.click()}
-                        type="button"
-                        title="Lee un PDF de Especificaciones Técnicas o TDR y autocompleta la ficha"
-                      >
-                        {extracting ? <Loader size={15} /> : <Sparkles size={15} />}
-                        {extracting ? "Leyendo con IA…" : "Autocompletar desde EETT/TDR (IA)"}
-                      </Button>
-                      <Button
-                        className="mt-2"
-                        disabled={completandoModelo || !necesidad?.tipo_proceso_seleccion}
-                        onClick={() => void completarConModelo()}
-                        type="button"
-                        title={
-                          necesidad?.tipo_proceso_seleccion
-                            ? `Analiza el requerimiento de «${necesidad.tipo_proceso_seleccion}» y propone valores para los campos`
-                            : "Elige y guarda primero el tipo de proceso de selección en la ficha"
-                        }
-                      >
-                        {completandoModelo ? <Loader size={15} /> : <WandSparkles size={15} />}
-                        {completandoModelo ? "Analizando el modelo…" : "Completar con el modelo del proceso (IA)"}
-                      </Button>
-                    </>
+                    <Button
+                      className="mt-2"
+                      disabled={completandoModelo || !necesidad?.tipo_proceso_seleccion}
+                      onClick={() => void completarConModelo()}
+                      type="button"
+                      title={
+                        necesidad?.tipo_proceso_seleccion
+                          ? `Analiza el requerimiento de «${necesidad.tipo_proceso_seleccion}» y propone valores para los campos`
+                          : "Elige y guarda primero el tipo de proceso de selección en la ficha"
+                      }
+                    >
+                      {completandoModelo ? <Loader size={15} /> : <WandSparkles size={15} />}
+                      {completandoModelo ? "Analizando el modelo…" : "Completar con el modelo del proceso (IA)"}
+                    </Button>
                   ) : null}
 
                   {extractResult ? (
                     <div className="mt-2.5 rounded-[10px] border border-brand/30 bg-brand-soft px-3 py-2.5">
                       <div className="flex items-center gap-[7px] text-[13px] text-ink [&_svg]:text-brand">
-                        {extractResult.origen === "modelo" ? <WandSparkles size={14} /> : <Sparkles size={14} />}
-                        <strong>
-                          {extractResult.origen === "modelo"
-                            ? "Propuesta desde el modelo del proceso"
-                            : "Datos detectados por IA"}
-                        </strong>
+                        <WandSparkles size={14} />
+                        <strong>Propuesta desde el modelo del proceso</strong>
                         <IconButton onClick={() => setExtractResult(null)} type="button" aria-label="Cerrar">
                           <X size={14} />
                         </IconButton>
                       </div>
                       {Object.keys(extractResult.campos).length === 0 ? (
-                        extractResult.origen === "modelo" ? (
-                          <div className="grid gap-1.5">
-                            <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>
-                              El modelo no permitió proponer campos automáticamente.
-                            </p>
-                            <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                              {extractResult.exigidos && extractResult.exigidos.length > 0
-                                ? "Se marcaron los campos que este proceso exige (en la ficha), pero su contenido depende de datos propios de la contratación que debes redactar."
-                                : "Redacta los campos con el copiloto o desde un EETT/TDR; el proceso no aportó texto reutilizable."}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="grid gap-1.5">
-                            <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>No se detectaron campos en el documento.</p>
-                            <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                              Lectura: {extractResult.extractionMethod === "pdf-text" ? "texto del PDF" : "OCR (escaneado)"} ·{" "}
-                              {extractResult.pageCount} pág · {extractResult.textLength} caracteres.
-                            </p>
-                            <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
-                              {(extractResult.textLength ?? 0) < 200
-                                ? "El documento devolvió muy poco texto: probablemente el escaneo es de baja calidad o el OCR no lo leyó bien. Prueba con un PDF de mejor resolución o con texto seleccionable."
-                                : "Se leyó texto pero la IA no reconoció datos del requerimiento en él. Revisa la vista previa para confirmar qué se leyó."}
-                            </p>
-                            {extractResult.textPreview ? (
-                              <details className="[&_summary]:cursor-pointer [&_summary]:text-[11.5px] [&_summary]:font-semibold [&_summary]:text-brand [&_pre]:mt-1.5 [&_pre]:max-h-[200px] [&_pre]:overflow-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-line [&_pre]:bg-surface [&_pre]:px-2.5 [&_pre]:py-2 [&_pre]:text-[11px] [&_pre]:leading-[1.45] [&_pre]:text-ink">
-                                <summary>Ver texto leído</summary>
-                                <pre>{extractResult.textPreview}</pre>
-                              </details>
-                            ) : null}
-                          </div>
-                        )
+                        <div className="grid gap-1.5">
+                          <p className="text-xs font-semibold text-muted" style={{ margin: 0 }}>
+                            El modelo no permitió proponer campos automáticamente.
+                          </p>
+                          <p className="m-0 text-[11.5px] leading-[1.45] text-muted">
+                            {extractResult.exigidos && extractResult.exigidos.length > 0
+                              ? "Se marcaron los campos que este proceso exige (en la ficha), pero su contenido depende de datos propios de la contratación que debes redactar."
+                              : "Redacta los campos con el copiloto o desde el panel EETT/TDR; el proceso no aportó texto reutilizable."}
+                          </p>
+                        </div>
                       ) : (
                         <>
                           <p className="mx-0 mb-2 mt-1.5 text-[11.5px] leading-snug text-muted">
@@ -2325,17 +2275,6 @@ export function NecesidadDetail({
         </aside>
       </div>
 
-      {/* ===== Matriz de riesgos de la contratación ===== */}
-      {riesgosAplica && panelesDelModo(modo).includes("sec-riesgos") ? (
-        <PanelRiesgos
-          necesidadId={necesidadId}
-          onCambio={recargar}
-          onError={setError}
-          puedeEditar={puedeAdjuntar}
-          riesgos={riesgos}
-        />
-      ) : null}
-
       {/* Cierre del ciclo: los dos actos de la DEC sobre algo ya redactado.
           Estaban en la cabecera y en el lateral de la ficha, es decir, antes
           y al lado del trabajo que juzgan. */}
@@ -2373,11 +2312,21 @@ export function NecesidadDetail({
       <ConfirmDialog
         open={confirmDeleteNecesidad}
         title="Eliminar necesidad"
-        message={`¿Eliminar la necesidad "${necesidad.nombre}"? Se borrarán sus adjuntos y riesgos. Esta acción no se puede deshacer.`}
+        message={`¿Eliminar la necesidad "${necesidad.nombre}"? Se borrarán sus adjuntos. Esta acción no se puede deshacer.`}
         tone="danger"
         confirmLabel="Eliminar"
         onConfirm={() => void deleteNecesidad()}
         onCancel={() => setConfirmDeleteNecesidad(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteEettId !== null}
+        title="Eliminar EETT/TDR"
+        message={`¿Eliminar "${eettDocs.find((d) => d.id === confirmDeleteEettId)?.title ?? "este documento"}"? Se quita del índice de consulta (RAG) y deja de anexarse al requerimiento. Esta acción no se puede deshacer.`}
+        tone="danger"
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteEettId) void borrarEett(confirmDeleteEettId); }}
+        onCancel={() => setConfirmDeleteEettId(null)}
       />
     </div>
   );

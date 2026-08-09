@@ -6,7 +6,8 @@ import { LIMITES_TEXTO } from "./necesidades";
 import { pdfsModeloDeProceso } from "./procesos-seleccion";
 import { GUIA_SECCION_NOMBRE, type GuiaItem, REQUERIMIENTO_GUIA } from "./requerimiento-guia";
 import { TIPOS_REQUISITO_ART72 } from "./requisitos-calificacion";
-import { supabaseRest, supabaseUserRest } from "./supabase-server";
+import { filtroEettTdr } from "./eett-tdr-documento";
+import { getSupabaseServerConfig, supabaseRest, supabaseUserRest } from "./supabase-server";
 import { tiposDelModeloComoLista } from "@/lib/requisitos-del-modelo";
 import type { TipoRequisitoArt72 } from "@/lib/requisitos-calificacion";
 
@@ -22,8 +23,9 @@ import type { TipoRequisitoArt72 } from "@/lib/requisitos-calificacion";
 // La IA razona sobre ambas, pero no las contradice ni fabrica datos.
 
 const campoSchema = z.object({
+  key: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(200),
-  valor: z.string().max(8000).default(""),
+  valor: z.string().max(20000).default(""),
 });
 
 // El campo a redactar lleva ADEMÁS su base legal (artículo que lo sustenta) y su
@@ -32,12 +34,20 @@ const campoSchema = z.object({
 const campoObjetivoSchema = campoSchema.extend({
   baseLegal: z.string().trim().max(400).default(""),
   seccion: z.string().trim().max(120).default(""),
+  // Molde del campo derivado del artículo (p. ej. la estructura tripartita del
+  // Art. 44.1 para la finalidad): estructura a respetar y ejemplo de estilo. Es
+  // lo que hace que "fundaméntate en la norma" se traduzca en la FORMA correcta,
+  // no solo en el principio.
+  plantilla: z.string().trim().max(1500).default(""),
+  ejemplo: z.string().trim().max(1500).default(""),
 });
 
 export const copilotoRequestSchema = z.object({
   accion: z.enum(["redactar", "revisar", "chat"]),
   tipoProcesoSeleccion: z.string().max(200).default(""),
   tipoObjeto: z.string().max(80).default(""),
+  // Necesidad asociada al requerimiento (para recuperar su TDR/EETT).
+  necesidadId: z.string().max(40).optional(),
   // Campo concreto a redactar (acción "redactar").
   campoObjetivo: campoObjetivoSchema.optional(),
   // Pregunta libre (acción "chat").
@@ -180,7 +190,14 @@ const SISTEMA = [
   "- Si una duda excede las fuentes y la guía entregadas, dilo y sugiere consultar el Chat legal del sistema.",
 ].join("\n");
 
-function contextoBase(input: CopilotoRequest, fuentes: Fuente[]): string {
+function contextoBase(input: CopilotoRequest, fuentes: Fuente[] = [], tdrChunks: string[] = []): string {
+  const tdrBloque = tdrChunks.length > 0
+    ? [
+        "",
+        "CONTENIDO DEL TDR (Extraído del PDF de Términos de Referencia de esta necesidad; léelo completo para redactar la matriz de riesgos):",
+        tdrChunks.map((c, i) => `[TDR ${i + 1}] ${c}`).join("\n\n"),
+      ].join("\n")
+    : "";
   return [
     `Tipo de contratación (objeto): ${input.tipoObjeto || "no especificado"}`,
     `Tipo de procedimiento de selección: ${input.tipoProcesoSeleccion || "no especificado"}`,
@@ -195,17 +212,23 @@ function contextoBase(input: CopilotoRequest, fuentes: Fuente[]): string {
       ? `\nCAMPOS OBLIGATORIOS AÚN VACÍOS: ${input.faltantes.join(", ")}.`
       : "",
     fuentesTexto(fuentes),
+    tdrBloque,
   ].join("\n");
 }
 
-export function construirMensajesCopiloto(input: CopilotoRequest, fuentes: Fuente[] = []): ChatMessage[] {
+export function construirMensajesCopiloto(
+  input: CopilotoRequest,
+  fuentes: Fuente[] = [],
+  tdrChunks: string[] = [],
+): ChatMessage[] {
   const mensajes: ChatMessage[] = [
     { role: "system", content: SISTEMA },
-    { role: "system", content: contextoBase(input, fuentes) },
+    { role: "system", content: contextoBase(input, fuentes, tdrChunks) },
   ];
 
   if (input.accion === "redactar" && input.campoObjetivo) {
     const c = input.campoObjetivo;
+    const esRiesgos = c.key === "gestionRiesgos";
     mensajes.push({
       role: "user",
       content: [
@@ -213,7 +236,65 @@ export function construirMensajesCopiloto(input: CopilotoRequest, fuentes: Fuent
         c.baseLegal
           ? `Base legal del campo: ${c.baseLegal}. Fundaméntate en ese artículo de la Ley N.° 32069 o su Reglamento usando las FUENTES NORMATIVAS recuperadas; si el artículo aparece, cítalo.`
           : "",
-        "Ajústate a la ESTRUCTURA y el estilo del MODELO DE REQUERIMIENTO de la entidad para este campo, si se te entregó.",
+        c.plantilla
+          ? `ESTRUCTURA OBLIGATORIA (respeta el orden y todas sus partes; rellena los [corchetes] con los datos YA REGISTRADOS de esta necesidad —CONTENIDO ACTUAL DEL REQUERIMIENTO—, y deja en [corchetes] solo lo que no conste):\n${c.plantilla}`
+          : "",
+        c.ejemplo
+          ? `Ejemplo de referencia del estilo y nivel de detalle esperados (NO lo copies literal; adáptalo a esta necesidad):\n${c.ejemplo}`
+          : "",
+        ...(esRiesgos
+          ? [
+              "",
+              "INSTRUCCIONES ESPECÍFICAS PARA LA MATRIZ DE RIESGOS:",
+              "Basándote en el CONTENIDO DEL TDR (términos de referencia) de arriba, en el tipo de contratación y procedimiento de selección, y en la Ley N.° 32069 y su Reglamento (Art. 44.3):",
+              "",
+              "Contenido de la Matriz: Debe incluir de forma obligatoria:",
+              "Identificación de riesgos: Técnicos, ambientales, financieros, de seguridad, sociales, entre otros.",
+              "Análisis cualitativo y cuantitativo: Estimación de la probabilidad de ocurrencia e impacto en el cronograma, presupuesto y calidad.",
+              "Asignación del riesgo: Se asigna a la parte (Entidad o Contratista) que esté en mejor capacidad de gestionarlo y mitigarlo.",
+              "Estrategias de respuesta: Acciones preventivas y correctivas debidamente justificadas.",
+              "",
+              "NO redactes ningún párrafo de sustento ni introducción. La salida EMPIEZA directamente con el encabezado «MATRIZ DE GESTIÓN DE RIESGOS» y a continuación la tabla Markdown con pipes (|). Nada antes del encabezado.",
+              "",
+              "Encabezado (texto suelto, sin tabla):",
+              "MATRIZ DE GESTIÓN DE RIESGOS",
+              "Nombre de la contratación: [del TDR]",
+              "Proyecto: CUI [CUI de la necesidad si existe, si no: No aplica]",
+              "Área usuaria: [del área usuaria]",
+              "Marco Legal: Ley N.° 32069 y su Reglamento",
+              "",
+              "Estructura de la tabla:",
+              "Categoría del Riesgo | Identificación del Riesgo | Análisis Cualitativo y Cuantitativo (Probabilidad / Impacto / Exposición) | Asignación del Riesgo (Responsable) | Estrategia de Respuesta / Mitigación | Relación con Penalidades",
+              "",
+              "Categorías a cubrir (al menos una por categoría; puede haber varias en la más relevante, hasta el total indicado más abajo):",
+              "1. Técnico / Ejecución — ej: deficiencias técnicas, errores de expediente, calidad de materiales o ejecución.",
+              "2. Financiero / Procura — ej: desabastecimiento de materiales, fluctuación de precios, problemas con proveedores.",
+              "3. Administrativo / Legal — ej: demora en licencias o permisos, problemas documentarios, incumplimientos normativos.",
+              "4. Seguridad y Salud — ej: accidentes laborales, falta de EPP, incumplimiento de normas de seguridad.",
+              "5. Ambiental / Social — ej: hallazgos arqueológicos, contaminación, conflictos sociales, condiciones climáticas adversas.",
+              "",
+              "Reglas para cada celda:",
+              "- Asignación: el riesgo se asigna a la parte que tenga mayor control sobre el evento (Entidad o Contratista).",
+              "- Análisis Cualitativo y Cuantitativo: estimar probabilidad (Baja/Media/Alta) e impacto (Bajo/Medio/Alto/Crítico) en cronograma, presupuesto y calidad, y expresar la exposición resultante (Probabilidad × Impacto: Bajo/Medio/Alto/Muy alto). SOLO si el TDR aporta una cifra concreta, cítala tal cual; NO inventes porcentajes ni montos —si no hay dato, quédate en el nivel cualitativo.",
+              "- Estrategia: acciones preventivas y correctivas específicas para el servicio del TDR, no genéricas.",
+              "- Relación con Penalidades: indicar si corresponde multa, penalidad por mora, otras penalidades o si no aplica.",
+              "OBJETIVIDAD: los riesgos deben expresarse en función del desempeño y la finalidad pública.",
+              "",
+              "Formato de la tabla Markdown (ejemplo):",
+              "",
+              "| Categoría del Riesgo | Identificación del Riesgo | Análisis Cualitativo y Cuantitativo | Asignación | Estrategia de Respuesta / Mitigación | Relación con Penalidades |",
+              "|---|---|---|---|---|---|",
+              "| Técnico / Ejecución | Deficiencias en el expediente técnico | Probabilidad: Media · Impacto: Alto (retrasos en el cronograma) · Exposición: Alta | Entidad | Revisión obligatoria del expediente por el contratista en etapa inicial | No aplica penalidad por ser error de la Entidad |",
+              "",
+              "Identifica entre 5 y 8 riesgos específicos del servicio descrito en el TDR (técnicos, ambientales, financieros, de seguridad, sociales, plazos, calidad, etc.). No uses riesgos genéricos. Cada riesgo debe corresponder a una característica real del servicio documentado en el TDR.",
+              "",
+              "Formato de salida:",
+              "- Empieza con el encabezado «MATRIZ DE GESTIÓN DE RIESGOS» (texto suelto) y sus líneas de nombre/CUI/área/marco legal.",
+              "- A continuación, la tabla de matriz de riesgos (con las columnas indicadas).",
+              "- SIN párrafo de sustento, comentarios ni encabezados adicionales fuera del formato especificado.",
+            ].join("\n")
+          : ""),
+        "Ajústate a la ESTRUCTURA legal de arriba en el FONDO y al estilo del MODELO DE REQUERIMIENTO de la entidad en la FORMA, si se te entregó.",
         c.valor.trim()
           ? `Texto actual (mejóralo o complétalo, no lo empeores):\n${c.valor.trim()}`
           : "El campo está vacío.",
@@ -460,7 +541,11 @@ async function documentosDelRegimen(): Promise<string[] | null> {
 const PUNTUACION_MINIMA = 0.35;
 
 /** Recupera fuentes NORMATIVAS del regimen de contratacion.
- *  Degrada en silencio: si la busqueda falla, el copiloto sigue con la guia. */
+ *  Si la busqueda FALLA (lanza), NO se calla: se marca `degradada` para que el
+ *  copiloto avise «verifica cada articulo». Antes el catch devolvia
+ *  `degradada: false` con cero fuentes, asi que el modelo redactaba citando
+ *  articulos de memoria y el panel no mostraba ninguna advertencia —una cifra o
+ *  un «Art. X» inventado salia con aspecto de fundamento real. */
 async function recuperarNormativa(
   input: CopilotoRequest,
 ): Promise<{ fuentes: Fuente[]; degradada: boolean }> {
@@ -486,7 +571,9 @@ async function recuperarNormativa(
       }));
     return { degradada: semanticaCaida, fuentes };
   } catch {
-    return { degradada: false, fuentes: [] };
+    // Un fallo de la busqueda ES una degradacion: sin fuentes y, si no se avisa,
+    // el texto sale citando de memoria. Se senala para que el panel lo advierta.
+    return { degradada: true, fuentes: [] };
   }
 }
 
@@ -508,6 +595,26 @@ export async function* streamCopiloto(
   options?: { entity?: string | null },
 ): AsyncGenerator<CopilotoEvent> {
   const { degradada, fuentes } = await recuperarFuentes(input, options?.entity);
+
+  // Recupera los chunks del TDR/EETT para la matriz de riesgos.
+  let tdrChunks: string[] = [];
+  if (input.accion === "redactar" && input.campoObjetivo?.key === "gestionRiesgos" && input.necesidadId) {
+    try {
+      getSupabaseServerConfig();
+      const [doc] = await supabaseRest<Array<{ id: string }>>(
+        `documents?${filtroEettTdr(input.necesidadId)}&select=id&limit=1`,
+      );
+      if (doc) {
+        const chunks = await supabaseRest<Array<{ content: string; chunk_index: number }>>(
+          `document_chunks?document_id=eq.${doc.id}&select=content,chunk_index&order=chunk_index.asc&limit=30`,
+        );
+        tdrChunks = chunks.map((c) => c.content);
+      }
+    } catch {
+      tdrChunks = [];
+    }
+  }
+
   // Se avisa ANTES de las fuentes: si la búsqueda vectorial no respondió, lo que
   // venga detrás sale del respaldo léxico y el usuario tiene que saberlo antes de
   // leerlo, no después.
@@ -528,10 +635,11 @@ export async function* streamCopiloto(
   }
 
   const client = getOpenAIClient();
-  // Responses API (misma que el chat legal): eventos response.output_text.delta.
+  // Matriz de riesgos: necesita más tokens (tabla de 6 columnas × 5-8 filas).
+  const esMatrizRiesgos = input.accion === "redactar" && input.campoObjetivo?.key === "gestionRiesgos";
   const stream = await client.responses.create({
-    input: construirMensajesCopiloto(input, fuentes),
-    max_output_tokens: input.accion === "revisar" ? 1300 : 900,
+    input: construirMensajesCopiloto(input, fuentes, tdrChunks),
+    max_output_tokens: esMatrizRiesgos ? 3000 : input.accion === "revisar" ? 1300 : 1200,
     model: legalAnswerModel,
     stream: true,
     temperature: 0.3,
@@ -560,6 +668,9 @@ const completarCampoSchema = z.object({
   seccion: z.string().trim().max(120).default(""),
   baseLegal: z.string().trim().max(400).default(""),
   obligatorio: z.boolean().default(false),
+  // Estructura del campo derivada de su artículo (p. ej. la tripartita del
+  // Art. 44.1 para la finalidad). Cuando existe, la propuesta debe seguirla.
+  plantilla: z.string().trim().max(1500).default(""),
 });
 
 export const completarModeloRequestSchema = z.object({
@@ -648,8 +759,33 @@ const COMPLETAR_SISTEMA = [
   "  marcadores [ENTRE CORCHETES] para que el usuario los complete. Si un campo no tiene sustento",
   "  alguno, OMÍTELO (no lo incluyas en «campos»).",
   "- Describe por desempeño y funcionalidad; nunca por marca, fabricante ni procedencia (Art. 44.6).",
+  "- Cuando un campo objetivo traiga «estructura obligatoria», el texto propuesto DEBE seguir esa",
+  "  estructura y su orden: es la FORMA que exige su artículo (p. ej. la finalidad pública, Art. 44.1:",
+  "  necesidad → finalidad pública → valor por dinero). Rellena sus [corchetes] con los CAMPOS YA",
+  "  RELLENOS y deja en [corchetes] lo que no conste.",
   "- «exigidos»: lista de api de los campos que ESTE procedimiento EXIGE según su modelo/bases",
   "  (obligatorios para este tipo de proceso), aunque no los hayas redactado.",
+  "- Usa SOLO las api que aparezcan en la lista de campos objetivo. No inventes claves.",
+].join("\n");
+
+// Variante para la ESTRATEGIA de contratación (Art. 46), no el requerimiento. La
+// estrategia es un ANÁLISIS que fundamenta cada decisión, no una afirmación
+// suelta: el prompt lo pide explícito. El resto del contrato (JSON, api, no
+// inventar datos) es idéntico.
+const COMPLETAR_SISTEMA_ESTRATEGIA = [
+  "Eres el copiloto de contratación pública del sistema ACE (Ley N.° 32069 y su Reglamento).",
+  "Tu tarea: PROPONER el contenido de las variables de la ESTRATEGIA DE CONTRATACIÓN (Art. 46) del",
+  "procedimiento de selección indicado, apoyándote en las BASES/MODELO de la entidad y en la norma.",
+  "Devuelves EXCLUSIVAMENTE un objeto JSON, sin texto alrededor, con esta forma:",
+  '{ "campos": { "<api>": "<texto propuesto>" }, "exigidos": ["<api>", ...] }',
+  "",
+  "Reglas:",
+  "- «campos»: incluye SOLO las variables para las que puedas redactar un ANÁLISIS o SUSTENTO útil.",
+  "  La estrategia FUNDAMENTA cada decisión (Art. 46.1): explica el porqué apoyándote en el",
+  "  requerimiento y en la interacción con el mercado. Redacta en español formal-técnico.",
+  "- NO inventes datos concretos (montos, plazos, fechas, nombres). Donde falten, usa marcadores",
+  "  [ENTRE CORCHETES]. Si una variable no tiene sustento alguno, OMÍTELA.",
+  "- «exigidos»: api de las variables que ESTE procedimiento exige según su modelo/bases.",
   "- Usa SOLO las api que aparezcan en la lista de campos objetivo. No inventes claves.",
 ].join("\n");
 
@@ -660,11 +796,17 @@ const COMPLETAR_SISTEMA = [
  */
 export async function completarDesdeModelo(
   input: CompletarModeloRequest,
-  options?: { entity?: string | null },
+  options?: { entity?: string | null; perfil?: "requerimiento" | "estrategia" },
 ): Promise<CompletarModeloResult> {
-  const query =
-    `Ley 32069 y su Reglamento · requerimiento de contratación ${input.tipoObjeto} ${input.tipoProcesoSeleccion} ` +
-    "finalidad pública, condiciones de contratación, términos de referencia y requisitos de calificación";
+  // Por defecto redacta el REQUERIMIENTO (lo que usa la ficha); con perfil
+  // "estrategia" cambia el prompt, la consulta y la etiqueta del modelo hacia el
+  // Art. 46 (lo que usa A4 del expediente). El resto del flujo es idéntico.
+  const esEstrategia = options?.perfil === "estrategia";
+  const query = esEstrategia
+    ? `Ley 32069 y su Reglamento · estrategia de contratación ${input.tipoObjeto} ${input.tipoProcesoSeleccion} ` +
+      "tipo de procedimiento, evaluadores, factores de evaluación, modalidad de pago, interacción con el mercado"
+    : `Ley 32069 y su Reglamento · requerimiento de contratación ${input.tipoObjeto} ${input.tipoProcesoSeleccion} ` +
+      "finalidad pública, condiciones de contratación, términos de referencia y requisitos de calificación";
 
   const docIds = await resolverModelosDocIds(input.tipoProcesoSeleccion, options?.entity, input.tipoObjeto);
   const [modeloRes, normaRes] = await Promise.all([
@@ -688,7 +830,8 @@ export async function completarDesdeModelo(
     .map(
       (c) =>
         `- api="${c.api}" · "${c.label}"${c.seccion ? ` [${c.seccion}]` : ""}${c.obligatorio ? " (obligatorio)" : ""}` +
-        `${c.baseLegal ? ` · base legal: ${c.baseLegal}` : ""}`,
+        `${c.baseLegal ? ` · base legal: ${c.baseLegal}` : ""}` +
+        `${c.plantilla ? `\n    · estructura obligatoria (sigue su orden; rellena los [corchetes] con los CAMPOS YA RELLENOS): ${c.plantilla}` : ""}`,
     )
     .join("\n");
   const llenosTxt =
@@ -705,8 +848,8 @@ export async function completarDesdeModelo(
     guiaTexto(input.tipoProcesoSeleccion),
     "",
     modeloTxt
-      ? `MODELO DE REQUERIMIENTO DE LA ENTIDAD (formato a seguir):\n${modeloTxt}`
-      : "MODELO DE REQUERIMIENTO DE LA ENTIDAD: no disponible; apóyate en la guía y la norma.",
+      ? `${esEstrategia ? "BASES/MODELO DE LA ENTIDAD" : "MODELO DE REQUERIMIENTO DE LA ENTIDAD"} (formato a seguir):\n${modeloTxt}`
+      : `${esEstrategia ? "BASES/MODELO DE LA ENTIDAD" : "MODELO DE REQUERIMIENTO DE LA ENTIDAD"}: no disponible; apóyate en la guía y la norma.`,
     "",
     normaTxt ? `FUENTES NORMATIVAS:\n${normaTxt}` : "",
     "",
@@ -720,7 +863,7 @@ export async function completarDesdeModelo(
   const client = getOpenAIClient();
   const resp = await client.responses.create({
     input: [
-      { role: "system", content: COMPLETAR_SISTEMA },
+      { role: "system", content: esEstrategia ? COMPLETAR_SISTEMA_ESTRATEGIA : COMPLETAR_SISTEMA },
       { role: "user", content: user },
     ],
     max_output_tokens: 5000,
@@ -1226,6 +1369,60 @@ const GENERAR_SISTEMA = [
 ].join("\n");
 
 /**
+ * Genera texto largo tolerando el TOPE DE SALIDA del proveedor.
+ *
+ * Aunque se pida `max_output_tokens` alto, el proveedor (p. ej. glm-4.5-flash)
+ * corta la respuesta a su propio límite: un requerimiento completo se cortaba a
+ * media propuesta (p. ej. en «C.1 Experiencia del personal clave», sin llegar a
+ * «D. Participación en consorcio»). Aquí, si la respuesta viene TRUNCADA
+ * (finish_reason «length» o status «incomplete»), se pide continuar EXACTAMENTE
+ * desde donde se quedó y se concatena, hasta que el modelo termina solo o se
+ * alcanza el tope de rondas.
+ */
+async function generarConContinuacion(
+  system: string,
+  user: string,
+  maxRondas = 5,
+): Promise<string> {
+  const client = getOpenAIClient();
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+  let full = "";
+  for (let ronda = 0; ronda < maxRondas; ronda += 1) {
+    const resp = (await client.responses.create({
+      input: messages,
+      max_output_tokens: 16000,
+      model: legalAnswerModel,
+      temperature: 0.25,
+    })) as {
+      output_text?: string;
+      status?: string;
+      raw?: { choices?: Array<{ finish_reason?: string }> };
+    };
+    const trozo = resp.output_text ?? "";
+    if (!trozo.trim()) break;
+    full += trozo;
+
+    const finish = resp.raw?.choices?.[0]?.finish_reason;
+    const truncado = finish === "length" || resp.status === "incomplete";
+    if (!truncado) break;
+
+    // Se acumula lo emitido como turno del asistente para que la continuación
+    // sepa qué ya escribió, y se pide seguir sin repetir ni cerrar.
+    messages.push({ role: "assistant", content: trozo });
+    messages.push({
+      role: "user",
+      content:
+        "Continúa el documento EXACTAMENTE desde donde te quedaste (sin repetir nada de lo ya escrito, " +
+        "sin preámbulo ni resumen), manteniendo el mismo formato Markdown, la numeración y los literales.",
+    });
+  }
+  return full.trim();
+}
+
+/**
  * Genera una propuesta completa de EETT/TDR anclada al modelo OECE del proceso.
  * Toma el contenido del borrador (texto del PDF subido / editor) y lo reescribe
  * conforme al formato oficial. Devuelve Markdown simple.
@@ -1242,7 +1439,11 @@ export async function generarEettTdr(
 
   const docId = await resolverModeloDocId(input.tipoProcesoSeleccion, options?.entity, input.tipoObjeto);
   const [modeloCompleto, normaRes] = await Promise.all([
-    docId ? modeloOeceCompleto(docId) : Promise.resolve(""),
+    // Para GENERAR se necesita el modelo de requerimiento ENTERO (no un recorte):
+    // si el modelo se trunca, la IA no ve los apartados finales y la propuesta
+    // sale incompleta. 120 000 cubre incluso el modelo de obras (~111k); estos
+    // modelos tienen contexto de sobra (128k-1M tokens).
+    docId ? modeloOeceCompleto(docId, 120000) : Promise.resolve(""),
     searchLegalSources({ query, topK: 6 })
       .then((r) => r.sources.filter((s) => ["ley", "reglamento", "directiva"].includes(s.documentType)))
       .catch(() => [] as LegalSource[]),
@@ -1275,18 +1476,7 @@ export async function generarEettTdr(
     input.contenido.trim() ? input.contenido.trim().slice(0, 24000) : "(vacío: genera la estructura base a completar)",
   ].join("\n");
 
-  const client = getOpenAIClient();
-  const resp = await client.responses.create({
-    input: [
-      { role: "system", content: GENERAR_SISTEMA },
-      { role: "user", content: user },
-    ],
-    max_output_tokens: 8000,
-    model: legalAnswerModel,
-    temperature: 0.25,
-  });
-
-  const contenido = (resp.output_text ?? "").trim();
+  const contenido = await generarConContinuacion(GENERAR_SISTEMA, user);
   return { contenido, usoModelo: Boolean(modeloTxt) };
 }
 

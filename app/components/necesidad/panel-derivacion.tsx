@@ -135,7 +135,7 @@ export const PanelDerivacion = memo(function PanelDerivacion({
                     key={paso.code}
                     title={`${paso.code} · ${paso.label}: ${paso.statusLabel}`}
                   >
-                    {paso.code}
+                    {paso.code.replace(/^[A-Z]/, "")}
                   </span>
                 ))}
               </div>

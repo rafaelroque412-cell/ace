@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { requireCapability, requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability, requireUser } from "@/lib/auth";
 import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
 import { type NecesidadDocumento, necesidadDocKinds } from "@/lib/necesidades";
 import {
@@ -28,6 +28,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return auth.error;
   }
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const documentos = await supabaseUserRest<NecesidadDocumento[]>(
     auth.user.accessToken,
     `necesidad_documentos?necesidad_id=eq.${id}&select=${SELECT}&order=created_at.asc`,
@@ -42,6 +44,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
 
   try {
     const formData = await request.formData();
@@ -116,6 +120,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if (!documentoId) {
     return NextResponse.json({ error: "Falta el documento a eliminar" }, { status: 400 });
   }
+  const malos = idsDeRutaInvalidos(id, documentoId);
+  if (malos) return malos;
 
   try {
     // El fichero, antes que la fila: al revés se pierde la ruta y el PDF se

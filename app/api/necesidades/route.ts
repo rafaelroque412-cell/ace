@@ -3,8 +3,14 @@ import { requireCapability, requireUser } from "@/lib/auth";
 import { type Necesidad, necesidadCreateSchema } from "@/lib/necesidades";
 import { columnasSelect, construirColumnas } from "@/lib/necesidad-columnas";
 import { construirQueryNecesidades } from "@/lib/necesidades-query";
+import { ordenPostgrest } from "@/lib/necesidad-lista";
 import { estadosBandeja } from "@/lib/necesidades-bandeja";
-import { NECESIDAD_ESTADOS } from "@/lib/necesidad-workflow";
+import {
+  ESTADOS_ACTIVOS,
+  ESTADOS_ESPERA,
+  fechaLimiteEstancada,
+  fechaLimitePorVencer,
+} from "@/lib/necesidades-portafolio";
 import { supabaseRest, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -23,26 +29,17 @@ const LIST_SELECT =
 const estadosPendientesDe = estadosBandeja;
 
 // ===== Portafolio (E2) =====
-// Estados "en espera de acción" (progreso + atención) y "activos" (todo lo que
-// aún se tramita: ni derivadas ni anuladas).
-const ESTADOS_ESPERA = NECESIDAD_ESTADOS.filter((e) => e.tono === "progreso" || e.tono === "atencion").map((e) => e.value);
-const ESTADOS_ACTIVOS = NECESIDAD_ESTADOS.filter((e) => e.value !== "incorporado_cmn" && e.value !== "anulada").map((e) => e.value);
-const DIAS_POR_VENCER = 15; // fecha requerida dentro de 15 días (o pasada)
-const DIAS_ESTANCADA = 7; // sin cambio de estado desde hace 7+ días
+// Los estados y umbrales viven en lib/necesidades-portafolio: fuente única
+// compartida con el CONTADOR del chip (facetas), para que la lista que sale al
+// pulsarlo y el número del chip no puedan discrepar.
 
 /** Filtros server-side de una vista de portafolio ("por_vencer" | "estancadas"). */
 function filtrosDeVista(vista: string): { statusIn?: string[]; fechaRequeridaHasta?: string; updatedAntesDe?: string } {
-  const hoy = new Date();
-  const enDias = (n: number) => {
-    const d = new Date(hoy);
-    d.setUTCDate(d.getUTCDate() + n);
-    return d;
-  };
   if (vista === "por_vencer") {
-    return { statusIn: ESTADOS_ACTIVOS, fechaRequeridaHasta: enDias(DIAS_POR_VENCER).toISOString().slice(0, 10) };
+    return { statusIn: [...ESTADOS_ACTIVOS], fechaRequeridaHasta: fechaLimitePorVencer() };
   }
   if (vista === "estancadas") {
-    return { statusIn: ESTADOS_ESPERA, updatedAntesDe: enDias(-DIAS_ESTANCADA).toISOString() };
+    return { statusIn: [...ESTADOS_ESPERA], updatedAntesDe: fechaLimiteEstancada().toISOString() };
   }
   return {};
 }
@@ -90,12 +87,18 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10) || 20));
   const offset = (page - 1) * limit;
 
+  // La clave de orden llega del cliente; `ordenPostgrest` la traduce a un
+  // fragmento seguro (clave desconocida → recientes), así nada del cliente se
+  // interpola crudo en el `order=` de la consulta.
+  const orden = ordenPostgrest(searchParams.get("orden"));
+
   const porVista = filtrosDeVista(vista);
   const query = construirQueryNecesidades({
     fechaRequeridaHasta: porVista.fechaRequeridaHasta,
     limit,
     meta: metaFilter,
     offset,
+    orden,
     oficina: oficinaFilter,
     responsable: responsableFilter,
     search,

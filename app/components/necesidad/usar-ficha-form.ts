@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { direccionDeLaEntidad } from "@/lib/configuracion-types";
 import { decidirSiembra, GEMELO } from "@/lib/necesidad-denominacion";
 import { FICHA_SECCIONES, type FichaField } from "@/lib/necesidad-ficha-secciones";
-import { LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
+import { acotarNumero, LIMITES_TEXTO, NOMBRE_MAX } from "@/lib/necesidades-limites";
 import type { Necesidad } from "@/lib/necesidades";
 import type { NecesidadItem } from "@/lib/necesidad-items";
 import { cuiDeCadenaFuncional } from "@/lib/pedido-compra-import";
@@ -47,7 +47,7 @@ export function useFichaForm({
   necesidadId,
   onAntesDeEditar,
   onError,
-  onRecargar,
+  onGuardado,
   onSalirDelPasoAPaso,
   year,
 }: {
@@ -79,7 +79,13 @@ export function useFichaForm({
   onAntesDeEditar: () => void;
   /** Cadena vacia limpia el aviso. */
   onError: (mensaje: string) => void;
-  onRecargar: () => Promise<void> | void;
+  /**
+   * Se llama tras un guardado con éxito con la necesidad fresca (del PATCH) y,
+   * si el cuadro cambió, los ítems (del PUT). Reemplaza a la recarga completa:
+   * guardar solo cambia `necesidades` e `necesidad_items`, no documentos,
+   * observaciones, versiones, admisibilidad ni el hitoEstado de transiciones.
+   */
+  onGuardado: (necesidad: Necesidad, items?: NecesidadItem[]) => void;
   /** Al fallar la validacion: el campo que falta suele estar en otro paso. */
   onSalirDelPasoAPaso: () => void;
   /** Ejercicio fiscal, para sembrar el año al abrir. */
@@ -227,6 +233,35 @@ export function useFichaForm({
     onError("");
   }
 
+  /**
+   * Reconcilia el formulario abierto con lo que una escritura EXTERNA acaba de
+   * persistir: el traslado de campos del EETT/TDR o el «aplicar» de los campos
+   * que la IA extrajo. Ambos hacen su propio PATCH y recargan la necesidad.
+   *
+   * Sin esto, `fichaForm` conserva el valor VIEJO de esos campos (normalmente
+   * vacío) y, como el autoguardado manda el formulario ENTERO, el siguiente
+   * autoguardado los REVIERTE en silencio: el usuario ve cómo lo trasladado
+   * desaparece solo. Aquí se re-siembran esos campos desde la necesidad ya
+   * recargada, de modo que el formulario y la base coincidan.
+   *
+   * Solo actúa en edición (en lectura no hay formulario). No marca `formSucio`:
+   * los valores YA están guardados. Debe llamarse con la necesidad recargada
+   * (valores frescos) y la lista de apis que se escribieron.
+   */
+  function reconciliarCamposExternos(n: Necesidad, apis: string[]) {
+    if (!fichaEdit || apis.length === 0) return;
+    const base = valoresDeLaBase(n);
+    setFichaForm((prev) => {
+      const next = { ...prev };
+      for (const api of apis) {
+        if (api in base) next[api] = base[api];
+      }
+      return next;
+    });
+    // Ya no son borrador local de este navegador: se acaban de guardar.
+    setCamposBorrador((prev) => prev.filter((a) => !apis.includes(a)));
+  }
+
   function setFichaField(api: string, value: string) {
     // Capado defensivo al tope del schema: evita que un texto largo (típicamente
     // redactado por el copiloto IA en un campo de tope corto) deje la ficha
@@ -307,7 +342,18 @@ export function useFichaForm({
         } else if (field.kind === "number") {
           if (raw === "") continue;
           const num = Number(raw);
-          if (Number.isFinite(num)) payload[field.api] = num;
+          if (Number.isFinite(num)) {
+            // Acotado defensivo al rango del schema, como el capado del texto:
+            // un número fuera de rango (p. ej. un plazo de respuestas > 365
+            // tecleado o heredado de un borrador) rebotaría en el PATCH con un
+            // 400 en CADA autoguardado y bloquearía la ficha entera. Solo los
+            // campos con rango declarado (días/periodos, `.int()` en el schema);
+            // la cantidad y los importes no declaran rango y no se tocan.
+            payload[field.api] =
+              field.min !== undefined || field.max !== undefined
+                ? acotarNumero(num, field.min, field.max)
+                : num;
+          }
         } else {
           // Un campo con valor por defecto NO puede viajar vacío: son enums
           // cerrados y el servidor los rechaza con un 400 que bloquea la ficha
@@ -390,12 +436,19 @@ export function useFichaForm({
   //
   // `fichaForm` entero en las dependencias: cualquier cambio del formulario
   // (incluida la siembra del gemelo) debe persistirse.
+  //
+  // `savingFicha` en el guard y las deps: al pulsar «Guardar ficha» el efecto se
+  // reejecuta, su cleanup CANCELA el temporizador pendiente y no agenda otro. Sin
+  // esto, un autoguardado ya programado disparaba en medio del guardado explícito;
+  // los dos leían el mismo sello y el segundo en confirmar chocaba con un 409
+  // espurio. Al terminar el guardado (`savingFicha` vuelve a false) se reagenda si
+  // sigue habiendo cambios.
   useEffect(() => {
-    if (!fichaEdit || !formSucio || conflictoGuardado) return;
+    if (!fichaEdit || !formSucio || conflictoGuardado || savingFicha) return;
     const t = setTimeout(() => { void autoguardarFicha(); }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fichaForm, fichaEdit, formSucio, conflictoGuardado]);
+  }, [fichaForm, fichaEdit, formSucio, conflictoGuardado, savingFicha]);
 
   async function saveFicha() {
     if ((fichaForm.nombre ?? "").trim().length < 3) {
@@ -462,9 +515,16 @@ export function useFichaForm({
         onError(data.error ?? "No se pudo guardar la ficha.");
         return;
       }
+      // El sello de versión se avanza AQUÍ, en cuanto la ficha se guarda, y NO
+      // después del PUT de ítems: si los ítems fallan, la fila de la necesidad YA
+      // cambió en el servidor y quedarse con el sello viejo hacía que el siguiente
+      // guardado (o autoguardado) chocara con un 409 espurio —"otro usuario guardó"
+      // siendo el mismo—.
+      if (data?.necesidad?.updated_at) baseUpdatedAtRef.current = data.necesidad.updated_at;
       // Los ítems viven en su propia tabla, así que van en una llamada aparte y
       // SOLO si el cuadro cambió: reemplazar la lista borra y reinserta, y
       // hacerlo en cada guardado gastaría ids nuevos sin motivo.
+      let itemsFrescos: NecesidadItem[] | undefined;
       if (JSON.stringify(items) !== itemsGuardados) {
         const resItems = await fetch(`/api/necesidades/${necesidadId}/items`, {
           body: JSON.stringify({ items }),
@@ -479,22 +539,28 @@ export function useFichaForm({
           );
           return;
         }
+        // El PUT devuelve los ítems ya guardados (con sus ids y `nro` reales), en
+        // la MISMA forma que el GET combinado: se reutilizan para no releerlos.
+        const dataItems = await resItems.json().catch(() => null);
+        if (dataItems?.items) itemsFrescos = dataItems.items as NecesidadItem[];
       }
       // NO se cierra la edición: al pulsar «Guardar ficha» se queda en el
       // editor para seguir trabajando. Antes saltaba a la vista de lectura, que
       // desde el editor se vivía como «salir de la página».
       //
-      // El sello de versión se avanza con el que devuelve el PATCH, para que el
-      // siguiente guardado (o autoguardado) no choque con un 409 por creer que
-      // la fila cambió por detrás. `formSucio` vuelve a false: lo recién guardado
-      // ya no está pendiente, y el autoguardado no dispara sin un cambio nuevo.
-      if (data?.necesidad?.updated_at) baseUpdatedAtRef.current = data.necesidad.updated_at;
+      // `formSucio` vuelve a false: lo recién guardado ya no está pendiente, y el
+      // autoguardado no dispara sin un cambio nuevo. (El sello ya se avanzó arriba,
+      // en cuanto la ficha se guardó.)
       setFormSucio(false);
       setAutoguardado("guardado");
       // Guardado con éxito: el borrador ya no representa nada pendiente.
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
       setCamposBorrador([]);
-      await onRecargar();
+      // En vez de recargar 7 tablas: se aplican la necesidad fresca del PATCH y,
+      // si el cuadro cambió, los ítems del PUT. Guardar campos solo cambia la fila
+      // `necesidades` y `necesidad_items`; documentos, observaciones, versiones,
+      // admisibilidad e hitosEstado (auditoría de transiciones) no cambian al guardar.
+      onGuardado(data.necesidad, itemsFrescos);
     } catch {
       onError("No se pudo conectar con el servidor.");
     } finally {
@@ -515,6 +581,7 @@ export function useFichaForm({
     focoPendiente,
     formSucio,
     guardar: saveFicha,
+    reconciliarCamposExternos,
     savingFicha,
     setCamposTocados,
     setFichaEdit,

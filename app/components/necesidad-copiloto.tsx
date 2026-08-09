@@ -1,18 +1,44 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ClipboardCheck, Copy, Loader, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Copy, Loader, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { markdownAHtmlSeguro } from "@/lib/markdown-seguro";
+import type { CopilotoFuente } from "@/lib/necesidad-copiloto";
+
+function MarkdownTexto({ content }: { content: string }) {
+  if (!content?.trim()) return null;
+  const html = markdownAHtmlSeguro(content);
+  return (
+    <div
+      className="copilotoMsgTexto [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-line [&_th]:border [&_th]:border-line [&_th]:bg-panel [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-[11px] [&_th]:font-semibold [&_td]:border [&_td]:border-line [&_td]:px-2 [&_td]:py-1 [&_td]:text-[12px] [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_strong]:font-semibold [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_h1]:text-[14px] [&_h1]:font-bold [&_h1]:mb-1 [&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:mb-1"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
 
 // Copiloto IA del Requerimiento. Panel lateral que redacta y revisa los campos
 // del requerimiento anclado a la guía oficial del tipo elegido (misma fuente que
 // la guía inline). Consume /api/necesidades/copiloto (NDJSON en streaming) con
 // la infra de chat existente.
 
-export type CopilotoCampo = { key: string; label: string; valor: string; baseLegal?: string; seccion?: string };
+export type CopilotoCampo = {
+  key: string;
+  label: string;
+  valor: string;
+  baseLegal?: string;
+  seccion?: string;
+  /** Molde del campo (estructura + ejemplo) para que la IA redacte con la forma
+   *  que exige su artículo, no solo con el principio. */
+  plantilla?: string;
+  ejemplo?: string;
+};
 
 // Fuente normativa (Ley 32069 / Reglamento) o modelo de requerimiento que
 // fundamenta la respuesta.
-type Fuente = { citation: string; article: string | null; documentType: string };
+// El tipo se IMPORTA del servidor en vez de redeclararse aqui: era una copia
+// que ya se habia quedado corta —le faltaban `documentId` y `rol`, que el
+// backend si enviaba— y el panel no podia enlazar lo que citaba.
+type Fuente = CopilotoFuente;
 
 const TIPO_FUENTE_LABEL: Record<string, string> = {
   ley: "Ley",
@@ -23,6 +49,8 @@ const TIPO_FUENTE_LABEL: Record<string, string> = {
 };
 
 type Mensaje = {
+  /** La búsqueda vectorial no respondió al generar esta respuesta. */
+  degradada?: boolean;
   role: "user" | "assistant";
   content: string;
   // Para respuestas de "redactar": campo destino, para poder insertarlas.
@@ -30,6 +58,7 @@ type Mensaje = {
   campoLabel?: string;
   // Fuentes normativas citadas (para respuestas del asistente).
   fuentes?: Fuente[];
+  aviso?: string;
 };
 
 type Accion =
@@ -42,6 +71,7 @@ export function NecesidadCopiloto({
   onCerrar,
   tipoProcesoSeleccion,
   tipoObjeto,
+  necesidadId,
   campos,
   faltantes = [],
   redactarSolicitud,
@@ -51,6 +81,7 @@ export function NecesidadCopiloto({
   onCerrar: () => void;
   tipoProcesoSeleccion: string;
   tipoObjeto: string;
+  necesidadId: string;
   /** Campos actualmente visibles del requerimiento (para contexto y redacción). */
   campos: CopilotoCampo[];
   /** Etiquetas de campos obligatorios aún vacíos (para priorizar en "revisar"). */
@@ -110,16 +141,20 @@ export function NecesidadCopiloto({
       accion: peticion.accion,
       tipoProcesoSeleccion,
       tipoObjeto,
+      necesidadId,
       camposLlenos: campos
         .filter((c) => c.valor.trim() !== "")
-        .map((c) => ({ label: c.label, valor: c.valor })),
+        .map((c) => ({ key: c.key, label: c.label, valor: c.valor })),
       ...(peticion.accion === "redactar"
         ? {
             campoObjetivo: {
+              key: peticion.campoObjetivo.key,
               label: peticion.campoObjetivo.label,
               valor: peticion.campoObjetivo.valor,
               baseLegal: peticion.campoObjetivo.baseLegal ?? "",
               seccion: peticion.campoObjetivo.seccion ?? "",
+              plantilla: peticion.campoObjetivo.plantilla ?? "",
+              ejemplo: peticion.campoObjetivo.ejemplo ?? "",
             },
           }
         : {}),
@@ -150,6 +185,8 @@ export function NecesidadCopiloto({
       let buffer = "";
       let acumulado = "";
       let fuentes: Fuente[] = [];
+      // La búsqueda vectorial no respondió: lo citado sale del respaldo léxico.
+      let degradada = false;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -164,12 +201,15 @@ export function NecesidadCopiloto({
             text?: string;
             error?: string;
             fuentes?: Fuente[];
+            aviso?: string;
           };
           if (ev.type === "delta" && ev.text) {
             acumulado += ev.text;
             setParcial(acumulado);
           } else if (ev.type === "fuentes" && ev.fuentes) {
             fuentes = ev.fuentes;
+          } else if (ev.type === "aviso" && ev.aviso === "busqueda-degradada") {
+            degradada = true;
           } else if (ev.type === "error") {
             throw new Error(ev.error ?? "No se pudo generar la respuesta.");
           }
@@ -177,6 +217,7 @@ export function NecesidadCopiloto({
       }
 
       const asistente: Mensaje = {
+        degradada,
         role: "assistant",
         content: acumulado.trim(),
         ...(fuentes.length > 0 ? { fuentes } : {}),
@@ -258,15 +299,39 @@ export function NecesidadCopiloto({
 
         {mensajes.map((m, i) => (
           <div className={`copilotoMsg ${m.role}`} key={i}>
-            <div className="copilotoMsgTexto">{m.content}</div>
+            <MarkdownTexto content={m.content} />
+            {/* Modo degradado a la vista. Sin este aviso, el respaldo lexico —un ilike
+                con OR entre palabras y sin orden por relevancia— se presentaba como
+                «fundamento normativo» y era indistinguible de una busqueda real. */}
+            {m.degradada ? (
+              <p className="copilotoDegradada" role="status">
+                <AlertTriangle size={12} aria-hidden /> La búsqueda normativa está degradada: no se pudo
+                consultar el índice vectorial. Las referencias, si las hay, salen de una coincidencia por
+                palabras; puede que no haya ninguna. <strong>Verifica cada artículo antes de usarlo.</strong>
+              </p>
+            ) : null}
             {m.fuentes && m.fuentes.length > 0 ? (
               <div className="copilotoFuentes">
                 <span className="copilotoFuentesLabel">Fundamento normativo:</span>
+                {/* La cita se abre. Las normas van a /normas, que acepta `documentId` y
+                    `article` y salta al articulo exacto; el PDF-modelo, a su descarga.
+                    Una cita que no se puede comprobar obliga a creerle a la IA. */}
                 {m.fuentes.map((f, j) => (
-                  <span className="copilotoFuente" key={j} title={f.citation}>
+                  <a
+                    className="copilotoFuente"
+                    href={
+                      f.rol === "norma"
+                        ? `/normas?documentId=${encodeURIComponent(f.documentId)}${f.article ? `&article=${encodeURIComponent(f.article)}` : ""}`
+                        : `/api/documents/${encodeURIComponent(f.documentId)}`
+                    }
+                    key={j}
+                    rel="noreferrer"
+                    target="_blank"
+                    title={`${f.citation} — abrir ${f.rol === "norma" ? "en Normas" : "el modelo"}`}
+                  >
                     {f.article ? `Art. ${f.article}` : f.citation.slice(0, 40)}
                     <em>{TIPO_FUENTE_LABEL[f.documentType] ?? f.documentType}</em>
-                  </span>
+                  </a>
                 ))}
               </div>
             ) : null}
@@ -286,7 +351,7 @@ export function NecesidadCopiloto({
                 {m.campoKey ? (
                   <button
                     className="copilotoLink"
-                    onClick={() => onAplicarCampo(m.campoKey!, m.content)}
+                    onClick={() => { console.log("[ copiloto ] insertar", m.campoKey, "len:", m.content.length); onAplicarCampo(m.campoKey!, m.content); }}
                     type="button"
                   >
                     <WandSparkles size={12} /> Insertar en «{m.campoLabel}»
@@ -299,7 +364,7 @@ export function NecesidadCopiloto({
 
         {parcial ? (
           <div className="copilotoMsg assistant">
-            <div className="copilotoMsgTexto">{parcial}</div>
+            <MarkdownTexto content={parcial} />
           </div>
         ) : null}
 

@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { requireCapability, requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability, requireUser } from "@/lib/auth";
 import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
 import { buildStoragePath } from "@/lib/documents";
 import {
@@ -13,6 +13,7 @@ import {
 import { leerDocx } from "@/lib/docx-a-bloques";
 import { extractPdfPagedText, processPdfForSearch } from "@/lib/pdf-processing";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import { DOC_TYPE_EETT, KIND_EETT, filtroEettTdr } from "@/lib/eett-tdr-documento";
 
 /** Mime de Word moderno. Los .doc antiguos no entran: no son zip. */
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -32,20 +33,21 @@ export const maxDuration = 60;
 // "bases_integradas" y metadata.kind="eett_tdr" + necesidadId + tipo (eett|tdr),
 // para listarlo/borrarlo por necesidad sin tocar el resto del corpus.
 
-const KIND = "eett_tdr";
-const DOC_TYPE = "bases_integradas";
+// Alias locales para no reescribir los usos de `marca`/`KIND`/`DOC_TYPE`
+// repartidos por el fichero; la definición vive en lib/eett-tdr-documento.
+const KIND = KIND_EETT;
+const DOC_TYPE = DOC_TYPE_EETT;
+const marca = filtroEettTdr;
 
 type EettTdrDoc = DocumentRecord & { metadata?: Record<string, unknown> };
-
-function marca(necesidadId: string) {
-  return `document_type=eq.${DOC_TYPE}&metadata->>kind=eq.${KIND}&metadata->>necesidadId=eq.${necesidadId}`;
-}
 
 // GET → lista los EETT/TDR de la necesidad.
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   try {
     getSupabaseServerConfig();
     const documents = await supabaseRest<EettTdrDoc[]>(
@@ -201,6 +203,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
   const docId = new URL(request.url).searchParams.get("docId");
   if (!docId) return NextResponse.json({ error: "Falta el documento a eliminar." }, { status: 400 });
+  const malos = idsDeRutaInvalidos(id, docId);
+  if (malos) return malos;
   try {
     // Solo borra si es REALMENTE un EETT/TDR de ESTA necesidad.
     const docs = await supabaseRest<Array<EettTdrDoc & DocumentoConFichero>>(

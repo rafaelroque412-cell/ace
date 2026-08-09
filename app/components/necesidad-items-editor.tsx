@@ -57,6 +57,21 @@ export function NecesidadItemsEditor({
   const discrepancia = discrepanciaCuantia(items, montoDeclarado);
   const agrupamiento = evaluarAgrupamiento(items, uitValor);
   const objeto = objetoSugerido(items, objetoNecesidad);
+  /**
+   * ¿Cabe siquiera agrupar? Con un solo ítem, no.
+   *
+   * El Art. 52.1 del Reglamento abre con «puede AGRUPAR la contratación de los
+   * bienes, servicios u obras esencialmente similares», y los dos mecanismos que
+   * enumera son plurales por definición: el paquete agrupa «VARIOS bienes o
+   * servicios» (52.1.a) y la relación de ítems los reparte en «DIFERENTES ítems,
+   * lotes o tramos» (52.1.b). Con una sola prestación no hay nada que agrupar:
+   * no es «por paquete» ni «según relación de ítems», es una contratación normal
+   * y el artículo no entra en juego.
+   *
+   * Por eso las dos columnas de paquete no se pintan con un único ítem: ofrecerlas
+   * invitaría a declarar un agrupamiento que la norma no admite.
+   */
+  const puedeAgrupar = items.length > 1;
   const paquetes = agruparPorPaquete(items);
   const sueltos = itemsSinPaquete(items);
   const unSoloItem = paquetesDeUnSoloItem(items);
@@ -94,7 +109,7 @@ export function NecesidadItemsEditor({
   }
 
   return (
-    <div className="necItems">
+    <div className="necItems" data-campo="items">
       <div className="necItemsHead">
         <span className="fichaSubgrupo">Ítems del requerimiento</span>
         <span className="necItemsHint">
@@ -109,7 +124,7 @@ export function NecesidadItemsEditor({
               <tr>
                 {/* Primera columna: el paquete. Su celda se combina a lo alto de
                     los ítems que agrupa. */}
-                <th scope="col">Paquete / objeto contractual</th>
+                {puedeAgrupar ? <th scope="col">Paquete / objeto contractual</th> : null}
                 <th scope="col">N°</th>
                 {/* El código del catálogo va DELANTE de la descripción: es como
                     se identifica la prestación en el CUBSO/SIGA y como se busca. */}
@@ -124,7 +139,7 @@ export function NecesidadItemsEditor({
                 <th scope="col">Naturaleza</th>
                 {/* Paquete: agrupa varios ítems en un solo objeto contractual
                     (Art. 52.1.a). Vacío = el ítem va suelto. */}
-                <th scope="col">Paquete</th>
+                {puedeAgrupar ? <th scope="col">Paquete</th> : null}
                 {readOnly ? null : <th scope="col"><span className="visuallyHidden">Quitar</span></th>}
               </tr>
             </thead>
@@ -140,7 +155,7 @@ export function NecesidadItemsEditor({
                     {/* Celda del paquete: la dibuja SOLO la primera fila del
                         grupo y abarca las de sus ítems (Art. 52.1.a: forman un
                         único objeto contractual). Los sueltos no la llevan. */}
-                    {filasPaquete > 0 && paquete ? (
+                    {puedeAgrupar && filasPaquete > 0 && paquete ? (
                       <td className="necItemsPaqueteCelda" rowSpan={filasPaquete}>
                         <strong>Paquete {paquete.nro}</strong>
                         <textarea
@@ -158,7 +173,7 @@ export function NecesidadItemsEditor({
                     ) : null}
                     {/* Los sueltos ocupan esa columna con una celda vacía para
                         que las demás no se desplacen. */}
-                    {paquete ? null : <td className="necItemsSinPaqueteCelda" />}
+                    {puedeAgrupar && !paquete ? <td className="necItemsSinPaqueteCelda" /> : null}
                     <td className="necItemsNro">{item.nro}</td>
                     <td className="necItemsCodigo">
                       <input
@@ -232,16 +247,18 @@ export function NecesidadItemsEditor({
                         ))}
                       </select>
                     </td>
-                    <td>
-                      <input
-                        aria-label={`Paquete del ítem ${item.nro}`}
-                        disabled={readOnly}
-                        inputMode="numeric"
-                        onChange={(e) => editar(item, { nroPaquete: num(e.target.value) })}
-                        placeholder="—"
-                        value={item.nroPaquete ?? ""}
-                      />
-                    </td>
+                    {puedeAgrupar ? (
+                      <td>
+                        <input
+                          aria-label={`Paquete del ítem ${item.nro}`}
+                          disabled={readOnly}
+                          inputMode="numeric"
+                          onChange={(e) => editar(item, { nroPaquete: num(e.target.value) })}
+                          placeholder="—"
+                          value={item.nroPaquete ?? ""}
+                        />
+                      </td>
+                    ) : null}
                     {readOnly ? null : (
                       <td>
                         <button

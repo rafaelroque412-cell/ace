@@ -158,16 +158,17 @@ describe("la sección 3.3 sigue el orden y las letras del requerimiento modelo",
     }
   });
 
-  it("el 3.5.2 vuelve a tener campo: el modelo trae esa sección", () => {
-    // Se guardó vacía al consolidar el personal clave en el editor del 72.3, y
-    // `seccionesVisibles` descarta las vacías, así que el 3.5.2 desaparecía. La
-    // experiencia del personal clave se registra en 3.5.1, junto a la del postor.
-    const s = FICHA_SECCIONES.find((x) => x.title.startsWith("3.5.2"));
-    expect(s?.fields.filter((f) => !f.oculto).map((f) => f.api)).toEqual(["requisitosAdicionales"]);
+  it("no hay una sección 3.5.2 de adicionales: era dato muerto y se retiró", () => {
+    // El textarea libre `requisitos_adicionales` no lo consumía nadie (ni el
+    // requerimiento, ni A4, ni la estrategia) y estaba vacío en todas las
+    // necesidades. Los facultativos se proponen en el editor de 3.5 marcando un
+    // tipo del 72.3 como "Facultativo".
+    expect(FICHA_SECCIONES.some((x) => x.title.startsWith("3.5.2"))).toBe(false);
+    expect(FICHA_SECCIONES.every((x) => !x.fields.some((f) => f.api === "requisitosAdicionales"))).toBe(true);
   });
 
-  it("la experiencia del personal clave está en 3.5.1, con la del postor", () => {
-    const s = FICHA_SECCIONES.find((x) => x.title.startsWith("3.5.1"));
+  it("la experiencia del personal clave está en el editor de 3.5, con la del postor", () => {
+    const s = FICHA_SECCIONES.find((x) => x.title.startsWith("3.5 Requisitos"));
     expect(s?.fields.map((f) => f.api)).toContain("personalClaveExperiencia");
   });
 });
@@ -238,9 +239,13 @@ describe("los campos del 3.3 encajan con lo que el modelo pide en cada apartado"
     const campo = campo33("solucionControversias");
     expect(campo.kind).toBe("controversias");
     expect(campo.plantilla).toBeUndefined();
-    // Y cita los artículos que de verdad aplican: el 224 es de contratos
-    // estandarizados de ingeniería y construcción, no la vía general.
+    // Y cita los artículos que de verdad aplican: conciliación/arbitraje
+    // (330/331) y —el mecanismo del cuadro— la lista de instituciones que
+    // propone la entidad y elige el postor, con inscripción en el REGAJU (332).
+    // El 224 es de contratos estandarizados de ingeniería y construcción.
     expect(campo.baseLegal).toMatch(/330|331/);
+    expect(campo.baseLegal).toMatch(/332/);
+    expect(campo.baseLegal).toMatch(/REGAJU/);
   });
 
   it("las otras penalidades se capturan en cuadro y siguen siendo opcionales", () => {
@@ -308,15 +313,14 @@ describe("las secciones 3.4 y 3.5 recogen lo que el modelo exige", () => {
     expect(seccion("3.4").nota).toMatch(/no van los requisitos de calificaci[oó]n/i);
   });
 
-  it("el 3.5.1 recuerda los dos topes del formato", () => {
-    const nota = seccion("3.5.1").nota ?? "";
+  it("el 3.5 recuerda los dos topes del formato", () => {
+    const nota = seccion("3.5 Requisitos").nota ?? "";
     expect(nota).toMatch(/TRES VECES/);
     expect(nota).toMatch(/QUINCE/);
   });
 
-  it("el 3.5.2 dice que es facultativo, no obligatorio", () => {
-    expect(seccion("3.5.2").nota).toMatch(/facultativ/i);
-    for (const f of visibles("3.5.2")) expect(f.obligatorio).not.toBe(true);
+  it("el 3.5 explica que los facultativos son opcionales, con sustento", () => {
+    expect(seccion("3.5 Requisitos").nota).toMatch(/facultativ/i);
   });
 });
 
@@ -381,7 +385,7 @@ describe("Identificación y Programación: agrupación y anclaje legal", () => {
       "a) Programación en el CMN y el PAC",
       "b) Inversión a la que se imputa",
       "c) Financiamiento",
-      "d) Valor estimado",
+      "d) Cuantía de la contratación",
       "e) Fechas del requerimiento",
     ]);
     // Ningún campo se queda fuera de su grupo.

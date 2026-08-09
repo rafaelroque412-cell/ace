@@ -44,8 +44,6 @@ export const BLOQUES_FICHA: ReadonlyArray<{
   // El flujo orienta en los dos modos. El diff de no objecion viaja dentro,
   // porque explica el punto en que esta.
   { id: "sec-flujo", label: "Flujo y estado", modos: AMBOS },
-  // El EETT/TDR es el INSUMO de la ficha, asi que va antes que ella.
-  { id: "sec-eett", label: "EETT / TDR", modos: SOLO_REDACTAR },
   // La ficha se lee en los dos; lo que cambia es si es editable.
   { id: "sec-ficha", label: "Ficha del requerimiento", modos: AMBOS },
   // Los diagnosticos no cambian de contenido, cambian de sitio: al lateral
@@ -54,11 +52,17 @@ export const BLOQUES_FICHA: ReadonlyArray<{
   { id: "sec-coherencia", label: "Coherencia", modos: AMBOS },
   { id: "sec-observaciones", label: "Observaciones", modos: AMBOS },
   { id: "sec-adjuntos", label: "Adjuntos", modos: SOLO_REDACTAR },
-  // Los riesgos son contenido del requerimiento (Art. 44.3), no un apendice.
-  { id: "sec-riesgos", label: "Riesgos", modos: SOLO_REDACTAR },
+  // La matriz de riesgos estructurada se retiró: era una duplicación del campo de
+  // prosa «Gestión de riesgos» (Art. 44.3), que es el que la IA redacta y el que va
+  // al Word oficial. Los riesgos siguen viviendo en ese campo, dentro de la ficha.
   // Los dos actos de la DEC sobre algo ya redactado.
   { id: "sec-admisibilidad", label: "Admisibilidad (DEC)", modos: SOLO_REVISAR },
-  { id: "sec-derivacion", label: "Derivación", modos: SOLO_REVISAR },
+  // En AMBOS modos: derivar y —sobre todo— «Abrir expediente» una vez derivada
+  // no son juicio de la DEC que solo importe al revisar; el área usuaria abre la
+  // ficha en «Redactar» (modo por defecto) y necesita poder llegar al expediente
+  // sin descubrir primero el interruptor de modo. El botón sigue gated por
+  // permisos y estado, así que mostrarlo no habilita nada indebido.
+  { id: "sec-derivacion", label: "Derivación", modos: AMBOS },
   { id: "sec-historial", label: "Historial", modos: SOLO_REVISAR },
 ];
 

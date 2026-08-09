@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability, requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability, requireUser } from "@/lib/auth";
 import { columnasSelect, construirColumnas } from "@/lib/necesidad-columnas";
 import { nomenclaturaExpediente } from "@/lib/necesidad-denominacion";
 import { borrarFicherosDe, type DocumentoConFichero } from "@/lib/necesidad-borrado";
@@ -55,6 +55,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const tok = auth.user.accessToken;
   try {
     // Carga combinada: todo lo necesidad-scoped que la página pide al abrir se
@@ -62,15 +64,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     // en vez de ~6 peticiones sueltas —cada una con su round-trip y su RLS—. Mismo
     // criterio que /api/processes/:id. Cada lectura tolera su propio fallo: si una
     // tabla nueva no existiera aún, el resto de la ficha carga igual.
-    const [necesidades, documentos, riesgos, observaciones, versiones, admisibilidadRows, auditRows, itemRows] = await Promise.all([
+    const [necesidades, documentos, observaciones, versiones, admisibilidadRows, auditRows, itemRows] = await Promise.all([
       supabaseUserRest<Necesidad[]>(tok, `necesidades?id=eq.${id}&select=${SELECT}`),
       supabaseUserRest<NecesidadDocumento[]>(
         tok,
         `necesidad_documentos?necesidad_id=eq.${id}&select=id,necesidad_id,kind,title,file_name,storage_bucket,storage_path,mime_type,status,error_message,created_at&order=created_at.asc`,
-      ).catch(() => []),
-      supabaseUserRest<unknown[]>(
-        tok,
-        `riesgo_necesidad?necesidad_id=eq.${id}&select=id,necesidad_id,riesgo,probabilidad,impacto,mitigacion,responsable,created_at&order=created_at.asc`,
       ).catch(() => []),
       supabaseUserRest<unknown[]>(
         tok,
@@ -105,7 +103,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({
       necesidad,
       documentos,
-      riesgos,
       observaciones,
       versiones,
       admisibilidad: { items: adm?.items ?? {}, actualizadoPor: adm?.actualizado_por ?? null, updatedAt: adm?.updated_at ?? null },
@@ -139,6 +136,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = necesidadUpdateSchema.safeParse(await request.json().catch(() => ({})));
   if (!payload.success) {
     // Se dice QUÉ campo falla y por qué. Antes solo respondía "Solicitud
@@ -253,13 +252,30 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   try {
-    // No se puede eliminar una necesidad ya derivada: primero el expediente.
-    const [nec] = await supabaseUserRest<Array<{ process_id: string | null }>>(
+    const [nec] = await supabaseUserRest<Array<{ process_id: string | null; owner_id: string }>>(
       auth.user.accessToken,
-      `necesidades?id=eq.${id}&select=process_id`,
+      `necesidades?id=eq.${id}&select=process_id,owner_id`,
     );
-    if (nec?.process_id) {
+    if (!nec) {
+      return NextResponse.json({ error: "La necesidad no existe." }, { status: 404 });
+    }
+    // Borrar es destructivo —arrastra los ficheros de Storage y los EETT/TDR—, así
+    // que a diferencia de editar/derivar (colaborativos) se restringe: solo el
+    // propietario que la registró, la DEC (órgano central que gestiona las de
+    // todas las oficinas) o un admin. Sin esto, cualquier rol con
+    // `necesidad.manage` de otra oficina podía borrar la necesidad ajena y sus
+    // ficheros. `isDec` ya incluye a admin.
+    if (!auth.user.isDec && nec.owner_id !== auth.user.id) {
+      return NextResponse.json(
+        { error: "Solo el propietario de la necesidad, la DEC o un administrador pueden eliminarla." },
+        { status: 403 },
+      );
+    }
+    // No se puede eliminar una necesidad ya derivada: primero el expediente.
+    if (nec.process_id) {
       return NextResponse.json(
         { error: "Esta necesidad está derivada a un expediente. Elimina primero el expediente." },
         { status: 409 },

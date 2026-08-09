@@ -68,9 +68,16 @@ describe("lo que el Art. 44.2 pide «de corresponder» no bloquea el guardado", 
 });
 
 describe("lo que la norma sí exige sigue bloqueando", () => {
-  it("finalidad pública (44.1) y EETT/TDR (126.1) siguen siendo obligatorios", () => {
+  it("la finalidad pública (44.1) sigue siendo obligatoria", () => {
     expect(buscar("finalidadPublica").obligatorio).toBe(true);
-    expect(buscar("descripcionDetallada").obligatorio).toBe(true);
+  });
+
+  it("el TDR/EETT (126.1) es «de corresponder», no obligatorio: puede adjuntarse como PDF", () => {
+    // La carga de 3.4 es opcional (puede escribirse aquí o adjuntarse como PDF del
+    // TDR/EETT en el panel de la ficha), así que no bloquea guardar ni remitir.
+    const f = buscar("descripcionDetallada");
+    expect(f.obligatorio).toBeFalsy();
+    expect(f.recomendado).toBe(true);
   });
 
   it("los requisitos de calificación (3.5.1) siguen siendo obligatorios", () => {
@@ -95,12 +102,10 @@ describe("listas cerradas como desplegable, no como texto libre", () => {
 });
 
 describe("las cláusulas se escriben en textarea ancho, no en una línea", () => {
-  it("adelanto, subcontratación y lugar de entrega tienen sitio para redactar", () => {
-    for (const api of ["adelantoDirecto", "lugarEntrega"]) {
-      const f = buscar(api);
-      expect(f.kind, api).toBe("textarea");
-      expect(f.wide, api).toBe(true);
-    }
+  it("el lugar de entrega tiene sitio para redactar", () => {
+    const f = buscar("lugarEntrega");
+    expect(f.kind).toBe("textarea");
+    expect(f.wide).toBe(true);
   });
 
   it("la subcontratación se elige entre los dos supuestos, no se redacta", () => {
@@ -109,6 +114,14 @@ describe("las cláusulas se escriben en textarea ancho, no en una línea", () =>
     // invitaba a mezclarlos.
     const f = buscar("subcontratacion");
     expect(f.kind).toBe("subcontratacion");
+    expect(f.wide).toBe(true);
+  });
+
+  it("el adelanto directo se elige (se otorga / no corresponde), no se redacta libre", () => {
+    // Art. 137: o se otorga con sus condiciones, o no corresponde. La selección
+    // por radios evita el apartado en blanco, que se lee como un olvido.
+    const f = buscar("adelantoDirecto");
+    expect(f.kind).toBe("adelanto");
     expect(f.wide).toBe(true);
   });
 });

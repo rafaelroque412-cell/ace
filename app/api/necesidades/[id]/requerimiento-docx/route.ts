@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireUser } from "@/lib/auth";
 import { MIME_DOCX } from "@/lib/archivar-formato";
 import { objectTypeLabel } from "@/lib/legal-taxonomy";
 import type { Necesidad } from "@/lib/necesidades";
@@ -8,6 +8,7 @@ import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
 import type { ObjetoFilter } from "@/lib/procesos-seleccion";
 import { resolverModelosDocIds } from "@/lib/necesidad-copiloto";
 import { generarRequerimientoDocx } from "@/lib/requerimiento-docx";
+import { filtroEettTdr } from "@/lib/eett-tdr-documento";
 import { slugify } from "@/lib/slugify";
 import { supabaseRest, supabaseUserRest } from "@/lib/supabase-server";
 
@@ -29,6 +30,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if ("error" in auth) return auth.error;
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   try {
     const [necesidad] = await supabaseUserRest<Necesidad[]>(
       auth.user.accessToken,
@@ -38,64 +41,78 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Necesidad no encontrada" }, { status: 404 });
     }
 
-    // Entidad y ciudad para el encabezado y la fecha del pie (config global).
-    const [ent] = await supabaseRest<Array<{ name: string | null; city: string | null }>>(
-      // Sin `order=year.desc`: es una fila única (PK `id`), no una por ejercicio.
-      `entity_settings?id=eq.default&select=name,city&limit=1`,
-    ).catch((err) => {
-      console.error("[requerimiento-docx] no se pudo leer la entidad:", err);
-      return [];
-    });
-
-    // Desagregado del requerimiento (Art. 52). Si no hay, el documento sale con
-    // la línea "Cantidad" de siempre.
-    const itemRows = await supabaseUserRest<
-      Array<{
-        nro: number;
-        descripcion: string;
-        unidad_medida: string | null;
-        cantidad: number | string | null;
-        costo_unitario: number | string | null;
-        costo_total: number | string | null;
-        tipo_objeto: string | null;
-      }>
-    >(
-      auth.user.accessToken,
-      `necesidad_items?necesidad_id=eq.${id}&select=nro,descripcion,unidad_medida,cantidad,costo_unitario,costo_total,tipo_objeto&order=nro.asc`,
-    ).catch((err) => {
-      console.error("[requerimiento-docx] no se pudieron leer los ítems:", err);
-      return [];
-    });
-
     const aNum = (v: number | string | null): number | null => {
       if (v === null || v === "") return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
     };
 
-    // Los apartados que este PROCEDIMIENTO pide, leidos de su PDF-modelo. Es lo
-    // que decide la estructura del documento: no es lo mismo el requerimiento de
-    // una Subasta Inversa de bienes que el de una Licitacion de obras.
-    //
-    // Sin modelo cargado la lista queda vacia y el generador se cae a la
-    // estructura del Art. 44.2. Falla en silencio a proposito: quedarse sin Word
-    // por no tener el PDF-modelo seria peor que un Word mas corto.
-    let apartados: string[] = [];
-    try {
-      const [docId] = await resolverModelosDocIds(
-        str(necesidad.tipo_proceso_seleccion),
-        auth.user.entity,
-        str(necesidad.tipo_objeto),
-      );
-      if (docId) {
-        const chunks = await supabaseRest<Array<{ content: string }>>(
-          `document_chunks?document_id=eq.${docId}&select=content&order=chunk_index.asc`,
-        );
-        apartados = apartadosDelModelo(chunks.map((c) => c.content).join("\n"));
-      }
-    } catch (err) {
-      console.error("[requerimiento-docx] no se pudo leer el modelo del proceso:", err);
-    }
+    // Las cuatro lecturas siguientes solo dependen de la necesidad ya cargada y
+    // son independientes entre sí: se resuelven en PARALELO en vez de encadenar
+    // cuatro round-trips a Supabase. Cada una conserva su propio fallback ante
+    // fallo (falla en silencio a propósito; ver los comentarios de cada bloque).
+    const [entRows, itemRows, anexoRows, apartados] = await Promise.all([
+      // Entidad y ciudad para el encabezado y la fecha del pie (config global).
+      // Sin `order=year.desc`: es una fila única (PK `id`), no una por ejercicio.
+      supabaseRest<Array<{ name: string | null; city: string | null }>>(
+        `entity_settings?id=eq.default&select=name,city&limit=1`,
+      ).catch((err) => {
+        console.error("[requerimiento-docx] no se pudo leer la entidad:", err);
+        return [] as Array<{ name: string | null; city: string | null }>;
+      }),
+      // Desagregado del requerimiento (Art. 52). Si no hay, el documento sale con
+      // la línea "Cantidad" de siempre.
+      supabaseUserRest<
+        Array<{
+          nro: number;
+          descripcion: string;
+          unidad_medida: string | null;
+          cantidad: number | string | null;
+          costo_unitario: number | string | null;
+          costo_total: number | string | null;
+          tipo_objeto: string | null;
+        }>
+      >(
+        auth.user.accessToken,
+        `necesidad_items?necesidad_id=eq.${id}&select=nro,descripcion,unidad_medida,cantidad,costo_unitario,costo_total,tipo_objeto&order=nro.asc`,
+      ).catch((err) => {
+        console.error("[requerimiento-docx] no se pudieron leer los ítems:", err);
+        return [];
+      }),
+      // EETT/TDR adjuntos a la necesidad, para listarlos como anexo al cerrar el
+      // 3.4. Con service-role (como el resto del módulo EETT/TDR); la visibilidad
+      // ya la garantizó la lectura de la necesidad con el token del usuario, arriba.
+      supabaseRest<Array<{ file_name: string | null; title: string | null }>>(
+        `documents?${filtroEettTdr(id)}&select=file_name,title&order=created_at.asc`,
+      ).catch((err) => {
+        console.error("[requerimiento-docx] no se pudieron leer los EETT/TDR adjuntos:", err);
+        return [] as Array<{ file_name: string | null; title: string | null }>;
+      }),
+      // Los apartados que este PROCEDIMIENTO pide, leídos de su PDF-modelo. Es lo
+      // que decide la estructura del documento: no es lo mismo una Subasta Inversa
+      // de bienes que una Licitación de obras. Sin modelo cargado la lista queda
+      // vacía y el generador cae a la estructura del Art. 44.2.
+      (async (): Promise<string[]> => {
+        try {
+          const [docId] = await resolverModelosDocIds(
+            str(necesidad.tipo_proceso_seleccion),
+            auth.user.entity,
+            str(necesidad.tipo_objeto),
+          );
+          if (docId) {
+            const chunks = await supabaseRest<Array<{ content: string }>>(
+              `document_chunks?document_id=eq.${docId}&select=content&order=chunk_index.asc`,
+            );
+            return apartadosDelModelo(chunks.map((c) => c.content).join("\n"));
+          }
+        } catch (err) {
+          console.error("[requerimiento-docx] no se pudo leer el modelo del proceso:", err);
+        }
+        return [];
+      })(),
+    ]);
+    const [ent] = entRows;
+    const anexosTdr = anexoRows.map((r) => str(r.file_name) || str(r.title)).filter(Boolean);
 
     const hoy = new Date();
     const fechaISO = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
@@ -134,6 +151,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       objetoLabel: necesidad.tipo_objeto ? objectTypeLabel(necesidad.tipo_objeto) : "",
       descripcionDetallada: str(necesidad.descripcion_detallada),
       cantidad: str(necesidad.cantidad),
+      anexosTdr,
       items: itemRows.map((r) => ({
         cantidad: aNum(r.cantidad),
         costoTotal: aNum(r.costo_total),

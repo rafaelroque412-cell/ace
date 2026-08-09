@@ -1,13 +1,15 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronDown, FileText } from "lucide-react";
+import { SeccionBadge } from "./ficha-progreso";
+import { markdownAHtmlSeguro } from "@/lib/markdown-seguro";
+import { desdeMatrizRiesgos } from "@/lib/matriz-riesgos";
 import { objectTypeLabel } from "@/lib/legal-taxonomy";
 import { tipoAreaLabel } from "@/lib/necesidad-workflow";
 import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
 import type { ObjetoFilter } from "@/lib/procesos-seleccion";
 import type { Necesidad } from "@/lib/necesidades";
-import { cn } from "@/lib/utils";
 
 /**
  * La ficha en modo LECTURA: lo guardado, sin controles.
@@ -76,14 +78,11 @@ export const FichaLectura = memo(function FichaLectura({
                 >
                   {isCollapsed ? <ChevronDown size={14} className="text-muted" /> : <FileText size={14} className="text-brand" />}
                   {section.title}
-                  <span
-                    className={cn(
-                      "ml-auto rounded-full px-2 py-px text-[11px] font-semibold",
-                      complete ? "bg-success-soft text-success" : "bg-ink/[0.06] text-muted",
-                    )}
-                  >
-                    {filled}/{campos.length}
-                  </span>
+                  <SeccionBadge
+                    className="ml-auto"
+                    estado={complete ? "completo" : filled > 0 ? "parcial" : "vacio"}
+                    texto={`${filled}/${campos.length}`}
+                  />
                 </button>
                 {!isCollapsed ? (
                   <div className="px-3.5 py-1">
@@ -109,6 +108,7 @@ export const FichaLectura = memo(function FichaLectura({
                             deIA={camposDeIA.get(f.api)}
                             key={f.api}
                             label={f.label}
+                            renderAsMarkdown={f.api === "gestionRiesgos"}
                             value={typeof v === "boolean" || typeof v === "number" ? v : (v as string | null)}
                           />,
                         );
@@ -130,11 +130,14 @@ function Row({
   label,
   value,
   deIA,
+  renderAsMarkdown,
 }: {
   label: string;
   value: string | number | boolean | null | undefined;
   /** Fecha ISO del traslado si el valor vino de la propuesta IA. */
   deIA?: string;
+  /** Renderiza el valor como Markdown (negritas, tablas, viñetas). */
+  renderAsMarkdown?: boolean;
 }) {
   const display = (() => {
     if (typeof value === "boolean") {
@@ -145,6 +148,14 @@ function Row({
     }
     return "—";
   })();
+  const htmlContent = useMemo(() => {
+    if (!renderAsMarkdown || display === "—") return null;
+    // `renderAsMarkdown` hoy solo lo marca la matriz de riesgos: se muestra desde
+    // el encabezado «MATRIZ DE GESTIÓN DE RIESGOS», sin el sustento previo (igual
+    // que la vista previa de edición). Para otro contenido sin ese encabezado,
+    // `desdeMatrizRiesgos` devuelve el texto entero, así que es inocuo.
+    return markdownAHtmlSeguro(desdeMatrizRiesgos(display));
+  }, [renderAsMarkdown, display]);
   return (
     <div className="grid grid-cols-[minmax(140px,34%)_1fr] items-start gap-3 border-b border-line/70 py-2 last:border-b-0">
       <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-muted">
@@ -158,7 +169,14 @@ function Row({
           </span>
         ) : null}
       </span>
-      <span className="text-[13.5px] leading-relaxed text-ink">{display}</span>
+      {htmlContent ? (
+        <div
+          className="max-w-none text-[13.5px] leading-relaxed text-ink [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-line [&_th]:border [&_th]:border-line [&_th]:bg-panel [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-[12px] [&_th]:font-semibold [&_td]:border [&_td]:border-line [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:text-[12.5px] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h1]:text-[15px] [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:mb-1.5 [&_em]:italic"
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      ) : (
+        <span className="text-[13.5px] leading-relaxed text-ink">{display}</span>
+      )}
     </div>
   );
 }

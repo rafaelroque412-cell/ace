@@ -27,7 +27,7 @@ export default async function NecesidadDetailPage({ params }: { params: Promise<
       title="Ficha de Necesidad"
     >
       <section className="singleWorkspace">
-        <NecesidadDetail necesidadId={id} permisos={permisos} role={role} />
+        <NecesidadDetail necesidadId={id} permisos={permisos} role={role} usuarioId={user?.id ?? null} />
       </section>
     </AppShell>
   );

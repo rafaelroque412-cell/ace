@@ -9,17 +9,6 @@ import type { NecesidadStatus, NoObjecionEstado, TipoArea } from "./necesidad-wo
 
 export type { NecesidadStatus } from "./necesidad-workflow";
 
-export type RiesgoNecesidad = {
-  id: string;
-  necesidad_id: string;
-  riesgo: string;
-  probabilidad: "baja" | "media" | "alta" | null;
-  impacto: "bajo" | "medio" | "alto" | null;
-  mitigacion: string | null;
-  responsable: string | null;
-  created_at: string;
-};
-
 /** Observación por campo (D2): la DEC comenta un campo; el área usuaria subsana. */
 export type ObservacionNecesidad = {
   id: string;
@@ -167,7 +156,6 @@ export type Necesidad = {
   owner_id: string;
   created_at: string;
   updated_at: string;
-  riesgos?: RiesgoNecesidad[];
 };
 
 export type NecesidadDocumento = {
@@ -197,7 +185,7 @@ export const necesidadDocKinds = [
 
 // Los topes viven en su propio modulo, sin zod, para que el cliente pueda
 // importarlos sin arrastrar los esquemas. Se reexportan para no romper nada.
-export { LIMITES_TEXTO, NOMBRE_MAX } from "./necesidades-limites";
+export { LIMITES_TEXTO, NOMBRE_MAX, acotarNumero } from "./necesidades-limites";
 import { NOMBRE_MAX } from "./necesidades-limites";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
@@ -302,7 +290,7 @@ export const necesidadCreateSchema = z.object({
   normasTecnicas: optionalText(2000),
   prestacionesAccesorias: optionalText(2000),
   otrasPenalidades: optionalText(3000),
-  solucionControversias: optionalText(1500),
+  solucionControversias: optionalText(8000),
   // NUMERO, no texto. La ficha lo declara `kind: "number"` y `construirPayload`
   // lo envia como numero; con `optionalText` aqui, el PATCH respondia 400 en
   // CADA guardado en cuanto alguien escribia algo, y bloqueaba la ficha entera.
@@ -324,7 +312,7 @@ export const necesidadCreateSchema = z.object({
   equipamientoEstrategicoAcreditacion: optionalText(2000),
   infraestructuraEstrategica: optionalText(2000),
   infraestructuraEstrategicaAcreditacion: optionalText(2000),
-  gestionRiesgos: optionalText(2000),
+  gestionRiesgos: optionalText(20000),
   // Específicas de obras / consultoría de obra.
   metasFisicas: optionalText(2000),
   disponibilidadTerreno: optionalText(2000),

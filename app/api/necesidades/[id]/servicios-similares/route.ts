@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { getOpenAIClient, legalAnswerModel as model } from "@/lib/openai-server";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { limpiarPropuestaSimilares, promptServiciosSimilares } from "@/lib/servicios-similares";
@@ -24,6 +24,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   try {
     const [nec] = await supabaseUserRest<
       Array<{ nombre: string | null; descripcion_catalogo: string | null; tipo_objeto: string | null }>

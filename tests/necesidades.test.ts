@@ -19,9 +19,18 @@ describe("necesidades schema", () => {
     expect(necesidadCreateSchema.safeParse({ nombre: "Servicio X", tipoObjeto: "otro" }).success).toBe(false);
   });
 
-  it("el update valida el estado de la necesidad", () => {
-    expect(necesidadUpdateSchema.safeParse({ status: "aprobado_area_usuaria" }).success).toBe(true);
+  it("el update valida el estado de la necesidad (workflow del requerimiento)", () => {
+    expect(necesidadUpdateSchema.safeParse({ status: "conforme" }).success).toBe(true);
+    expect(necesidadUpdateSchema.safeParse({ status: "no_objecion_pendiente" }).success).toBe(true);
+    expect(necesidadUpdateSchema.safeParse({ status: "aprobado_area_usuaria" }).success).toBe(false);
     expect(necesidadUpdateSchema.safeParse({ status: "inexistente" }).success).toBe(false);
+  });
+
+  it("acepta el tipo de área (área usuaria / ATE)", () => {
+    expect(necesidadCreateSchema.safeParse({ nombre: "Compra X", tipoArea: "ate" }).success).toBe(true);
+    const def = necesidadCreateSchema.safeParse({ nombre: "Compra X" });
+    expect(def.success && def.data.tipoArea).toBe("area_usuaria");
+    expect(necesidadCreateSchema.safeParse({ nombre: "Compra X", tipoArea: "otro" }).success).toBe(false);
   });
 
   it("define las clases de documento de la necesidad", () => {

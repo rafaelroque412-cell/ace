@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { type Necesidad } from "@/lib/necesidades";
+import { COLUMNAS_SEED, EMBED_ITEMS, seedHitosFromNecesidad } from "@/lib/fase1-precarga";
+import { nomenclaturaExpediente } from "@/lib/necesidad-denominacion";
 import type { ProcurementProcess } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -17,24 +19,78 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = (await request.json().catch(() => ({}))) as { procedureType?: string };
 
   try {
     const [necesidades] = await Promise.all([
       supabaseUserRest<Necesidad[]>(
         auth.user.accessToken,
-        `necesidades?id=eq.${id}&select=id,codigo,nombre,tipo_objeto,summary,status,process_id,entidad`,
+        // Columnas propias del expediente + las que consume la precarga
+        // (COLUMNAS_SEED va junto al tipo, para que no puedan divergir).
+        `necesidades?id=eq.${id}&select=id,codigo,nombre,summary,status,process_id,entidad,moneda,${COLUMNAS_SEED},${EMBED_ITEMS}`,
       ),
     ]);
     const necesidad = necesidades[0];
     if (!necesidad) {
       return NextResponse.json({ error: "Necesidad no encontrada" }, { status: 404 });
     }
-    if (necesidad.process_id) {
-      return NextResponse.json({ error: "La necesidad ya fue derivada a un expediente." }, { status: 409 });
+    // Una necesidad, UN expediente. Antes esto solo miraba `necesidad.process_id`
+    // y, si `reabrir` lo había puesto en null, derivar creaba un expediente
+    // NUEVO cada vez → duplicados huérfanos a partir de la misma necesidad.
+    //
+    // Se comprueban los DOS extremos: el puntero de la necesidad y cualquier
+    // expediente que ya la referencie. Si existe, se RECONECTA en vez de
+    // duplicar (repara el vínculo cojo y lleva de vuelta al mismo expediente).
+    const yaVinculado =
+      necesidad.process_id ||
+      (
+        await supabaseUserRest<{ id: string }[]>(
+          auth.user.accessToken,
+          `procurement_processes?necesidad_id=eq.${id}&select=id&limit=1`,
+        ).catch(() => [])
+      )[0]?.id;
+
+    if (yaVinculado) {
+      // Cose la dirección que faltara y devuelve el expediente existente.
+      await supabaseUserRest(
+        auth.user.accessToken,
+        `necesidades?id=eq.${id}&process_id=is.null`,
+        { body: JSON.stringify({ process_id: yaVinculado }), method: "PATCH" },
+      ).catch(() => undefined);
+      await supabaseUserRest(
+        auth.user.accessToken,
+        `procurement_processes?id=eq.${yaVinculado}&necesidad_id=is.null`,
+        { body: JSON.stringify({ necesidad_id: id }), method: "PATCH" },
+      ).catch(() => undefined);
+      return NextResponse.json({ processId: yaVinculado, reconectado: true });
+    }
+    if (necesidad.status !== "conforme") {
+      return NextResponse.json(
+        { error: "Solo se puede derivar un requerimiento conforme (CMN verificado y no objeción resuelta)." },
+        { status: 409 },
+      );
     }
 
-    const nomenclature = necesidad.codigo ? `${necesidad.codigo} — ${necesidad.nombre}` : necesidad.nombre;
+    const nomenclature = nomenclaturaExpediente(necesidad.codigo, necesidad.nombre);
+    // Precarga inteligente: siembra A1 (CMN/PAC) y A3 (Requerimiento) con lo ya
+    // capturado en la Necesidad para no re-preguntarlo en la Fase 1.
+    const hitos = seedHitosFromNecesidad(necesidad);
+
+    // El procedimiento que se elige al derivar es el PROGRAMADO EN EL PAC: un
+    // hecho, no una decisión. Se siembra en A1, que es donde vive el PAC.
+    //
+    // NO se escribe en `procurement_processes.procedure_type`: ese lo determina
+    // la DEC en la estrategia (Art. 46.1.a), cuando ya conoce el requerimiento,
+    // la segmentación y el mercado. Fijarlo aquí era decidir antes de saber, y
+    // dejaba a A4 sin nada contra lo que comparar en su variable a).
+    if (payload.procedureType) {
+      hitos.A1 = {
+        ...(hitos.A1 ?? { status: "en_curso" }),
+        data: { ...(hitos.A1?.data ?? {}), procedimiento_pac: payload.procedureType },
+      };
+    }
     const [process] = await supabaseUserRest<ProcurementProcess[]>(
       auth.user.accessToken,
       "procurement_processes?select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,created_at,updated_at",
@@ -42,12 +98,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         body: JSON.stringify({
           nomenclature,
           object_type: necesidad.tipo_objeto,
-          procedure_type: payload.procedureType || null,
           entity: necesidad.entidad || auth.user.entity || null,
           status: "actuaciones_preparatorias",
           summary: necesidad.summary || null,
+          moneda: necesidad.moneda || null,
+          formula_reajuste: necesidad.formula_reajuste || null,
+          requisitos_calificacion: necesidad.requisitos_calificacion || null,
           necesidad_id: necesidad.id,
           owner_id: auth.user.id,
+          ...(Object.keys(hitos).length > 0 ? { hitos } : {}),
         }),
         method: "POST",
       },

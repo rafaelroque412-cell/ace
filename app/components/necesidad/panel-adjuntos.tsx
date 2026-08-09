@@ -4,7 +4,7 @@ import { memo, useRef, useState } from "react";
 import { FileText, Loader, Trash2, UploadCloud } from "lucide-react";
 import { NECESIDAD_DOC_KINDS, necesidadDocKindLabel } from "@/lib/legal-taxonomy";
 import type { NecesidadDocumento } from "@/lib/necesidades";
-import { Button } from "../ui";
+import { Button, IconButton } from "../ui";
 import { ConfirmDialog } from "../confirm-dialog";
 
 /**
@@ -143,7 +143,7 @@ export const PanelAdjuntos = memo(function PanelAdjuntos({
       {documentos.length === 0 ? (
         <p className="text-xs font-semibold text-muted">
           {puedeEditar
-            ? "Sin adjuntos. Carga el requerimiento, TDR, ET, cotizaciones u otros sustentos."
+            ? "Sin adjuntos. Carga el requerimiento firmado, cotizaciones u otros sustentos. (El TDR/EE.TT. va en su panel del punto 3.4, que lo indexa y lo anexa al Word.)"
             : "Sin adjuntos."}
         </p>
       ) : (
@@ -156,15 +156,15 @@ export const PanelAdjuntos = memo(function PanelAdjuntos({
                 <small>{necesidadDocKindLabel(doc.kind)}</small>
               </div>
               {puedeEditar ? (
-                <button
+                <IconButton
                   aria-label="Eliminar adjunto"
-          
+                  destructive
+                  size="sm"
                   disabled={deletingId === doc.id}
                   onClick={() => setConfirmDeleteDocId(doc.id)}
-                  type="button"
                 >
                   {deletingId === doc.id ? <Loader size={15} /> : <Trash2 size={15} />}
-                </button>
+                </IconButton>
               ) : null}
             </li>
           ))}

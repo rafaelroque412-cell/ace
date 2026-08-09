@@ -85,7 +85,7 @@ export function ObservacionesNecesidad({
   return (
     <div className="obsPanel">
       <div className="obsPanelHead">
-        <strong>Observaciones por campo</strong>
+        <h3 className="panelTitle">Observaciones por campo</h3>
         {pendientes.length > 0 ? (
           <span className="obsPendientesBadge">{pendientes.length} pendiente{pendientes.length === 1 ? "" : "s"}</span>
         ) : observaciones.length > 0 ? (

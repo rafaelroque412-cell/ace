@@ -15,7 +15,8 @@ import { OBJECT_TYPES, objectTypeLabel } from "@/lib/legal-taxonomy";
 import { PROCESO_SELECCION_OPCIONES } from "@/lib/procesos-seleccion";
 import { TIPO_AREA_OPCIONES } from "@/lib/necesidad-workflow";
 import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
-import { componerControversias, parseInstituciones } from "@/lib/instituciones-arbitrales";
+import { componerControversias, parseInstituciones, textoLibreControversias } from "@/lib/instituciones-arbitrales";
+import { desdeMatrizRiesgos } from "@/lib/matriz-riesgos";
 import { NOMBRE_MAX } from "@/lib/necesidades-limites";
 import { topeSubsanacion } from "@/lib/plazo-subsanacion";
 import { cn } from "@/lib/utils";
@@ -23,8 +24,12 @@ import { Alert, Button } from "../ui";
 import { NecesidadItemsEditor } from "../necesidad-items-editor";
 import { useSettingsCatalog } from "../use-settings-catalog";
 import { CampoFicha } from "./campo-ficha";
+import { BarraObligatorios, SeccionBadge } from "./ficha-progreso";
 import { CAMPO_LABEL } from "./campos-etiquetas";
-import { FICHA_CTRL, FICHA_CTRL_H, FICHA_IA, FICHA_LABEL } from "./ficha-estilos";
+import { FICHA_CTRL, FICHA_CTRL_H, FICHA_IA, FICHA_LABEL, FICHA_REQ } from "./ficha-estilos";
+
+/** Referencia estable para el campo de requisitos cuando no hay ítems (memo de CampoFicha). */
+const SIN_ITEMS: ReadonlyArray<{ nro: number; cuantia: number | null }> = [];
 
 /** El copiloto son 345 lineas que solo ve quien lo despliega. */
 const NecesidadCopiloto = dynamic(
@@ -37,6 +42,8 @@ import { FICHA_SECCIONES } from "@/lib/necesidad-ficha-secciones";
 import type { ObjetoFilter } from "@/lib/procesos-seleccion";
 import type { Necesidad, ObservacionNecesidad } from "@/lib/necesidades";
 import type { NecesidadItem } from "@/lib/necesidad-items";
+import { importeItem } from "@/lib/necesidad-items";
+import { enRangoLpAbreviadaBienes, rangoLpAbreviadaConfigurado } from "@/lib/umbral-licitacion-abreviada";
 import type { ModoFicha } from "@/lib/necesidad-modos";
 import type { CopilotoCampo } from "../necesidad-copiloto";
 
@@ -73,6 +80,8 @@ export function FichaEditable({
   items,
   setItems,
   uitValor,
+  lpAbreviadaBienesMin,
+  lpAbreviadaBienesMax,
   vista,
 }: {
   /** Lo que necesita cada control de campo. */
@@ -115,6 +124,8 @@ export function FichaEditable({
     docs: Array<{ file_name: string; id: string; status: string; title: string; metadata?: unknown; created_at?: string }>;
     subiendo: boolean;
     subir: (archivo: File, tipo: "eett" | "tdr") => void;
+    /** Abre el modal de gestión del PDF de EETT/TDR (subir, revisar, eliminar). */
+    gestionar: () => void;
   };
   /** Todo el ciclo de vida del formulario, tal cual lo devuelve `useFichaForm`. */
   ficha: {
@@ -141,6 +152,9 @@ export function FichaEditable({
   setItems: (items: NecesidadItem[]) => void;
   /** UIT del ejercicio, para juzgar el tope del contrato menor. */
   uitValor: number | null;
+  /** Rango (S/) de la LP abreviada para bienes: qué ítems llevan experiencia por ítem. */
+  lpAbreviadaBienesMin: number | null;
+  lpAbreviadaBienesMax: number | null;
   /** Como se esta mirando la ficha: paso a paso, filtros y modo de trabajo. */
   vista: {
     cambiarModo: (m: ModoFicha) => void;
@@ -215,9 +229,25 @@ export function FichaEditable({
       // el modelo exige un campo y esta vacio, tiene que saberlo.
       if (campoExigible(f) && !tieneValor(f)) faltantesCopiloto.push(f.label);
       if (f.oculto || f.checkbox || f.kind === "number" || f.kind === "date") continue;
+      // La solución de controversias NO se redacta con IA: su texto es el estándar
+      // del Reglamento (se carga con el botón «Insertar texto estándar» en su
+      // editor). Se deja fuera del copiloto para no reintroducir la redacción por
+      // IA que duplicaba las instituciones.
+      if (f.kind === "controversias") continue;
       if (vistosCopiloto.has(f.api)) continue;
       vistosCopiloto.add(f.api);
-      camposCopiloto.push({ key: f.api, label: f.label, valor: fichaForm[f.api] ?? "", baseLegal: f.baseLegal ?? "", seccion: s.title });
+      camposCopiloto.push({
+        key: f.api,
+        label: f.label,
+        valor: fichaForm[f.api] ?? "",
+        baseLegal: f.baseLegal ?? "",
+        seccion: s.title,
+        // El molde del campo (estructura + ejemplo) viaja al copiloto para que
+        // redacte con la FORMA que exige su artículo (p. ej. la finalidad con la
+        // estructura tripartita del Art. 44.1), no solo con el principio.
+        plantilla: f.plantilla ?? "",
+        ejemplo: f.ejemplo ?? "",
+      });
     }
   }
 
@@ -290,12 +320,34 @@ export function FichaEditable({
       ? ""
       : `No puede pasar de ${topeSubsanacionDias} días: es el 30% del plazo de ejecución (${(fichaForm.plazoEjecucion ?? "").trim()} días) que fija el Art. 144.`;
 
+  // Ítems (nº + cuantía) para redactar la experiencia del postor rotulada por
+  // ítem. Se memoiza —solo cambia con los ítems o el rango, no en cada tecla—
+  // para no anular la memoización de `CampoFicha`; solo baja al campo de requisitos.
+  //
+  // Con el rango de la LP abreviada configurado, solo pasan los ítems cuya
+  // cuantía cae en esa banda (los que "corresponden a una LP abreviada de
+  // bienes"). Sin rango, pasan todos y el editor avisa de que falta configurarlo.
+  const umbralLpConfigurado = rangoLpAbreviadaConfigurado({
+    min: lpAbreviadaBienesMin,
+    max: lpAbreviadaBienesMax,
+  });
+  const itemsExperiencia = useMemo(() => {
+    const rango = { min: lpAbreviadaBienesMin, max: lpAbreviadaBienesMax };
+    const todos = items.map((it) => ({ nro: it.nro, cuantia: importeItem(it) }));
+    if (!rangoLpAbreviadaConfigurado(rango)) return todos;
+    return todos.filter((it) => enRangoLpAbreviadaBienes(it.cuantia, rango) === true);
+  }, [items, lpAbreviadaBienesMin, lpAbreviadaBienesMax]);
+
   function renderFichaField(field: FichaField) {
     // El cuadro del personal clave solo se le pasa al campo de requisitos —que
     // es quien lo pinta—. Al resto de campos se les da cadena vacía (estable),
     // para que un cambio en el personal clave no repinte toda la ficha: la
     // memoización de `CampoFicha` depende de props estables.
     const esRequisitos = field.kind === "requisitos";
+    // Igual que el personal clave con los requisitos: la matriz de riesgos solo
+    // se le pasa al cuadro de «otras penalidades» —que la usa para el traslado—;
+    // al resto, cadena vacía, para no repintar la ficha en cada tecla.
+    const esPenalidades = field.kind === "penalidades";
     // El campo se pinta en su propio componente memoizado. Lo que se le
     // pasa son VALORES de este campo, no las estructuras completas: el
     // formulario y los mapas de avisos cambian de identidad en cada
@@ -327,6 +379,9 @@ export function FichaEditable({
         equipamientoEstrategicoAcreditacion={esRequisitos ? (fichaForm.equipamientoEstrategicoAcreditacion ?? "") : ""}
         infraestructuraEstrategica={esRequisitos ? (fichaForm.infraestructuraEstrategica ?? "") : ""}
         infraestructuraEstrategicaAcreditacion={esRequisitos ? (fichaForm.infraestructuraEstrategicaAcreditacion ?? "") : ""}
+        gestionRiesgos={esPenalidades ? (fichaForm.gestionRiesgos ?? "") : ""}
+        itemsExperiencia={esRequisitos ? itemsExperiencia : SIN_ITEMS}
+        umbralLpConfigurado={umbralLpConfigurado}
         onCampoFicha={cambiarCampo}
         obligatorio={campoEsObligatorio(field)}
         obsPendiente={obsPendientesPorCampo.get(field.api) ?? null}
@@ -355,8 +410,19 @@ export function FichaEditable({
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
           <div className="col-span-full min-w-0">
             <label className="flex flex-col">
-              <span className={FICHA_LABEL}>Nombre de la contratación</span>
+              <span className={FICHA_LABEL}>
+                Nombre de la contratación <span className={FICHA_REQ}>obligatorio</span>
+              </span>
               <input
+                aria-required
+                // Inválido solo cuando hay texto pero es demasiado corto (1-2): es
+                // lo que bloquea guardar y lo que avisa DenominacionAsistente; el
+                // vacío inicial no se marca inválido antes de que escriban.
+                aria-invalid={
+                  (fichaForm.nombre ?? "").trim().length > 0 && (fichaForm.nombre ?? "").trim().length < 3
+                    ? true
+                    : undefined
+                }
                 className={cn(FICHA_CTRL, FICHA_CTRL_H)}
                 onChange={(e) => setFichaField("nombre", e.target.value)}
                 value={fichaForm.nombre ?? ""}
@@ -495,19 +561,7 @@ export function FichaEditable({
           {section.preliminar ? (
             <span className="rounded-full bg-brand/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-brand">preliminar</span>
           ) : null}
-          {badge ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-px text-[11px] font-semibold",
-                comp.estado === "completo" && "bg-success-soft text-success",
-                comp.estado === "pendiente" && "bg-warning-soft text-warning",
-                (comp.estado === "parcial" || comp.estado === "vacio") && "bg-ink/[0.06] text-muted",
-              )}
-            >
-              {comp.estado === "completo" ? <Check size={11} /> : null}
-              {badge}
-            </span>
-          ) : null}
+          <SeccionBadge estado={comp.estado} texto={badge} />
         </h4>
         {section.resumenLlano ? (
           <p className="text-[13px] leading-relaxed text-ink">{section.resumenLlano}</p>
@@ -547,6 +601,19 @@ export function FichaEditable({
             tipoProceso={fichaForm.tipoProcesoSeleccion || null}
             uitValor={uitValor}
           />
+        ) : null}
+        {/* El documento del TDR/EETT no es un campo de `necesidades`: es un PDF que
+            se sube, se indexa en RAG y se revisa en su propia ventana. Desde 3.4
+            se abre esa gestión, que es donde vive «el cómo debe ser» detallado. */}
+        {section.title.startsWith("3.4") && permisos.manage ? (
+          <button
+            type="button"
+            onClick={eett.gestionar}
+            className="inline-flex w-fit items-center gap-2 rounded-[10px] border border-brand/30 bg-brand-soft px-3 py-2 text-[13px] font-semibold text-brand transition hover:border-brand/50 hover:bg-brand-soft"
+          >
+            <FileText size={15} /> Revisar TDR
+            <span className="font-normal text-brand/80">— subir y gestionar el PDF (se indexa en el buscador con IA)</span>
+          </button>
         ) : null}
         {ocultosOpcionales > 0 ? (
           <button
@@ -634,6 +701,7 @@ export function FichaEditable({
       <div className="flex flex-wrap items-center gap-3">
         <div className="inline-flex rounded-[10px] border border-line bg-surface p-0.5" role="group" aria-label="Campos a mostrar">
           <button
+            aria-pressed={obligatoriosOnly}
             className={cn("rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition", obligatoriosOnly ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand")}
             onClick={() => setObligatoriosOnly(true)}
             type="button"
@@ -641,6 +709,7 @@ export function FichaEditable({
             Solo obligatorios
           </button>
           <button
+            aria-pressed={!obligatoriosOnly}
             className={cn("rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold transition", !obligatoriosOnly ? "bg-brand text-white shadow-card" : "text-muted hover:text-brand")}
             onClick={() => setObligatoriosOnly(false)}
             type="button"
@@ -649,17 +718,7 @@ export function FichaEditable({
           </button>
         </div>
 
-        {obligTotal > 0 ? (
-          <div className="flex items-center gap-2" title={`${obligDone} de ${obligTotal} campos obligatorios completos`}>
-            <div className="h-2 w-28 overflow-hidden rounded-full bg-line">
-              <div
-                className={cn("h-full rounded-full", obligDone >= obligTotal ? "bg-success" : "bg-brand")}
-                style={{ width: `${Math.round((obligDone / obligTotal) * 100)}%` }}
-              />
-            </div>
-            <span className="text-[12px] font-semibold text-muted">{obligDone}/{obligTotal} obligatorios</span>
-          </div>
-        ) : null}
+        <BarraObligatorios done={obligDone} total={obligTotal} barClassName="w-28 flex-none" />
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => { setWizardMode((w) => !w); setWizardStep(0); }}>
@@ -712,6 +771,7 @@ export function FichaEditable({
               <button
                 key={i}
                 type="button"
+                aria-current={activo ? "step" : undefined}
                 onClick={() => setWizardStep(i)}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition",
@@ -796,6 +856,27 @@ export function FichaEditable({
         </div>
       )}
 
+      {/* Aviso de conflicto de versión: común a ambos modos. Antes vivía dentro
+          del bloque !wizardMode, así que en «paso a paso» un 409 (autoguardado o
+          traslado) era invisible y el usuario no tenía el botón «Recargar». */}
+      {conflictoGuardado ? (
+        <Alert tone="warning">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              Otro usuario guardó cambios en esta necesidad. Recarga para ver su versión antes de
+              volver a guardar (tu borrador se conserva).
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { superarConflicto(); setError(""); void reload(); }}
+            >
+              Recargar
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
+
       {/* Navegación del wizard */}
       {wizardMode ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
@@ -806,12 +887,26 @@ export function FichaEditable({
             Cancelar
           </Button>
           <span className="text-[12px] text-muted">Paso {pasoActual + 1} de {totalPasos}</span>
+          {autoguardado ? (
+            <span
+              className={cn(
+                "text-[12px] font-medium",
+                autoguardado === "error" ? "text-danger" : autoguardado === "guardado" ? "text-success" : "text-muted",
+              )}
+            >
+              {autoguardado === "guardando"
+                ? "Guardando…"
+                : autoguardado === "guardado"
+                  ? "Cambios guardados"
+                  : "No se pudo autoguardar — pulsa Guardar ficha"}
+            </span>
+          ) : null}
           {pasoActual < totalPasos - 1 ? (
             <Button variant="primary" size="sm" className="ml-auto" onClick={() => setWizardStep((s) => Math.min(totalPasos - 1, s + 1))}>
               Siguiente →
             </Button>
           ) : (
-            <Button variant="primary" size="sm" className="ml-auto" loading={savingFicha} onClick={saveFicha}>
+            <Button variant="primary" size="sm" className="ml-auto" disabled={conflictoGuardado} loading={savingFicha} onClick={saveFicha}>
               {!savingFicha ? <CheckCircle2 size={15} /> : null}
               Guardar ficha
             </Button>
@@ -822,23 +917,6 @@ export function FichaEditable({
       {/* Botones de acción en modo completo */}
       {!wizardMode ? (
         <>
-          {conflictoGuardado ? (
-            <Alert tone="warning">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  Otro usuario guardó cambios en esta necesidad. Recarga para ver su versión antes de
-                  volver a guardar (tu borrador se conserva).
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => { superarConflicto(); setError(""); void reload(); }}
-                >
-                  Recargar
-                </Button>
-              </div>
-            </Alert>
-          ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
             <Button variant="primary" disabled={conflictoGuardado} loading={savingFicha} onClick={saveFicha}>
               {!savingFicha ? <CheckCircle2 size={15} /> : null}
@@ -870,18 +948,41 @@ export function FichaEditable({
           abierto={copilotoAbierto}
           campos={camposCopiloto}
           faltantes={faltantesCopiloto}
+          necesidadId={necesidadId}
           // La solución de controversias se FUSIONA en vez de sustituirse: su valor
           // lleva el cuadro de instituciones designadas, y volcar encima el texto de
           // la IA las borraría. Se conservan y lo redactado pasa a ser el bloque de
-          // condiciones adicionales.
-          onAplicarCampo={(api, valor) =>
+          // condiciones adicionales. Del texto de la IA se toma SOLO su parte libre
+          // (`textoLibreControversias`): la IA suele reproducir el párrafo fijo y la
+          // tabla de instituciones que ya venían en el campo, y sumarlos tal cual
+          // duplicaba las instituciones (las del campo + las repetidas por la IA).
+          onAplicarCampo={(api, valor) => {
             setFichaField(
               api,
               api === "solucionControversias"
-                ? componerControversias(parseInstituciones(fichaForm.solucionControversias ?? ""), valor)
-                : valor,
-            )
-          }
+                ? componerControversias(
+                    parseInstituciones(fichaForm.solucionControversias ?? ""),
+                    textoLibreControversias(valor),
+                  )
+                : // Gestión de riesgos: se guarda SOLO la matriz (desde su
+                  // encabezado), sin el párrafo de sustento que la IA redacta
+                  // antes, para que el campo coincida con la vista previa.
+                  api === "gestionRiesgos"
+                  ? desdeMatrizRiesgos(valor)
+                  : valor,
+            );
+            // Desplaza la vista al campo donde se insertó el texto: sin esto,
+            // el usuario no ve el resultado porque la sección puede estar fuera
+            // del viewport.
+            setTimeout(() => {
+              const el = document.querySelector(`[data-campo="${api}"]`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("ring-2", "ring-brand", "ring-offset-2");
+                setTimeout(() => el.classList.remove("ring-2", "ring-brand", "ring-offset-2"), 2000);
+              }
+            }, 100);
+          }}
           onCerrar={() => setCopilotoAbierto(false)}
           redactarSolicitud={copilotoRedactar}
           tipoObjeto={tipoObj ? objectTypeLabel(tipoObj) : ""}

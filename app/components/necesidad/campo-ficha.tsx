@@ -2,6 +2,8 @@
 
 import { memo } from "react";
 import { MessageSquare, Sparkles } from "lucide-react";
+import { markdownAHtmlSeguro } from "@/lib/markdown-seguro";
+import { desdeMatrizRiesgos } from "@/lib/matriz-riesgos";
 import type { FichaField } from "@/lib/necesidad-ficha-secciones";
 import { etiquetaRecomendado } from "@/lib/necesidad-ficha-secciones";
 import type { ObservacionNecesidad } from "@/lib/necesidades";
@@ -9,12 +11,14 @@ import { LIMITES_TEXTO } from "@/lib/necesidades-limites";
 import { filasTextarea } from "@/lib/textarea-alto";
 import { cn } from "@/lib/utils";
 import { InfoPopover } from "../ui";
+import { AdelantoDirectoEditor } from "../adelanto-directo-editor";
+import { FormulaReajusteEditor } from "../formula-reajuste-editor";
 import { NecesidadEettCampo } from "../necesidad-eett-campo";
 import { InstitucionesArbitralesEditor } from "../instituciones-arbitrales-editor";
 import { OtrasPenalidadesEditor } from "../otras-penalidades-editor";
 import { RequisitosCalificacionEditor } from "../requisitos-calificacion-editor";
 import { SubcontratacionEditor } from "../subcontratacion-editor";
-import { CAMPOS_SIN_REDACCION_IA } from "./campos-sin-redaccion-ia";
+import { CAMPOS_COMPOSICION_LOCAL, CAMPOS_SIN_REDACCION_IA } from "./campos-sin-redaccion-ia";
 import {
   FICHA_CTRL,
   FICHA_CTRL_AREA,
@@ -90,6 +94,16 @@ export type CampoFichaProps = {
   /** Requisito y acreditación de la infraestructura estratégica. */
   infraestructuraEstrategica: string;
   infraestructuraEstrategicaAcreditacion: string;
+  /**
+   * Matriz de gestión de riesgos (Art. 44.3), solo para el cuadro de «otras
+   * penalidades»: de ahí trae las filas marcadas «otras penalidades». Cadena
+   * vacía para el resto de campos, para no romper la memoización.
+   */
+  gestionRiesgos: string;
+  /** Ítems (nº + cuantía) cuando el requerimiento va por relación de ítems; para rotular la experiencia por ítem. */
+  itemsExperiencia: ReadonlyArray<{ nro: number; cuantia: number | null }>;
+  /** ¿Está registrado en Configuración el rango de la LP abreviada para bienes? */
+  umbralLpConfigurado: boolean;
   /** Escribe un campo suelto de la ficha; el editor lo usa para el personal clave. */
   onCampoFicha: (api: string, valor: string) => void;
   obligatorio: boolean;
@@ -145,6 +159,9 @@ export const CampoFicha = memo(function CampoFicha({
   equipamientoEstrategicoAcreditacion,
   infraestructuraEstrategica,
   infraestructuraEstrategicaAcreditacion,
+  gestionRiesgos,
+  itemsExperiencia,
+  umbralLpConfigurado,
   onCampoFicha,
   obligatorio,
   obsPendiente,
@@ -218,14 +235,22 @@ export const CampoFicha = memo(function CampoFicha({
   // nada que redactar: el boton invitaba a pedirle al copiloto que eligiera una
   // opcion de una lista cerrada, y salia en siete de ellos.
   const esProsa = !field.kind || field.kind === "text" || field.kind === "textarea";
-  const botonRedactarIA = puedeGestionar && esProsa && !CAMPOS_SIN_REDACCION_IA.has(field.api) ? (
+  // La solución de controversias también admite redacción: la IA aporta las
+  // «condiciones adicionales» (sede, plazos…) y el editor conserva el cuadro de
+  // instituciones —la fusión vive en onAplicarCampo, en ficha-editable—.
+  const admiteRedaccion = esProsa || field.kind === "controversias";
+  // Algunos campos NO llaman al modelo: componen el texto del formato (Art. 67
+  // forma de pago, apartado j) plazo). En esos el botón se rotula "Redactar del
+  // formato" para no llamar "IA" a un compositor de plantilla.
+  const esComposicion = CAMPOS_COMPOSICION_LOCAL.has(field.api);
+  const botonRedactarIA = puedeGestionar && admiteRedaccion && !CAMPOS_SIN_REDACCION_IA.has(field.api) ? (
     <button
       className="mb-1.5 inline-flex w-fit items-center gap-1 rounded-md bg-accent/10 px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/20"
       onClick={(e) => { e.preventDefault(); onRedactarIA(field.api); }}
-      title="Redactar este campo con el copiloto IA (Ley 32069)"
+      title={esComposicion ? "Redactar este campo con el texto del formato (sin IA)" : "Redactar este campo con el copiloto IA (Ley 32069)"}
       type="button"
     >
-      <Sparkles size={12} /> Redactar con IA
+      <Sparkles size={12} /> {esComposicion ? "Redactar del formato" : "Redactar con IA"}
     </button>
   ) : null;
   // Base legal del campo. El disparador y el globo los pone Radix: teclado,
@@ -274,7 +299,7 @@ export const CampoFicha = memo(function CampoFicha({
           {obligatorio ? (
             <span className={FICHA_REQ}>obligatorio</span>
           ) : (
-            <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
           )}
         </span>
         <NecesidadEettCampo
@@ -307,7 +332,7 @@ export const CampoFicha = memo(function CampoFicha({
           {obligatorio ? (
             <span className={FICHA_REQ}>obligatorio</span>
           ) : (
-            <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
           )}
           {fechaIA !== null ? (
             <span
@@ -319,6 +344,8 @@ export const CampoFicha = memo(function CampoFicha({
           ) : null}
         </span>
         <RequisitosCalificacionEditor
+          // En la ficha de la necesidad el área usuaria PROPONE (Art. 44.2.b).
+          modo="propuesta"
           // Sin la cuantía no se puede comprobar el tope de 3x del modelo, y sin el
           // procedimiento no se sabe si cabe la capacidad económica (Art. 72.3.e).
           montoEstimado={montoEstimado}
@@ -338,6 +365,8 @@ export const CampoFicha = memo(function CampoFicha({
           tipoProceso={tipoProceso}
           requisitosModelo={requisitosModelo}
           objeto={tipoObjeto}
+          itemsExperiencia={itemsExperiencia}
+          umbralLpConfigurado={umbralLpConfigurado}
           onChange={(next) => onCambio(field.api, next)}
           value={val}
         />
@@ -355,7 +384,7 @@ export const CampoFicha = memo(function CampoFicha({
           {obligatorio ? (
             <span className={FICHA_REQ}>obligatorio</span>
           ) : (
-            <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
           )}
           {fechaIA !== null ? (
             <span
@@ -366,10 +395,12 @@ export const CampoFicha = memo(function CampoFicha({
             </span>
           ) : null}
         </span>
-        {/* La IA no reescribe el apartado: aporta las condiciones adicionales
-            (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
-        {botonRedactarIA}
+        {/* Sin IA: el editor tiene su propio botón «Insertar texto estándar»
+            (Arts. 330-332) para el texto del apartado, y la tabla de instituciones
+            debajo. Por eso este campo queda fuera del copiloto (ficha-editable). */}
         <InstitucionesArbitralesEditor
+          monto={montoEstimado}
+          objeto={tipoObjeto}
           onChange={(next) => onCambio(field.api, next)}
           value={val}
         />
@@ -387,7 +418,7 @@ export const CampoFicha = memo(function CampoFicha({
           {obligatorio ? (
             <span className={FICHA_REQ}>obligatorio</span>
           ) : (
-            <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
           )}
           {fechaIA !== null ? (
             <span
@@ -402,7 +433,54 @@ export const CampoFicha = memo(function CampoFicha({
             (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
         {botonRedactarIA}
         <OtrasPenalidadesEditor
+          matriz={gestionRiesgos}
           onChange={(next) => onCambio(field.api, next)}
+          value={val}
+        />
+        {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
+      </div>
+    );
+  }
+
+  // Adelanto directo: selección por radios (se otorga / no corresponde), fuera de <label>.
+  if (field.kind === "adelanto") {
+    return (
+      <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
+        <span className={FICHA_LABEL}>
+          {field.label}
+          {obligatorio ? (
+            <span className={FICHA_REQ}>obligatorio</span>
+          ) : (
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
+          )}
+        </span>
+        <AdelantoDirectoEditor
+          objeto={tipoObjeto}
+          onChange={(next) => onCambio(field.api, next)}
+          plantilla={field.plantilla ?? ""}
+          value={val}
+        />
+        {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
+      </div>
+    );
+  }
+
+  // Fórmula de reajuste: selección por radios (se aplica / no corresponde), fuera de <label>.
+  if (field.kind === "reajuste") {
+    return (
+      <div className={field.wide ? "col-span-full" : undefined} data-campo={field.api} key={field.api}>
+        <span className={FICHA_LABEL}>
+          {field.label}
+          {obligatorio ? (
+            <span className={FICHA_REQ}>obligatorio</span>
+          ) : (
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
+          )}
+        </span>
+        <FormulaReajusteEditor
+          objeto={tipoObjeto}
+          onChange={(next) => onCambio(field.api, next)}
+          plantilla={field.plantilla ?? ""}
           value={val}
         />
         {!modoSimple && field.baseLegal ? <small className="mt-1 block text-[11.5px] text-muted">{field.baseLegal}</small> : null}
@@ -419,7 +497,7 @@ export const CampoFicha = memo(function CampoFicha({
           {obligatorio ? (
             <span className={FICHA_REQ}>obligatorio</span>
           ) : (
-            <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+            <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
           )}
           {fechaIA !== null ? (
             <span
@@ -434,6 +512,7 @@ export const CampoFicha = memo(function CampoFicha({
             (sede, plazos…). El párrafo y el cuadro los compone el editor. */}
         {botonRedactarIA}
         <SubcontratacionEditor
+          objeto={tipoObjeto}
           onChange={(next) => onCambio(field.api, next)}
           value={val}
         />
@@ -449,7 +528,7 @@ export const CampoFicha = memo(function CampoFicha({
         {obligatorio ? (
           <span className={FICHA_REQ}>obligatorio</span>
         ) : (
-          <span className={FICHA_OPT}>{field.recomendado ? etiquetaRecomendado(field) : "opcional"}</span>
+          <span className={FICHA_OPT} title={field.recomendado ? etiquetaRecomendado(field) : undefined}>{field.recomendado ? "de corresponder" : "opcional"}</span>
         )}
         {fechaIA !== null ? (
           <span
@@ -513,21 +592,39 @@ export const CampoFicha = memo(function CampoFicha({
       ) : field.kind === "textarea" ? (
         <>
           {botonRedactarIA}
-          <textarea
-            className={cn(FICHA_CTRL, FICHA_CTRL_AREA, hasError && FICHA_CTRL_ERR)}
-            {...marcasError}
-            maxLength={LIMITES_TEXTO[field.api]}
-            onBlur={validarAlSalir}
-            onChange={(e) => { onCambio(field.api, e.target.value); alEscribir(); }}
-            // La fórmula se ve al redactar, no escondida en el globo
-            // de ayuda: es la estructura que el texto debe seguir.
-            placeholder={field.plantilla}
-            rows={filasTextarea(val, field.wide)}
-            value={val}
-          />
-          <span className={cn("mt-1 text-[11px]", val.length > 1800 ? "font-semibold text-warning" : "text-muted")}>
-            {val.length} caracteres
-          </span>
+          {field.api === "gestionRiesgos" ? (
+            // La matriz se genera con IA y es Markdown: no se edita a mano. Se
+            // oculta el textarea y se muestra directamente la vista previa —el
+            // dato que va al documento—, siempre visible.
+            val.trim() ? (
+              <div
+                className="mt-1.5 max-w-none rounded-[10px] border border-line bg-surface p-3 text-[13px] leading-relaxed text-ink [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-line [&_th]:border [&_th]:border-line [&_th]:bg-panel [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-[12px] [&_th]:font-semibold [&_td]:border [&_td]:border-line [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:text-[12.5px] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h1]:text-[15px] [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:mb-1.5 [&_strong]:font-semibold [&_em]:italic"
+                dangerouslySetInnerHTML={{ __html: markdownAHtmlSeguro(desdeMatrizRiesgos(val)) }}
+              />
+            ) : (
+              <p className="mt-1 text-[12px] leading-[1.5] text-muted">
+                Pulsa «Redactar con IA» para generar la matriz de gestión de riesgos; aquí verás la vista previa.
+              </p>
+            )
+          ) : (
+            <>
+              <textarea
+                className={cn(FICHA_CTRL, FICHA_CTRL_AREA, hasError && FICHA_CTRL_ERR)}
+                {...marcasError}
+                maxLength={LIMITES_TEXTO[field.api]}
+                onBlur={validarAlSalir}
+                onChange={(e) => { onCambio(field.api, e.target.value); alEscribir(); }}
+                // La fórmula se ve al redactar, no escondida en el globo
+                // de ayuda: es la estructura que el texto debe seguir.
+                placeholder={field.plantilla}
+                rows={filasTextarea(val, field.wide)}
+                value={val}
+              />
+              <span className={cn("mt-1 text-[11px]", val.length > 1800 ? "font-semibold text-warning" : "text-muted")}>
+                {val.length} caracteres
+              </span>
+            </>
+          )}
         </>
       ) : field.kind === "select" ? (
         <select

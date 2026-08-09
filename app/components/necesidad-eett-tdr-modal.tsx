@@ -11,8 +11,11 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
 import { numeroDesdeTexto, TrasladoPanel, type GrupoTraslado } from "./necesidad-traslado-panel";
+import { Button, IconButton } from "./ui/button";
+import { Alert } from "./ui/alert";
 
 // Modal de revisión del EETT/TDR: visor del PDF subido a un lado y, al otro, la
 // PROPUESTA generada por IA (conforme al modelo OECE del proceso) + la REVISIÓN
@@ -167,7 +170,13 @@ export function EettTdrModal({
   /** Valor ACTUAL de cada campo en la ficha, para ver qué se pisaría. */
   valoresActuales?: Record<string, string>;
   onClose: () => void;
-  onSaved?: () => void;
+  /**
+   * `apisTrasladados`: los campos de la ficha que este guardado escribió (solo
+   * al trasladar a la ficha). Quien recibe reconcilia el formulario abierto con
+   * esos valores para que el autoguardado no los revierta. Los demás guardados
+   * (revisar, editar el documento) no tocan la ficha y no pasan nada.
+   */
+  onSaved?: (apisTrasladados?: string[]) => void;
 }) {
   // Texto base del EETT/TDR (extraído del PDF) y propuesta generada por IA.
   const [contenidoBase, setContenidoBase] = useState(initialText ?? "");
@@ -181,6 +190,9 @@ export function EettTdrModal({
   const [generando, setGenerando] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso (no error): p. ej. la propuesta/revisión se generó pero no se pudo
+  // guardar, así que se perdería al cerrar si no se descarga o traslada antes.
+  const [aviso, setAviso] = useState<string | null>(null);
   const [guardado, setGuardado] = useState(false);
   // La revisión se inicializa con la GUARDADA (si la hay): no se vuelve a llamar
   // a la IA hasta que el usuario pulse «Volver a revisar».
@@ -251,6 +263,7 @@ export function EettTdrModal({
     }
     setRevisando(true);
     setError(null);
+    setAviso(null);
     try {
       const res = await fetch(`/api/necesidades/${necesidadId}/eett-tdr/revisar`, {
         method: "POST",
@@ -267,6 +280,12 @@ export function EettTdrModal({
       setRevisadoEn(payload.revisadoEn ?? null);
       setVeredicto(payload.veredicto ?? null);
       setConteo(payload.conteo ?? null);
+      // Si no quedó guardada, avisar: al cerrar el modal se perdería.
+      setAviso(
+        payload.persistida === false
+          ? "La revisión se hizo pero no se pudo guardar. Se perderá al cerrar el modal; vuelve a revisar más tarde."
+          : null,
+      );
       onSaved?.();
     } catch {
       setError("No se pudo conectar para revisar.");
@@ -282,6 +301,7 @@ export function EettTdrModal({
     }
     setGenerando(true);
     setError(null);
+    setAviso(null);
     try {
       const res = await fetch(`/api/necesidades/${necesidadId}/eett-tdr/generar`, {
         method: "POST",
@@ -300,6 +320,19 @@ export function EettTdrModal({
         setCamposPropuestos(null);
         setSeccionesOk(new Set());
         setCamposExcluidos(new Set());
+        // Y la revisión anterior juzgaba la propuesta vieja: se invalida para no
+        // mostrar un veredicto que ya no aplica a esta propuesta.
+        setResumen(null);
+        setHallazgos([]);
+        setRevisadoEn(null);
+        setVeredicto(null);
+        setConteo(null);
+        // Si no quedó guardada, avisar: al cerrar el modal se perdería.
+        setAviso(
+          payload.persistida === false
+            ? "La propuesta se generó pero no se pudo guardar. Descárgala o trasládala antes de cerrar el modal, o vuelve a generarla."
+            : null,
+        );
       } else setError("La IA no devolvió una propuesta. Reintenta.");
     } catch {
       setError("No se pudo conectar para generar la propuesta.");
@@ -466,7 +499,7 @@ export function EettTdrModal({
       setCamposPropuestos(null);
       setSeccionesOk(new Set());
       setCamposExcluidos(new Set());
-      onSaved?.();
+      onSaved?.(Object.keys(body));
     } catch {
       setError("No se pudo conectar para trasladar los campos.");
     } finally {
@@ -509,36 +542,18 @@ export function EettTdrModal({
   const tipoLabel = doc.tipo === "eett" ? "Especificaciones Técnicas (EETT)" : "Términos de Referencia (TDR)";
 
   return (
-    <div
-      className="eettModalOverlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        background: "rgba(15,23,42,0.55)",
-        display: "flex",
-        alignItems: "stretch",
-        justifyContent: "center",
-        padding: "2vh 2vw",
-      }}
-    >
-      <div
-        className="eettModal"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--panel, #fff)",
-          borderRadius: 12,
-          width: "100%",
-          maxWidth: 1400,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
-        }}
-      >
+    <DialogPrimitive.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="tw fixed inset-0 z-[1000] bg-ink/45 backdrop-blur-[2px]" />
+        {/* Se usan los primitivos de Radix (no el helper DialogContent) porque este
+            no es un diálogo simple: es un editor ANCHO de dos columnas con una barra
+            de acciones propia. Radix aporta lo que el overlay a mano no tenía —trampa
+            de foco, bloqueo de scroll, cierre con Escape y clic fuera, overlay del
+            sistema—; el layout ancho lo mantiene el className. */}
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className="tw fixed left-1/2 top-1/2 z-[1000] flex max-h-[96dvh] w-[96vw] max-w-[1400px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[12px] border border-line bg-panel shadow-pop outline-none"
+        >
         {/* Cabecera */}
         <div
           style={{
@@ -549,95 +564,86 @@ export function EettTdrModal({
             borderBottom: "1px solid color-mix(in srgb, var(--muted, #64748b) 20%, transparent)",
           }}
         >
-          <strong style={{ flex: 1 }}>
-            Revisar · {tipoLabel}
-            <span style={{ color: "var(--muted, #64748b)", fontWeight: 400 }}> · {doc.file_name}</span>
-          </strong>
-          <button
-            className="secondaryButton compactButton"
-            type="button"
+          <DialogPrimitive.Title asChild>
+            <strong style={{ flex: 1 }}>
+              Revisar · {tipoLabel}
+              <span style={{ color: "var(--muted, #64748b)", fontWeight: 400 }}> · {doc.file_name}</span>
+            </strong>
+          </DialogPrimitive.Title>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void generar()}
-            disabled={generando || sinProceso}
+            loading={generando}
+            disabled={sinProceso}
             title={sinProceso ? "Elige el tipo de proceso en la ficha" : "Genera una propuesta correcta según el modelo del proceso"}
           >
-            {generando ? <Loader size={14} /> : <WandSparkles size={14} />}{" "}
+            {generando ? null : <WandSparkles size={14} />}
             {propuesta.trim() ? "Volver a generar" : "Generar propuesta (IA)"}
-          </button>
-          <button
-            className="secondaryButton compactButton"
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void revisar()}
-            disabled={revisando || sinProceso}
+            loading={revisando}
+            disabled={sinProceso}
             title={sinProceso ? "Elige el tipo de proceso en la ficha" : "Revisa contra el modelo oficial del proceso"}
           >
-            {revisando ? <Loader size={14} /> : <Sparkles size={14} />}{" "}
+            {revisando ? null : <Sparkles size={14} />}
             {revisadoEn ? "Volver a revisar" : "Revisar con el modelo OECE"}
-          </button>
-          <button
-            className="secondaryButton compactButton"
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void extraerCampos()}
-            disabled={extrayendo || !propuesta.trim() || !(camposObjetivo ?? []).length}
-            title={
-              !propuesta.trim()
-                ? "Genera primero la propuesta"
-                : "Revisa campo a campo qué se trasladaría a la ficha"
-            }
+            loading={extrayendo}
+            disabled={!propuesta.trim() || !(camposObjetivo ?? []).length}
+            title={!propuesta.trim() ? "Genera primero la propuesta" : "Revisa campo a campo qué se trasladaría a la ficha"}
           >
-            {extrayendo ? <Loader size={14} /> : <ClipboardCheck size={14} />} Trasladar a la ficha
-          </button>
-          <button className="secondaryButton compactButton" type="button" onClick={() => void descargarDocx()} disabled={descargando}>
-            {descargando ? <Loader size={14} /> : <Download size={14} />} Descargar .docx
-          </button>
-          <button
-            className="primaryButton compactButton"
-            type="button"
+            {extrayendo ? null : <ClipboardCheck size={14} />} Trasladar a la ficha
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => void descargarDocx()} loading={descargando}>
+            {descargando ? null : <Download size={14} />} Descargar .docx
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => (guardarPisaFicha() ? setConfirmandoGuardar(true) : void guardar())}
-            disabled={saving}
+            loading={saving}
             title="Reemplaza la sección 3.4 de la ficha (Términos de referencia / Especificaciones técnicas) con este documento completo"
           >
-            {saving ? <Loader size={14} /> : <CheckCircle2 size={14} />}{" "}
+            {saving ? null : <CheckCircle2 size={14} />}
             {guardado ? "Guardado" : "Guardar en 3.4 de la ficha"}
-          </button>
-          <button className="iconButton" type="button" onClick={onClose} aria-label="Cerrar">
+          </Button>
+          <IconButton aria-label="Cerrar" size="sm" onClick={onClose}>
             <X size={18} />
-          </button>
+          </IconButton>
         </div>
 
         {/* Banner del tipo de proceso */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 16px",
-            fontSize: 13,
-            background: sinProceso
-              ? "color-mix(in srgb, var(--warning, #d97706) 12%, transparent)"
-              : "color-mix(in srgb, var(--accent, #7c3aed) 10%, transparent)",
-            borderBottom: "1px solid color-mix(in srgb, var(--muted, #64748b) 18%, transparent)",
-          }}
-        >
+        <div className="px-4 pt-3">
           {sinProceso ? (
-            <>
-              <AlertTriangle size={15} style={{ color: "var(--warning, #d97706)", flexShrink: 0 }} />
-              <span>
-                Esta necesidad <strong>no tiene un tipo de proceso de selección</strong> elegido. Selecciónalo y
-                guárdalo en la ficha para revisar y generar la propuesta contra el modelo oficial correcto.
-              </span>
-            </>
+            <Alert tone="warning">
+              Esta necesidad <strong>no tiene un tipo de proceso de selección</strong> elegido. Selecciónalo y
+              guárdalo en la ficha para revisar y generar la propuesta contra el modelo oficial correcto.
+            </Alert>
           ) : (
-            <>
-              <Sparkles size={15} style={{ color: "var(--accent, #7c3aed)", flexShrink: 0 }} />
-              <span>
-                Revisando y generando contra el modelo oficial de: <strong>{tipoProcesoSeleccion}</strong>.
-              </span>
-            </>
+            <Alert tone="info">
+              Revisando y generando contra el modelo oficial de: <strong>{tipoProcesoSeleccion}</strong>.
+            </Alert>
           )}
         </div>
 
         {error ? (
-          <p style={{ margin: 0, padding: "8px 16px", color: "var(--danger, #dc2626)", fontSize: 13 }}>{error}</p>
+          <div className="px-4 pt-3">
+            <Alert tone="danger">{error}</Alert>
+          </div>
+        ) : null}
+
+        {aviso ? (
+          <div className="px-4 pt-3">
+            <Alert tone="warning">{aviso}</Alert>
+          </div>
         ) : null}
 
         {/* Cuerpo: PDF · (propuesta + revisión) */}
@@ -660,11 +666,11 @@ export function EettTdrModal({
                     marginBottom: 12,
                     borderRadius: 6,
                     fontSize: 12.5,
-                    background: "color-mix(in srgb, var(--accent, #7c3aed) 10%, transparent)",
-                    border: "1px solid color-mix(in srgb, var(--accent, #7c3aed) 25%, transparent)",
+                    background: "color-mix(in srgb, var(--accent, #bd6b2f) 10%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--accent, #bd6b2f) 25%, transparent)",
                   }}
                 >
-                  <Loader size={15} style={{ color: "var(--accent, #7c3aed)", flexShrink: 0 }} />
+                  <Loader size={15} style={{ color: "var(--accent, #bd6b2f)", flexShrink: 0 }} />
                   <span>
                     <strong>Leyendo el PDF</strong> (con OCR si es un escaneo)… la revisión usará su contenido detallado.
                   </span>
@@ -779,7 +785,7 @@ export function EettTdrModal({
               {propuesta.trim() ? (
                 <div style={{ marginBottom: 18 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-                    <WandSparkles size={15} style={{ color: "var(--accent, #7c3aed)" }} /> Propuesta generada (según modelo OECE)
+                    <WandSparkles size={15} style={{ color: "var(--accent, #bd6b2f)" }} /> Propuesta generada (según modelo OECE)
                   </div>
                   {generadoEn ? (
                     <p style={{ fontSize: 11.5, color: "var(--muted, #64748b)", margin: "0 0 6px" }}>
@@ -807,7 +813,7 @@ export function EettTdrModal({
 
               {/* Revisión */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
-                <Sparkles size={15} style={{ color: "var(--accent, #7c3aed)" }} /> Revisión contra el modelo OECE
+                <Sparkles size={15} style={{ color: "var(--accent, #bd6b2f)" }} /> Revisión contra el modelo OECE
               </div>
               {revisadoEn ? (
                 <p style={{ fontSize: 11.5, color: "var(--muted, #64748b)", margin: "0 0 8px" }}>
@@ -912,7 +918,7 @@ export function EettTdrModal({
                         {h.propuesta ? (
                           <div style={{ marginTop: 6 }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--accent, #7c3aed)" }}>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--accent, #bd6b2f)" }}>
                                 ✍️ Propuesta correcta (lista para pegar)
                               </span>
                               <button
@@ -923,7 +929,7 @@ export function EettTdrModal({
                                   setCopiado(i);
                                   window.setTimeout(() => setCopiado((c) => (c === i ? null : c)), 1500);
                                 }}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, cursor: "pointer", background: "none", border: "none", color: "var(--accent, #7c3aed)" }}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, cursor: "pointer", background: "none", border: "none", color: "var(--accent, #bd6b2f)" }}
                               >
                                 <Copy size={12} /> {copiado === i ? "Copiado" : "Copiar"}
                               </button>
@@ -933,8 +939,8 @@ export function EettTdrModal({
                                 fontSize: 12.5,
                                 lineHeight: 1.5,
                                 whiteSpace: "pre-wrap",
-                                background: "color-mix(in srgb, var(--accent, #7c3aed) 7%, transparent)",
-                                border: "1px solid color-mix(in srgb, var(--accent, #7c3aed) 25%, transparent)",
+                                background: "color-mix(in srgb, var(--accent, #bd6b2f) 7%, transparent)",
+                                border: "1px solid color-mix(in srgb, var(--accent, #bd6b2f) 25%, transparent)",
                                 borderRadius: 6,
                                 padding: "8px 10px",
                                 color: "var(--ink, inherit)",
@@ -957,7 +963,8 @@ export function EettTdrModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

@@ -21,13 +21,13 @@ export type AdmisibilidadItem = {
 export const ADMISIBILIDAD_ITEMS: readonly AdmisibilidadItem[] = [
   { key: "finalidad", label: "Finalidad pública clara y vinculada a la función de la entidad", baseLegal: "Art. 44.1" },
   { key: "objeto_eett", label: "Objeto y EETT/TDR definidos y suficientes para contratar", baseLegal: "Art. 44.10 · 126" },
-  { key: "cantidades", label: "Cantidades, unidades y metas coherentes con la necesidad", baseLegal: "Art. 44.2" },
+  { key: "cantidades", label: "Cantidades, unidades y metas coherentes con la necesidad", baseLegal: "Art. 44" },
   { key: "requisitos", label: "Requisitos de calificación proporcionales y no restrictivos", baseLegal: "Art. 44.2.b · 72" },
   { key: "condiciones", label: "Condiciones de contratación completas (plazo, pago, entrega)", baseLegal: "Art. 44.2" },
   { key: "lugar", label: "Lugar de entrega o prestación indicado", baseLegal: "Art. 44.2" },
-  { key: "presupuesto", label: "Datos presupuestales y certificación de crédito", baseLegal: "Art. 44 · Ley 32069" },
-  { key: "sin_direccionamiento", label: "Sin direccionamiento ni condiciones que restrinjan la competencia", baseLegal: "Art. 44.4" },
-  { key: "cmn", label: "Incluida y coherente con el CMN/PAC", baseLegal: "Art. 42 · 125" },
+  { key: "presupuesto", label: "Datos presupuestales y certificación de crédito", baseLegal: "Art. 48 · Ley 32069" },
+  { key: "sin_direccionamiento", label: "Sin direccionamiento ni condiciones que restrinjan la competencia", baseLegal: "Art. 44.6" },
+  { key: "cmn", label: "Incluida y coherente con el CMN/PAC", baseLegal: "Art. 46.1 · Ley 32069 (PMBSO)" },
 ] as const;
 
 

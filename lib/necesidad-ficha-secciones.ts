@@ -25,7 +25,7 @@ import {
 
 // Configuración de la ficha editable: cada campo mapea la columna (snake_case,
 // para leer) con la clave del PATCH (camelCase) y su tipo de control.
-export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "formacionAcademica" | "capacitacion" | "subcontratacion" | "select";
+export type FichaFieldKind = "text" | "number" | "textarea" | "date" | "requisitos" | "controversias" | "penalidades" | "personalClave" | "formacionAcademica" | "capacitacion" | "subcontratacion" | "adelanto" | "reajuste" | "select";
 
 // Catálogo del "Tipo de proceso de selección" (referencia inicial del área
 // usuaria) y su puente al PDF-modelo. Vive en lib/ para compartirse con el
@@ -288,8 +288,8 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // vivia en Identificación, que no es donde se busca.
       { subgrupo: "a) Programación en el CMN y el PAC", col: "periodo_programacion", api: "periodoProgramacion", label: "Periodo de programación", baseLegal: "Art. 20.a Reglamento · el requerimiento debe estar previsto en el CMN; aquí va el periodo multianual al que corresponde.", ejemplo: "2026-I" },
       { subgrupo: "a) Programación en el CMN y el PAC", col: "meta_presupuestal", api: "metaPresupuestal", label: "Meta presupuestal", obligatorio: true, baseLegal: "Meta del presupuesto institucional que financia la contratación.", ejemplo: "Meta 001" },
-      { subgrupo: "a) Programación en el CMN y el PAC", col: "trimestre", api: "trimestre", label: "Trimestre", kind: "number", baseLegal: "Trimestre en que el PAC prevé ejecutar la contratación (1 a 4).", ejemplo: "1" },
-      { subgrupo: "a) Programación en el CMN y el PAC", col: "mes_programado", api: "mesProgramado", label: "Mes programado", kind: "number", baseLegal: "Mes previsto en el PAC (1 a 12).", ejemplo: "3" },
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "trimestre", api: "trimestre", label: "Trimestre", kind: "number", min: 1, max: 4, baseLegal: "Trimestre en que el PAC prevé ejecutar la contratación (1 a 4).", ejemplo: "1" },
+      { subgrupo: "a) Programación en el CMN y el PAC", col: "mes_programado", api: "mesProgramado", label: "Mes programado", kind: "number", min: 1, max: 12, baseLegal: "Mes previsto en el PAC (1 a 12).", ejemplo: "3" },
       { subgrupo: "b) Inversión a la que se imputa", col: "cui", api: "cui", label: "Código Único de Inversión (CUI)", recomendado: true, baseLegal: "Art. 46.1.c Reglamento · lo pide la variable c) del Formato de Estrategia. Viene de act_proy del pedido SIGA.", ejemplo: "2661009" },
       { subgrupo: "b) Inversión a la que se imputa", col: "cadena_funcional", api: "cadenaFuncional", label: "Cadena funcional", baseLegal: "Cadena funcional programática del SIGA; su 4.º segmento lleva el CUI.", ejemplo: "21-046-0102-2656190-4000129" },
       { subgrupo: "b) Inversión a la que se imputa", col: "clasificador_gasto", api: "clasificadorGasto", label: "Clasificador de gasto", baseLegal: "Clasificador de gastos del SIAF; va a la solicitud de certificación presupuestal.", ejemplo: "2.3.1.1.1" },
@@ -298,10 +298,10 @@ export const FICHA_SECCIONES: FichaSection[] = [
       { subgrupo: "c) Financiamiento", col: "fuente_financiamiento", api: "fuenteFinanciamiento", label: "Fuente de financiamiento", obligatorio: true, baseLegal: "Fuente de financiamiento del clasificador del MEF con la que se atiende la necesidad.", ejemplo: "Recursos Ordinarios" },
       { subgrupo: "c) Financiamiento", col: "rubro", api: "rubro", label: "Rubro", obligatorio: true, baseLegal: "Rubro de financiamiento del SIGA (col. `fuente_fto` del pedido).", ejemplo: "18" },
       { subgrupo: "c) Financiamiento", col: "moneda", api: "moneda", label: "Moneda", kind: "select", opciones: OPCIONES_MONEDA, baseLegal: "Moneda del requerimiento; determina cómo se expresa la cuantía (Art. 47.1).", ejemplo: "PEN" },
-      { subgrupo: "d) Valor estimado", col: "monto_estimado", api: "montoEstimado", label: "Monto estimado (S/)", kind: "number", obligatorio: true, baseLegal: "Ley 32069, Art. 48 · la entidad establece la CUANTÍA de la contratación para gestionar los recursos presupuestales. Art. 47.1 Reglamento · el valor definitivo lo fija la interacción con el mercado; esta es la estimación de partida.", ejemplo: "50000" },
-      { subgrupo: "d) Valor estimado", col: "costo_unitario", api: "costoUnitario", label: "Costo unitario (S/)", kind: "number", baseLegal: "Art. 47.1 Reglamento · base de la cuantía en Subasta Inversa y Comparación de Precios, donde se compara por unitario.", ejemplo: "12.50", obligatorioEnProceso: ["Subasta Inversa Electrónica", "Comparación de Precios"] },
-      { subgrupo: "d) Valor estimado", col: "costo_total", api: "costoTotal", label: "Costo total (S/)", kind: "number", baseLegal: "Se calcula automáticamente (cant. × costo unitario)", ejemplo: "6250" },
-      { subgrupo: "d) Valor estimado", col: "anio_referencia", api: "anioReferencia", label: "Año de referencia", kind: "number", ejemplo: "2026", obligatorioEnProceso: ["Comparación de Precios", "Subasta Inversa Electrónica"], baseLegal: "Art. 47.1 Reglamento · año del precio de referencia con el que se actualiza la cuantía." },
+      { subgrupo: "d) Cuantía de la contratación", col: "monto_estimado", api: "montoEstimado", label: "Monto estimado (S/)", kind: "number", obligatorio: true, baseLegal: "Ley 32069, Art. 48 · la entidad establece la CUANTÍA de la contratación para gestionar los recursos presupuestales. Art. 47.1 Reglamento · el valor definitivo lo fija la interacción con el mercado; esta es la estimación de partida.", ejemplo: "50000" },
+      { subgrupo: "d) Cuantía de la contratación", col: "costo_unitario", api: "costoUnitario", label: "Costo unitario (S/)", kind: "number", baseLegal: "Art. 47.1 Reglamento · base de la cuantía en Subasta Inversa y Comparación de Precios, donde se compara por unitario.", ejemplo: "12.50", obligatorioEnProceso: ["Subasta Inversa Electrónica", "Comparación de Precios"] },
+      { subgrupo: "d) Cuantía de la contratación", col: "costo_total", api: "costoTotal", label: "Costo total (S/)", kind: "number", baseLegal: "Costo total de la partida (cantidad × costo unitario). Al desagregar el requerimiento en ítems, la cuantía sale de la sumatoria de sus importes (Art. 52).", ejemplo: "6250" },
+      { subgrupo: "d) Cuantía de la contratación", col: "anio_referencia", api: "anioReferencia", label: "Año de referencia", kind: "number", ejemplo: "2026", obligatorioEnProceso: ["Comparación de Precios", "Subasta Inversa Electrónica"], baseLegal: "Art. 47.1 Reglamento · año del precio de referencia con el que se actualiza la cuantía." },
       { subgrupo: "e) Fechas del requerimiento", col: "fecha_requerida", api: "fechaRequerida", label: "Fecha requerida", kind: "date", baseLegal: "Fecha para la que se necesita; la DEC estima contra ella el cronograma (Art. 46.1.o).", obligatorio: true, ejemplo: "2026-03-15" },
       { subgrupo: "e) Fechas del requerimiento", col: "fecha_remision_dec", api: "fechaRemisionDec", label: "Fecha de recepción por la DEC", kind: "date", obligatorio: true, baseLegal: "Art. 44.2 Reglamento · El área usuaria remite el requerimiento a la DEC", ejemplo: "2026-03-16" },
       { subgrupo: "e) Fechas del requerimiento", col: "fecha_version_dos", api: "fechaVersionDos", label: "Fecha de la 2ª versión del requerimiento", kind: "date", baseLegal: "Art. 44.7 Reglamento · Ciclo de no objeción (mejora del requerimiento)", ejemplo: "2026-03-20" },
@@ -410,7 +410,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
       { subgrupo: "d) Lugar de prestación", col: "provincia", api: "provincia", label: "Provincia", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "Lima" },
       { subgrupo: "d) Lugar de prestación", col: "distrito", api: "distrito", label: "Distrito", recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar de entrega o de prestación, de corresponder.", ejemplo: "San Isidro" },
       { subgrupo: "d) Lugar de prestación", col: "lugar_entrega", api: "lugarEntrega", label: "Lugar de prestación o entrega", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 44.2 Reglamento · lugar concreto de entrega o de prestación.", ejemplo: "Av. Principal 123" },
-      { subgrupo: "e) Adelanto directo", col: "adelanto_directo", api: "adelantoDirecto", label: "Adelanto directo", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 137 Reglamento · en bienes y servicios solo se otorga adelanto directo en los supuestos que ahí se tasan.", plantilla: "La entidad contratante otorgará [NÚMERO] adelanto(s) directo(s) por el [PORCENTAJE, no mayor al 30% en conjunto] del monto del contrato original. El contratista debe solicitarlos dentro de los [PLAZO] días siguientes al perfeccionamiento del contrato.", ejemplo: "Hasta 30% del monto del contrato" },
+      { subgrupo: "e) Adelanto directo", col: "adelanto_directo", api: "adelantoDirecto", label: "Adelanto directo", kind: "adelanto", wide: true, recomendado: true, baseLegal: "Art. 137 Reglamento · en bienes y servicios solo se otorga adelanto directo en los supuestos que ahí se tasan.", plantilla: "La entidad contratante otorgará [NÚMERO] adelanto(s) directo(s) por el [PORCENTAJE, no mayor al 30% del monto del contrato original (Art. 66.3)]. El contratista lo solicita adjuntando el mecanismo de garantía (Art. 137). En bienes y servicios el Reglamento no fija un plazo de solicitud.", ejemplo: "Hasta 30% del monto del contrato" },
       { subgrupo: "f) Penalidades", col: "penalidad_mora", api: "penalidadMora", label: "Penalidad por mora", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 120 Reglamento · penalidad por mora ante retraso injustificado; el Art. 119 exige que el contrato la establezca junto con las demás penalidades.", ejemplo: "0.10 × monto / (F × plazo en días)" },
       // El Art. 119.1 pide que el contrato establezca la penalidad por mora Y OTRAS
       // penalidades. El apartado f) del modelo trae un cuadro para ellas (supuesto,
@@ -422,13 +422,13 @@ export const FICHA_SECCIONES: FichaSection[] = [
       // tenia donde escribirlo, asi que el requerimiento salia con un apartado que
       // nadie podia rellenar. Manda el modelo (confirmado con la entidad).
       { subgrupo: "g) Subcontratación", col: "subcontratacion", api: "subcontratacion", label: "Subcontratación", kind: "subcontratacion", wide: true, baseLegal: "Art. 108.1 Reglamento · se subcontrata hasta el 40% del monto del contrato vigente; las bases pueden excluir prestaciones esenciales o, si así se evaluó en la estrategia de contratación Y con el sustento correspondiente, prohibirla.", ejemplo: "Prohibida / Permitida hasta 40%" },
-      { subgrupo: "h) Fórmula de reajuste", col: "formula_reajuste", api: "formulaReajuste", label: "Fórmula de reajuste", plantilla: "[DE SER EL CASO, CONSIGNAR LAS FÓRMULAS DE REAJUSTE CORRESPONDIENTES Y EL PROCEDIMIENTO, DE ACUERDO CON LO PREVISTO EN EL NUMERAL 136.2 DEL ARTÍCULO 136 DEL REGLAMENTO]", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 136.2 Reglamento · solo en contratos de ejecución PERIÓDICA O CONTINUADA; el reajuste sigue la variación del IPC nacional o de Lima Metropolitana del mes de pago, según dónde se ejecute la prestación. Se incluye a propuesta del área usuaria y previa validación en la estrategia de contratación.", ejemplo: "Fórmula polinómica basada en el índice de precios del INEI" },
-      { subgrupo: "i) Solución de controversias contractuales", col: "solucion_controversias", api: "solucionControversias", label: "Solución de controversias contractuales", kind: "controversias", wide: true, recomendado: true, baseLegal: "Arts. 330 y 331 Reglamento · conciliación y arbitraje; el arbitraje institucional se inicia ante la Institución Arbitral elegida entre las designadas (Art. 331.2). El Art. 224, que citaba antes este campo, es de contratos estandarizados de ingeniería y construcción de uso internacional.", ejemplo: "Cámara de Comercio de Lima — RUC 20112273922" },
+      { subgrupo: "h) Fórmula de reajuste", col: "formula_reajuste", api: "formulaReajuste", label: "Fórmula de reajuste", plantilla: "[DE SER EL CASO, CONSIGNAR LAS FÓRMULAS DE REAJUSTE CORRESPONDIENTES Y EL PROCEDIMIENTO, DE ACUERDO CON LO PREVISTO EN EL NUMERAL 136.2 DEL ARTÍCULO 136 DEL REGLAMENTO]", kind: "reajuste", wide: true, recomendado: true, baseLegal: "Arts. 136.2 y 209 Reglamento · en bienes, servicios y consultoría en general de ejecución PERIÓDICA O CONTINUADA el reajuste sigue la variación del IPC nacional o de Lima Metropolitana del mes de pago (Art. 136.2); en obras y consultoría de obras se aplican fórmulas polinómicas con los Índices Unificados de Precios de la Construcción del INEI (Art. 209). A propuesta del área usuaria y validado en la estrategia de contratación.", ejemplo: "Fórmula polinómica basada en el índice de precios del INEI" },
+      { subgrupo: "i) Solución de controversias contractuales", col: "solucion_controversias", api: "solucionControversias", label: "Solución de controversias contractuales", kind: "controversias", wide: true, recomendado: true, baseLegal: "Arts. 330-332 Reglamento · las controversias se resuelven por conciliación y arbitraje (Arts. 330 y 331); la entidad propone en las bases la lista de Instituciones Arbitrales —con inscripción vigente en el REGAJU (Art. 332.1)— y el postor ganador elige una (Art. 332.2). El Art. 224, que citaba antes este campo, es de contratos estandarizados de ingeniería y construcción de uso internacional.", ejemplo: "Cámara de Comercio de Lima — RUC 20112273922" },
       // NUMERO de dias, tambien en el esquema. Estaba declarado numero aqui y
       // validado como texto alli, asi que `construirPayload` mandaba un numero
       // que el PATCH rechazaba con 400 en CADA guardado. El texto del apartado
       // vive en `plazoRespuestasTexto`, que es lo que se redacta.
-      { subgrupo: "j) Plazo para respuestas entre las partes", col: "plazo_respuestas", api: "plazoRespuestas", label: "Plazo máximo de respuesta entre las partes (días calendario)", kind: "number", baseLegal: "Apartado j) del formato de requerimiento · plazo en que las partes se responden durante la ejecución. No lo fija el Reglamento: es una condición del modelo.", ejemplo: "10" },
+      { subgrupo: "j) Plazo para respuestas entre las partes", col: "plazo_respuestas", api: "plazoRespuestas", label: "Plazo máximo de respuesta entre las partes (días calendario)", kind: "number", min: 1, max: 365, baseLegal: "Apartado j) del formato · plazo en que las partes se responden durante la ejecución; el Reglamento no fija uno general (sí plazos por procedimiento, p. ej. Arts. 108.3 y 201). El cómputo es en días calendario (Art. 105.3).", ejemplo: "10" },
       // El apartado j) ya redactado. El plazo de arriba sigue siendo un NUMERO,
       // con el que se puede contar y comparar; el texto va aparte porque son dos
       // cosas distintas y meterlas en la misma columna obligaba a adivinar cual
@@ -514,9 +514,13 @@ export const FICHA_SECCIONES: FichaSection[] = [
     title: "3.4 Términos de referencia",
     resumenLlano: "Describe con detalle las características técnicas de lo que se contrata (el «cómo debe ser»).",
     simple: false,
-    nota: "Características técnicas y condiciones de ejecución, de preferencia por desempeño y funcionalidad antes que por rasgos meramente descriptivos (Art. 126.1 · principio de valor por dinero). AQUÍ NO van los requisitos de calificación del proveedor: esos son el 3.5. Sí cabe listar el personal, equipamiento o infraestructura NO clave que se necesite para prestar el servicio, pero sin exigir su acreditación en la selección: son condiciones de la ejecución.",
+    nota: "Características técnicas y condiciones de ejecución, de preferencia por desempeño y funcionalidad antes que por rasgos meramente descriptivos (Art. 126.1 · principio de valor por dinero). AQUÍ NO van los requisitos de calificación del proveedor: esos son el 3.5. Sí cabe listar el personal, equipamiento o infraestructura NO clave que se necesite para prestar el servicio, pero sin exigir su acreditación en la selección: son condiciones de la ejecución. El PDF del TDR/EETT se adjunta en el panel de EETT/TDR de esta misma ficha: se indexa para consulta y se lista como anexo en el requerimiento en Word.",
     fields: [
-      { col: "descripcion_detallada", api: "descripcionDetallada", label: "Términos de referencia / Especificaciones técnicas", kind: "textarea", wide: true, obligatorio: true, baseLegal: "Art. 126.1 Reglamento · Especificaciones técnicas (bienes) o términos de referencia (servicios)", ejemplo: "Servicio de X con las siguientes características técnicas…" },
+      // "De corresponder", no obligatorio: el detalle técnico (Art. 126.1) puede
+      // escribirse aquí O adjuntarse como PDF del TDR/EETT en el panel de esta ficha
+      // (que al extraerlo rellena este mismo campo). Por eso no bloquea el guardado ni
+      // el remitir; sigue visible y advertido (la verificación lo marca como aviso).
+      { col: "descripcion_detallada", api: "descripcionDetallada", label: "Términos de referencia / Especificaciones técnicas", kind: "textarea", wide: true, recomendado: true, baseLegal: "Art. 126.1 Reglamento · Especificaciones técnicas (bienes) o términos de referencia (servicios)", ejemplo: "Servicio de X con las siguientes características técnicas…" },
       // Lo demás que el 3.4 del modelo exige y la ficha no recogía. Va detrás del
       // TDR porque son precisiones SOBRE él, no descripciones alternativas.
       { col: "ficha_tecnica_identificacion", api: "fichaTecnicaIdentificacion", label: "Ficha técnica u homologación aplicable", baseLegal: "Art. 260 Reglamento · las fichas técnicas y de homologación aprobadas son de uso OBLIGATORIO con independencia del monto; cuando se usan, el requerimiento debe identificarlas.", ejemplo: "Ficha técnica N° 0001-2025-PERUCOMPRAS · Papel bond A4 75 g" },
@@ -525,19 +529,20 @@ export const FICHA_SECCIONES: FichaSection[] = [
     ],
   },
   {
-    // Bases Estándar, Cap. III · 3.5.1: requisitos OBLIGATORIOS (capacidad legal
-    // + experiencia del postor). El área usuaria PROPONE; la DEC los establece
-    // en la Estrategia (Art. 72.1).
-    title: "3.5.1 Requisitos de calificación obligatorios",
-    resumenLlano: "Qué debe acreditar el proveedor para poder participar (habilitación y experiencia). Tú lo propones; la DEC lo confirma.",
+    // Bases Estándar, Cap. III · 3.5: requisitos de calificación (los 5 tipos del
+    // Art. 72.3). El editor cubre las tres naturalezas —obligatorio (fijo por la
+    // ley según el procedimiento, Art. 72.4), facultativo (elección de la entidad,
+    // con sustento) y no aplica—, así que aquí van TODOS, no solo los obligatorios.
+    // El área usuaria PROPONE; la DEC los establece en la Estrategia (Art. 72.1).
+    title: "3.5 Requisitos de calificación y/o precalificación",
+    resumenLlano: "Qué debe acreditar el proveedor para poder participar (habilitación, experiencia y, si la entidad los pide, facultativos). Tú lo propones; la DEC lo confirma.",
     simple: false,
-    nota: "Dos requisitos obligatorios, según el formato: A) capacidad legal —solo si la normativa del objeto exige habilitación para la actividad; si no la exige, se omite— y B) experiencia del postor en la especialidad. Cada uno lleva su REQUISITO y cómo se ACREDITA. Dos topes del formato: el monto facturado acumulado no puede superar TRES VECES la cuantía de la contratación o del ítem, y se cuenta en los QUINCE años anteriores a la presentación de ofertas. En consorcio, cada integrante comprometido con el objeto acredita el requisito. El área usuaria PROPONE; la DEC los establece en la estrategia (Art. 72.1).",
+    nota: "Los 5 tipos del Art. 72.3, en un solo lugar. Cuáles son OBLIGATORIOS lo fija la ley según el procedimiento (bases estándar, Art. 72.4): salen bloqueados. Los demás los propones como FACULTATIVOS con su sustento (la DEC puede excluirlos si limitan la concurrencia, con tu no objeción). Cada requisito lleva qué se exige y cómo se acredita. Topes del formato para la experiencia: el monto facturado acumulado no supera TRES VECES la cuantía, y se cuenta en los QUINCE años anteriores a la presentación de ofertas. En consorcio, cada integrante comprometido acredita el requisito.",
     fields: [
-      // 3.5.1 del formato de requerimiento: los requisitos de calificación son
-      // OBLIGATORIOS en los 15 procesos (todos los modelos incluyen esta sección).
+      // Editor de los 5 tipos del Art. 72.3 (obligatorio/facultativo/no aplica).
       // El área usuaria PROPONE; la DEC los establece (Art. 72.1), pero la
-      // propuesta debe existir en el requerimiento.
-      { col: "requisitos_calificacion", api: "requisitosCalificacion", label: "Propuesta de requisitos de calificación / precalificación", kind: "requisitos", wide: true, obligatorio: true, baseLegal: "Art. 44.2.b / 72.3 Reglamento · Sección 3.5.1 (obligatoria). El área usuaria PROPONE; la DEC los establece en la Estrategia (Art. 72.1). Los 5 tipos son los del Art. 72.3.", ejemplo: "Capacidad legal; Experiencia del postor en la especialidad" },
+      // propuesta debe existir en el requerimiento (Art. 44.2.b).
+      { col: "requisitos_calificacion", api: "requisitosCalificacion", label: "Propuesta de requisitos de calificación / precalificación", kind: "requisitos", wide: true, obligatorio: true, baseLegal: "Art. 44.2.b / 72.3 Reglamento · Sección 3.5. El área usuaria PROPONE (obligatorios y facultativos); la DEC los establece en la Estrategia (Art. 72.1). Los 5 tipos son los del Art. 72.3.", ejemplo: "Capacidad legal; Experiencia del postor en la especialidad" },
       // CONSOLIDADO en la Propuesta de requisitos de calificación (editor): la
       // "Experiencia del postor en la especialidad" es uno de los 5 tipos del
       // Art. 72.3 que gestiona el editor. Se mantiene la columna (oculta) como
@@ -588,27 +593,12 @@ export const FICHA_SECCIONES: FichaSection[] = [
       { col: "infraestructura_estrategica_acreditacion", api: "infraestructuraEstrategicaAcreditacion", label: "Acreditación de la infraestructura estratégica", oculto: true, kind: "textarea", baseLegal: "Art. 72.3.b Reglamento · forma de acreditar la infraestructura estratégica. Texto estándar del formato de Concurso Público de servicios." },
     ],
   },
-  {
-    // Bases Estándar, Cap. III · 3.5.2: requisitos ADICIONALES (capacidad
-    // técnica y profesional / personal clave), de corresponder.
-    title: "3.5.2 Requisitos de calificación adicionales",
-    simple: false,
-    nota: "Facultativos: solo se incluyen si así se determina en la estrategia de contratación. El típico es la capacidad técnica y profesional —calificaciones y experiencia del personal clave, Art. 72.3.b—. Aviso del formato sobre la formación académica: como requisito de calificación solo puede exigirse el GRADO o título, no cursos ni especializaciones.",
-    fields: [
-      // CONSOLIDADO en la Propuesta de requisitos de calificación (editor): la
-      // "Capacidad técnica y profesional (personal clave)" es el tipo
-      // `capacidad_tecnica` del Art. 72.3 que gestiona el editor. Columna oculta
-      // como respaldo; su contenido se migra a ese tipo al abrir la ficha.
-      //
-      // La sección se había quedado SIN campos visibles al consolidar el personal
-      // clave, y `seccionesVisibles` descarta las secciones vacías: el 3.5.2
-      // desaparecía de la ficha aunque el requerimiento modelo lo trae. Los
-      // adicionales no son solo personal clave: son los facultativos que la DEC
-      // decida en la estrategia. La experiencia del personal clave se registra
-      // en 3.5.1, junto a la del postor, donde la entidad la pide.
-      { col: "requisitos_adicionales", api: "requisitosAdicionales", label: "Requisitos de calificación adicionales", kind: "textarea", wide: true, baseLegal: "Art. 72.1 Reglamento · los requisitos de calificación se establecen en la estrategia de contratación; el área usuaria propone los adicionales que correspondan.", ejemplo: "Capacidad técnica y profesional: equipamiento estratégico mínimo." },
-    ],
-  },
+  // La antigua "3.5.2 Requisitos de calificación adicionales" (textarea libre
+  // `requisitos_adicionales`) se retira de la ficha: era dato MUERTO —no lo
+  // consumían el requerimiento, ni la precarga a A4, ni la estrategia— y estaba
+  // vacío en todas las necesidades. Los facultativos se proponen en el editor de
+  // 3.5 marcando el tipo del Art. 72.3 como "Facultativo". La columna sigue en la
+  // BD por si hubiera datos históricos; solo desaparece del formulario.
   {
     title: "Planeamiento (PEI / POI)",
     simple: false,
@@ -625,7 +615,7 @@ export const FICHA_SECCIONES: FichaSection[] = [
     nota: "La DEC participa en la elaboración y revisión del requerimiento SOLO en cuanto al cumplimiento de la normativa: los aspectos TÉCNICOS de la necesidad son responsabilidad del área usuaria (Art. 14.2.b). Estas cuatro casillas son las verificaciones del Art. 14.2 que tocan al requerimiento —c) CMN, d) ficha técnica o acuerdo marco, e) almacén y patrimonio, j) certificación presupuestal—. La del CMN se resuelve además con las acciones del flujo (aprobar / solicitar no objeción).",
     fields: [
       // El CMN es una verificación del 14.2.c, no un dato de identificación.
-      { col: "version_cmn", api: "versionCmn", label: "Versión del CMN", baseLegal: "Art. 14.2.c Reglamento · La necesidad debe constar en el CMN aprobado del año fiscal o su modificatoria (Art. 54.3)", ejemplo: "CMN 2026 v2" },
+      { col: "version_cmn", api: "versionCmn", label: "N.° del CMN (y su modificatoria, si aplica)", baseLegal: "Art. 14.2.c Reglamento · La necesidad debe constar en el CMN aprobado del año fiscal o su modificatoria (Art. 54.3)", ejemplo: "CMN 2026, Modificatoria N.° 2" },
       { col: "verificacion_ficha_tecnica", api: "verificacionFichaTecnica", label: "Verificación de ficha técnica, homologación o acuerdo marco", checkbox: true, baseLegal: "Art. 14.2.d Reglamento · la DEC verifica si la necesidad está definida en una ficha técnica, en una ficha de homologación O EN EL CATÁLOGO ELECTRÓNICO DE ACUERDOS MARCO. Las fichas aprobadas son de uso obligatorio con independencia del monto (Art. 260); el acuerdo marco es otra vía de contratación." },
       { col: "verificacion_almacen", api: "verificacionAlmacen", label: "Verificación de almacén / patrimonio", checkbox: true, baseLegal: "Art. 14.2.e Reglamento · DEC verifica si la necesidad puede cubrirse con existencias disponibles o bienes patrimoniales sin asignar" },
       { col: "certificacion_presupuestal", api: "certificacionPresupuestal", label: "Certificación / previsión presupuestal", baseLegal: "Art. 14.2.j Reglamento · DEC solicita a la oficina de presupuesto la certificación o previsión presupuestal" },

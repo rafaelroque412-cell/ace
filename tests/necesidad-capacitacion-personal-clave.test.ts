@@ -61,6 +61,23 @@ describe("capacitacionIncompletas", () => {
   });
 });
 
+describe("el marcador [POR DEFINIR] no se lee como dato", () => {
+  it("parseFilasCapacitacion devuelve vacio donde el serializador dejo el marcador", () => {
+    // format deja «[POR DEFINIR]» en horas y puesto; al leer vuelven a ser "".
+    const texto = formatFilasCapacitacion([fila({ actividad: "JEFE", horas: "", materia: "X", puesto: "" })]);
+    expect(parseFilasCapacitacion(texto)).toEqual([fila({ actividad: "JEFE", materia: "X" })]);
+  });
+
+  it("el requisito compuesto muestra la guia OECE, no el marcador", () => {
+    const [f] = parseFilasCapacitacion(
+      formatFilasCapacitacion([fila({ actividad: "JEFE", horas: "40", materia: "BIM", puesto: "" })]),
+    );
+    const t = componerRequisitoCapacitacion(f);
+    expect(t).toContain("del personal clave requerido como [CONSIGNAR EL PERSONAL CLAVE");
+    expect(t).not.toContain("[POR DEFINIR]");
+  });
+});
+
 describe("capacitacionExcedeHoras", () => {
   it("corta en 120: 120 no excede, 121 si, no-numerico no cuenta", () => {
     const filas = [
