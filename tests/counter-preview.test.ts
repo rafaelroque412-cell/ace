@@ -14,15 +14,16 @@ describe("formatDocumentNumber (formato oficial peruano)", () => {
     );
   });
 
-  it("INFORME: con segmentos multiples por guion se normalizan a /", () => {
+  it("INFORME: los guiones internos del area se CONSERVAN (no se normalizan a /)", () => {
     expect(formatDocumentNumber({ tipo: "INFORME", siguiente: 42, ancho: 4, sufijo: "MDCH-SG-A", year: 2026 })).toBe(
-      "INFORME N° 0042-2026-MDCH/SG/A",
+      "INFORME N° 0042-2026-MDCH-SG-A",
     );
   });
 
-  it("INFORME: con / y - mixtos", () => {
-    expect(formatDocumentNumber({ tipo: "INFORME", siguiente: 5, ancho: 3, sufijo: "MDCH/SG-A", year: 2026 })).toBe(
-      "INFORME N° 005-2026-MDCH/SG/A",
+  it("INFORME: con / y - mixtos (el '/' separa, el '-' se mantiene)", () => {
+    // Es el caso real de la entidad: área con guiones, entidad tras la barra.
+    expect(formatDocumentNumber({ tipo: "INFORME", siguiente: 1, ancho: 3, sufijo: "JRM-UA-OGA/MDCH", year: 2026 })).toBe(
+      "INFORME N° 001-2026-JRM-UA-OGA/MDCH",
     );
   });
 
@@ -89,8 +90,9 @@ describe("splitSufijo", () => {
     expect(splitSufijo("MDCH/GM")).toEqual(["MDCH", "GM"]);
   });
 
-  it("separa por -", () => {
-    expect(splitSufijo("MDCH-SG-A")).toEqual(["MDCH", "SG", "A"]);
+  it("NO separa por - (los guiones son internos del área y se conservan)", () => {
+    expect(splitSufijo("MDCH-SG-A")).toEqual(["MDCH-SG-A"]);
+    expect(splitSufijo("JRM-UA-OGA/MDCH")).toEqual(["JRM-UA-OGA", "MDCH"]);
   });
 
   it("ignora segmentos vacios y trimea", () => {

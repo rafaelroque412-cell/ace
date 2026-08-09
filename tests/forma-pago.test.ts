@@ -482,11 +482,9 @@ describe("«Redactar con IA» solo donde hay prosa", () => {
   it("no sale en desplegables, fechas ni números", async () => {
     const { readFileSync } = await import("node:fs");
     const fuente = readFileSync("app/components/necesidad/campo-ficha.tsx", "utf-8");
-    // El botón se calcula UNA vez y se reparte; la condición vive ahí.
-    const i = fuente.indexOf("const botonRedactarIA");
-    const decl = fuente.slice(i - 400, i + 120);
-    expect(decl).toContain("esProsa");
-    expect(decl).toMatch(/kind === "text"/);
-    expect(decl).toMatch(/kind === "textarea"/);
+    // El botón solo aparece en PROSA: `esProsa` mira el kind, y el botón se
+    // calcula a partir de `admiteRedaccion` (que parte de esProsa).
+    expect(fuente).toMatch(/const esProsa =[^\n]*!field\.kind[^\n]*kind === "text"[^\n]*kind === "textarea"/);
+    expect(fuente).toMatch(/const botonRedactarIA =[^\n]*admiteRedaccion/);
   });
 });

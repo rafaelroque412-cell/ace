@@ -31,7 +31,7 @@ describe("los textos son los del formato", () => {
 });
 
 describe("está en la ficha (3.5.1), oculto, y va al documento", () => {
-  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!;
+  const seccion = FICHA_SECCIONES.find((s) => s.title === "3.5 Requisitos de calificación y/o precalificación")!;
 
   it("los dos campos existen y son ocultos", () => {
     for (const api of ["equipamientoEstrategico", "equipamientoEstrategicoAcreditacion"]) {

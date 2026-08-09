@@ -70,7 +70,7 @@ describe("filas a medio declarar", () => {
 });
 
 describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
-  const campo = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!
+  const campo = FICHA_SECCIONES.find((s) => s.title === "3.5 Requisitos de calificación y/o precalificación")!
     .fields.find((f) => f.api === "formacionAcademica");
 
   it("existe, oculta, kind formacionAcademica (tabla en Word)", () => {
@@ -89,7 +89,7 @@ describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
   });
 
   it("la acreditación de la formación es un campo aparte, oculto, y va al Word", () => {
-    const acr = FICHA_SECCIONES.find((s) => s.title === "3.5.1 Requisitos de calificación obligatorios")!
+    const acr = FICHA_SECCIONES.find((s) => s.title === "3.5 Requisitos de calificación y/o precalificación")!
       .fields.find((f) => f.api === "formacionAcademicaAcreditacion");
     expect(acr?.oculto).toBe(true);
     expect(acr?.kind).toBe("textarea");
