@@ -1,0 +1,10 @@
+{
+  "autoUpdatesChannel": "latest",
+  "theme": "dark",
+  "tui": "fullscreen",
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "af7949f9af8b4f5b92c6e8a8e93ecbaa.KlhvbYqFWniPn3xJ",
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "API_TIMEOUT_MS": "3000000"
+  }
+}
