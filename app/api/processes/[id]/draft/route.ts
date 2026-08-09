@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import {
   buildAdministrativeDraftDocx,
   draftKinds,
@@ -49,6 +49,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = draftSchema.safeParse(await request.json().catch(() => ({})));
   if (!payload.success) {
     return NextResponse.json({ error: "Selecciona un tipo de documento valido" }, { status: 400 });

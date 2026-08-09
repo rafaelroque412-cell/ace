@@ -48,6 +48,16 @@ export type ProcesoSeleccion = {
   articulo: string;
   /** Resumen de la columna «Condiciones para su uso». */
   condiciones: string;
+  /**
+   * ¿El procedimiento tiene etapa de PRECALIFICACIÓN?
+   *
+   * Decide qué requisitos de calificación caben: el Art. 72.3.e limita la
+   * capacidad económica a los procedimientos que la tienen, y el 72.4 remite a
+   * las bases estándar de cada modalidad. Va como dato explícito y no se deduce
+   * del nombre: «Licitación Pública para bienes especializados» la lleva sin
+   * decirlo en el título.
+   */
+  precalificacion?: boolean;
   /** Modelos base (nombre EXACTO tal como está en `documents.file_name`). */
   pdfs?: string[];
 };
@@ -103,6 +113,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     objetos: ["bienes"],
     pdfs: [MODELO_BIENES],
     value: "Licitación Pública para bienes especializados",
+    precalificacion: true,
   },
   {
     articulo: ART_93,
@@ -132,6 +143,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     objetos: ["obras"],
     pdfs: [MODELO_OBRAS],
     value: "Licitación Pública de obras con precalificación",
+    precalificacion: true,
   },
   {
     articulo: ART_93,
@@ -211,6 +223,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     objetos: ["servicios", "consultoria_obra"],
     pdfs: MODELOS_CONSULTORIA_VIAL,
     value: "Concurso Público con precalificación",
+    precalificacion: true,
   },
   {
     articulo: ART_94,
@@ -304,6 +317,59 @@ export const OBJETOS_POR_PROCEDIMIENTO: Record<string, ObjetoFilter[]> = Object.
 /** Valor del catálogo que declara, ya en la ficha, un procedimiento no competitivo. */
 export const PROCESO_NO_COMPETITIVO = "Procedimiento de Selección No Competitivo";
 
+export type TipoEvaluador = "oficial_compra" | "comite" | "jurado";
+
+/**
+ * Cuadro N° 7 de la Guía de Actuaciones Preparatorias (3.ª versión, pág. 27):
+ * evaluador(es) ADMISIBLE(S) por procedimiento de selección (Arts. 93/94/95 del
+ * Reglamento de la Ley N° 32069). Transcrito del PDF y verificado por posición de
+ * columna (Oficial de compra / Comité / Jurado). El procedimiento no competitivo no
+ * figura en el cuadro (no se elige evaluador de este modo) y queda fuera del mapa.
+ */
+export const EVALUADORES_POR_PROCESO: Readonly<Record<string, readonly TipoEvaluador[]>> = {
+  "Licitación Pública para bienes": ["oficial_compra", "comite"],
+  "Licitación Pública para bienes especializados": ["comite", "jurado"],
+  "Licitación Pública abreviada para bienes": ["oficial_compra", "comite"],
+  "Licitación Pública de obras": ["comite", "jurado"],
+  "Licitación Pública de obras con precalificación": ["comite", "jurado"],
+  "Licitación Pública abreviada de obras": ["oficial_compra", "comite"],
+  "Licitación Pública con diálogo competitivo": ["jurado"],
+  "Licitación Pública de obras con negociación": ["jurado"],
+  "Licitación Pública para mecanismos diferenciados de adquisición (MDA)": ["jurado"],
+  "Concurso Público de servicios": ["oficial_compra", "comite"],
+  "Concurso Público para consultorías y servicios de mantenimiento vial": ["comite", "jurado"],
+  "Concurso Público abreviado": ["oficial_compra", "comite"],
+  "Concurso Público con precalificación": ["comite", "jurado"],
+  "Concurso Público con diálogo competitivo": ["jurado"],
+  "Concurso Público abreviado para la contratación de expertos y gerentes de proyectos": ["comite"],
+  "Compra Pública Precomercial": ["jurado"],
+  "Asociación para la Innovación": ["jurado"],
+  "Subasta Inversa Electrónica": ["oficial_compra"],
+  "Comparación de Precios": ["oficial_compra"],
+  "Concurso de Proyectos Arquitectónicos y Urbanísticos": ["jurado"],
+};
+
+/**
+ * Evaluadores admisibles para un proceso (por su `value` del catálogo), según el
+ * Cuadro N° 7. Devuelve `[]` si el proceso no está en el cuadro (no competitivo,
+ * "— Por definir —" o un texto no reconocido): sin cuadro, no se valida.
+ */
+export function evaluadoresAdmisibles(proceso: string | null | undefined): readonly TipoEvaluador[] {
+  return EVALUADORES_POR_PROCESO[(proceso ?? "").trim()] ?? [];
+}
+
+/**
+ * Los procedimientos competitivos ESPECÍFICOS (los 21 de los Arts. 93/94/95), sin
+ * la opción "— Por definir —" ni el no competitivo. Es lo que ofrece el select
+ * "Procedimiento registrado en el PAC" (A1): guardar el proceso específico —y no
+ * solo su genérico— es lo que permite que un cambio de submodalidad (con
+ * precalificación, diálogo competitivo, con negociación, MDA) se detecte como
+ * modificación del PAC en la variable a) de la estrategia.
+ */
+export const PROCESOS_COMPETITIVOS_OPCIONES = PROCESOS_SELECCION.filter(
+  (p) => p.value && p.value !== PROCESO_NO_COMPETITIVO,
+).map(({ value, label }) => ({ value, label }));
+
 /**
  * ¿El tipo de proceso anticipado en la ficha es no competitivo?
  *
@@ -337,6 +403,12 @@ export function esModeloDeProceso(fileName: string | null | undefined, value: st
 }
 
 /** ¿`value` es un procedimiento del catálogo? El "— Por definir —" no cuenta. */
+/** ¿Este procedimiento tiene etapa de precalificación? (Art. 72.3.e). */
+export function tienePrecalificacion(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return PROCESOS_SELECCION.some((p) => p.value === value && p.precalificacion === true);
+}
+
 export function esProcesoValido(value: string | null | undefined): boolean {
   const v = (value ?? "").trim();
   return v !== "" && PROCESOS_SELECCION.some((p) => p.value === v);

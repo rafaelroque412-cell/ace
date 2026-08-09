@@ -44,14 +44,22 @@ export type ParametrosSegmentacionInput = {
    */
   noProgramadasConvocadas?: number | null;
   /**
-   * Σ de OTRAS no programadas que se segmentan en el mismo acto, sin incluir la
-   * que se evalúa (esa se suma aparte).
+   * Σ de OTRAS no programadas que se segmentan en el mismo acto. Normalmente NO
+   * incluye la que se evalúa (esa se suma aparte, como "Esta contratación").
+   * Excepción: con `contratacionEnOtras` la entidad decide registrar la propia
+   * contratación DENTRO de este monto, y entonces no se suma por separado.
    */
   otrasNoProgramadasASegmentar?: number | null;
   /** Valor estimado de la contratación a segmentar. */
   valorEstimado: number | null | undefined;
   /** true si la contratación ya está incluida en el PAC del ejercicio. */
   programada: boolean;
+  /**
+   * La propia contratación ya está incluida dentro de `otrasNoProgramadasASegmentar`
+   * (por decisión de la entidad), así que NO se suma aparte como "Esta
+   * contratación". Evita el doble conteo cuando su valor se registra en ese campo.
+   */
+  contratacionEnOtras?: boolean;
 };
 
 export type ParametrosSegmentacion = {
@@ -101,8 +109,11 @@ export function calcularParametrosSegmentacion(
 
   const noProgramadasConvocadas = sumando(input.noProgramadasConvocadas);
   const otrasNoProgramadasASegmentar = sumando(input.otrasNoProgramadasASegmentar);
-  // Programada: ya está considerada en el PAC, no se vuelve a sumar.
-  const nuevaContratacion = input.programada ? 0 : valor;
+  // La contratación evaluada se suma como sumando propio SALVO que ya esté
+  // considerada en la base: porque está programada (ya en el PAC) o porque la
+  // entidad la registró dentro de "otras no programadas" (`contratacionEnOtras`).
+  // En ambos casos sumarla otra vez la contaría dos veces.
+  const nuevaContratacion = input.programada || input.contratacionEnOtras ? 0 : valor;
 
   const montoActualizado = redondear2(
     pac + noProgramadasConvocadas + otrasNoProgramadasASegmentar + nuevaContratacion,
@@ -121,6 +132,30 @@ export function calcularParametrosSegmentacion(
     cuantiaAlta: redondear2(valor) > lineaCorte,
     valorEstimado: redondear2(valor),
   };
+}
+
+/**
+ * ¿La cuantía de A2 quedó SIN DETERMINAR? Cierto solo para bienes/servicios
+ * cuando NO hay cálculo automático posible —falta el PAC o el valor estimado,
+ * las mismas condiciones con que `calcularParametrosSegmentacion` devuelve
+ * null— y el usuario TAMPOCO eligió alta/baja a mano (`cuantiaAlta` undefined).
+ *
+ * En ese estado la categoría se asume "baja" pero no es firme: de la cuantía
+ * depende Rutinaria/Crítico (baja) vs Operacional/Estratégico (alta). Lo usan el
+ * formulario (para avisar) y el panel (para impedir cerrar A2 en ese estado), de
+ * modo que ambos apliquen exactamente la misma regla.
+ */
+export function cuantiaSegmentacionSinDeterminar(input: {
+  objeto?: string;
+  cuantiaAlta?: boolean;
+  pacBienesServicios?: number | null;
+  valorEstimado?: number | null;
+}): boolean {
+  if ((input.objeto ?? "bienes_servicios") !== "bienes_servicios") return false;
+  const pac = Number(input.pacBienesServicios);
+  const valor = Number(input.valorEstimado);
+  const hayCalculo = Number.isFinite(pac) && pac > 0 && Number.isFinite(valor) && valor > 0;
+  return !hayCalculo && input.cuantiaAlta === undefined;
 }
 
 /** Formatea un monto como "S/ 1,287,639.70". */

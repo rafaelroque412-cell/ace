@@ -750,6 +750,33 @@ async function readFileBytes(file: File) {
   return Buffer.from(new Uint8Array(await file.arrayBuffer()));
 }
 
+// Assets de pdfjs-dist (wasm/, standard_fonts/, cmaps/). pdf.js v5+ decodifica
+// JBIG2 y JPX —las compresiones tipicas de PDFs ESCANEADOS— con modulos WASM;
+// sin `wasmUrl` esas imagenes fallan ("JBig2Error: JBig2 failed to initialize")
+// y las paginas se rasterizan EN BLANCO, con lo que el OCR no ve texto alguno.
+// pdf.js exige que las rutas terminen en "/"; en Node las lee via fs.
+async function getPdfjsAssetOptions(): Promise<Record<string, unknown>> {
+  try {
+    const { createRequire } = await import("node:module");
+    const path = await import("node:path");
+    const nodeRequire = createRequire(import.meta.url);
+    const distRoot = path.dirname(nodeRequire.resolve("pdfjs-dist/package.json"));
+    const dir = (name: string) => `${path.join(distRoot, name)}/`;
+    return {
+      cMapPacked: true,
+      cMapUrl: dir("cmaps"),
+      iccUrl: dir("iccs"),
+      standardFontDataUrl: dir("standard_fonts"),
+      wasmUrl: dir("wasm"),
+    };
+  } catch (err) {
+    console.warn(
+      `[pdf] No se pudo resolver pdfjs-dist para wasmUrl (JBIG2/JPX pueden fallar): ${err instanceof Error ? err.message : err}`,
+    );
+    return {};
+  }
+}
+
 // Rasteriza las primeras `maxPages` paginas del PDF a PNG (base64). Se usa para
 // el OCR de escaneados: pasar el PDF como `input_file` hace que el modelo lo trate
 // como "documento" y RECHACE transcribir escaneados ("no puedo extraer texto de
@@ -762,7 +789,10 @@ async function rasterizePdfPages(
 ): Promise<{ pageNumber: number; base64: string }[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    ...(await getPdfjsAssetOptions()),
+  });
   const doc = await loadingTask.promise;
 
   try {
@@ -962,6 +992,21 @@ export async function extractPdfPlainText(
 ): Promise<{ pageCount: number; text: string }> {
   const extracted = await extractPdfText(file, options);
   return { pageCount: extracted.pageCount, text: extracted.text };
+}
+
+// Igual que extractPdfPlainText pero con MARCADORES DE PÁGINA ("=== PÁGINA N ===")
+// intercalados, para que la revisión de EETT/TDR pueda citar en qué PÁGINA está
+// cada apartado. Funciona tanto con texto seleccionable como con OCR.
+export async function extractPdfPagedText(
+  file: File,
+  options: { forceOcr?: boolean } = {},
+): Promise<{ pageCount: number; text: string }> {
+  const extracted = await extractPdfText(file, options);
+  const text =
+    extracted.pages.length > 0
+      ? extracted.pages.map((p) => `=== PÁGINA ${p.pageNumber} ===\n${p.text}`).join("\n\n")
+      : extracted.text;
+  return { pageCount: extracted.pageCount, text };
 }
 
 async function createProcessingJob(documentId: string) {
@@ -1280,7 +1325,11 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
       extractionMethod: extracted.extractionMethod,
       embeddingTextStrategy: "legal-context-header-plus-page-chunk",
       hierarchyRank: hierarchyRank(documentType),
-      indexedTextComplete: true,
+      // OCR parcial (PDF escaneado con mas paginas que el tope OPENAI_OCR_MAX_PAGES)
+      // dejaba indexedTextComplete=true: el documento entraba al corpus RAG como si
+      // estuviera completo cuando solo se habian indexado las primeras paginas. El
+      // flag debe reflejar si el texto indexado cubre todo el documento.
+      indexedTextComplete: !extracted.ocrPartial,
       indexingPipelineVersion,
       maxChunksPerDocument: getMaxChunksPerDocument() ?? "unlimited",
       number: documentNumber,
@@ -1513,7 +1562,7 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
         chunkInsertBatchSize,
         contentHash,
         extractionMethod: extracted.extractionMethod,
-        indexedTextComplete: true,
+        indexedTextComplete: !extracted.ocrPartial,
         indexingPipelineVersion,
         pageCount: extracted.pageCount,
         pinecone: {

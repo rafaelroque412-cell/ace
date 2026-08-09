@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { requireCapability, requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability, requireUser } from "@/lib/auth";
 import { type ProcessDocument, processDocKinds } from "@/lib/processes";
 import { reconcileProcessStatus } from "@/lib/process-status";
 import { extractPdfPlainText } from "@/lib/pdf-processing";
 import {
   downloadStorageObject,
+  esIdSeguro,
   getSupabaseServerConfig,
   type DocumentRecord,
   supabaseRest,
@@ -29,6 +30,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return auth.error;
   }
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const documents = await supabaseUserRest<ProcessDocument[]>(
     auth.user.accessToken,
     `process_documents?process_id=eq.${id}&select=id,process_id,library_document_id,kind,bidder_name,title,file_name,storage_bucket,storage_path,mime_type,status,error_message,metadata,created_at&order=created_at.asc`,
@@ -43,11 +46,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
 
   try {
     const formData = await request.formData();
     const libraryDocumentId = formData.get("libraryDocumentId");
     if (typeof libraryDocumentId === "string" && libraryDocumentId.trim()) {
+      // Se valida como UUID ANTES de interpolarlo: esta consulta va con
+      // service_role (salta RLS), así que un valor con `&`/`select` embebido
+      // podría leer filas/columnas del corpus fuera del alcance del usuario.
+      if (!esIdSeguro(libraryDocumentId.trim())) {
+        return NextResponse.json({ error: "Documento de biblioteca inválido." }, { status: 400 });
+      }
       const [libraryDocument] = await supabaseRest<DocumentRecord[]>(
         `documents?id=eq.${libraryDocumentId.trim()}&select=id,title,file_name,file_size,mime_type,storage_bucket,storage_path,document_type,process_type,source_entity,status,error_message,metadata,created_at,updated_at&limit=1`,
       );

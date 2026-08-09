@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   ACREDITACION_EXPERIENCIA,
   HUECO_MONTO_EXPERIENCIA,
+  HUECO_MONTO_MYPE,
   HUECO_SIMILARES,
+  clausulaMype,
+  componerExperienciaPorItems,
   componerExperienciaPostor,
   importeConLetras,
   montoDeExperiencia,
+  montoMypeDeExperiencia,
   similaresDeExperiencia,
 } from "@/lib/requisitos-experiencia";
 import { formatRequisitos, parseRequisitos, repartirRequisitos } from "@/lib/requisitos-calificacion";
@@ -73,7 +77,10 @@ describe("el requisito completo es el del formato", () => {
 
   it("el objeto de la frase sigue al objeto de la contratación", () => {
     const p = (objeto: string) => componerExperienciaPostor({ monto: "1", moneda: "PEN", objeto });
-    expect(componerExperienciaPostor({ monto: "180000", objeto: "bienes" })).toContain("por la contratación de bienes iguales o similares");
+    // Bienes usa el texto propio de su formato: «venta de bienes» y diez años.
+    const bienes = componerExperienciaPostor({ monto: "180000", objeto: "bienes" });
+    expect(bienes).toContain("por la venta de bienes iguales o similares");
+    expect(bienes).toContain("durante los diez años anteriores");
     expect(t).toContain("por la contratación de servicios iguales o similares");
     expect(p("obras")).toContain("por la contratación de obras iguales o similares");
     expect(p("consultoria_obra")).toContain("por la contratación de consultoría de obras iguales o similares");
@@ -106,9 +113,9 @@ describe("la segunda frase: qué se considera similar", () => {
     expect(t).toContain(`Se consideran servicios similares a los siguientes: [${HUECO_SIMILARES}].`);
   });
 
-  it("la palabra del objeto es la misma en las dos frases", () => {
+  it("la palabra del objeto es coherente en las frases", () => {
     const t = componerExperienciaPostor({ monto: "1", objeto: "bienes", similares: "equipos de cómputo" });
-    expect(t).toContain("por la contratación de bienes iguales o similares");
+    expect(t).toContain("por la venta de bienes iguales o similares");
     expect(t).toContain("Se consideran bienes similares a los siguientes: equipos de cómputo.");
   });
 
@@ -165,6 +172,90 @@ describe("la acreditación es el texto fijo del formato", () => {
     });
     const vuelta = repartirRequisitos(parseRequisitos(canonico)).porTipo.get("experiencia_postor");
     expect(vuelta?.acreditacion).toBe(ACREDITACION_EXPERIENCIA);
+  });
+});
+
+describe("la cláusula MYPE (Anexo N° 1, monto registrado, diez años)", () => {
+  it("se incluye tras el requisito general en bienes, con el monto MYPE dentro", () => {
+    const t = componerExperienciaPostor({ monto: "180000", montoMype: "50000", moneda: "PEN", objeto: "bienes" });
+    expect(t).toContain("micro y pequeña empresa");
+    expect(t).toContain("Anexo N° 1 ");
+    expect(t).toContain("durante los diez años");
+    expect(t).toContain("todos los integrantes deben contar con la condición de micro y pequeña empresa");
+    // El monto MYPE que registró el área usuaria, en números y letras.
+    expect(t).toContain("S/ 50,000.00 (CINCUENTA MIL CON 00/100 SOLES)");
+    // En bienes el formato dice «venta de bienes».
+    expect(t).toContain("por la venta de bienes iguales o similares");
+  });
+
+  it("en servicios usa el verbo neutro del requisito", () => {
+    const t = componerExperienciaPostor({ monto: "1", montoMype: "10000", objeto: "servicios" });
+    expect(t).toContain("por la contratación de servicios iguales o similares al objeto de la convocatoria, durante los diez años");
+  });
+
+  it("sin monto MYPE conserva el corchete del 25%", () => {
+    const t = componerExperienciaPostor({ monto: "1", objeto: "bienes" });
+    expect(t).toContain(`[${HUECO_MONTO_MYPE}]`);
+  });
+
+  it("NO se incluye en obras ni consultoría de obras", () => {
+    for (const objeto of ["obras", "consultoria_obra"]) {
+      const t = componerExperienciaPostor({ monto: "1", montoMype: "50000", objeto });
+      expect(t, objeto).not.toContain("micro y pequeña empresa");
+    }
+  });
+
+  it("relee cada monto por separado, y lo similar queda intacto", () => {
+    const t = componerExperienciaPostor({
+      monto: "180000",
+      montoMype: "50000",
+      moneda: "PEN",
+      objeto: "bienes",
+      similares: "equipos de cómputo",
+    });
+    // El monto general y el MYPE se releen cada uno de su frase, sin confundirse.
+    expect(montoDeExperiencia(t)).toBe("180000");
+    expect(montoMypeDeExperiencia(t)).toBe("50000");
+    // La frase de similares queda al final y se relee intacta.
+    expect(similaresDeExperiencia(t)).toBe("equipos de cómputo");
+  });
+
+  it("clausulaMype es reutilizable de forma aislada", () => {
+    const c = clausulaMype({ monto: "50000", moneda: "PEN", objeto: "bienes" });
+    expect(c).toMatch(/^En el caso de postores que declaren en el Anexo N° 1/);
+    expect(c).toContain("S/ 50,000.00");
+  });
+});
+
+describe("por relación de ítems: un bloque por ítem con su cuantía", () => {
+  const items = [
+    { nro: 1, cuantia: 200000 },
+    { nro: 2, cuantia: 80000 },
+  ];
+  const t = componerExperienciaPorItems(items, { moneda: "PEN", objeto: "bienes", similares: "equipos de cómputo" });
+
+  it("rotula cada ítem con su número", () => {
+    expect(t).toContain("Ítem N° 1: El postor debe acreditar");
+    expect(t).toContain("Ítem N° 2: El postor debe acreditar");
+  });
+
+  it("el 25% MYPE se calcula sobre la cuantía DE CADA ítem", () => {
+    // 25% de 200,000 = 50,000; 25% de 80,000 = 20,000.
+    expect(t).toContain("S/ 50,000.00 (CINCUENTA MIL CON 00/100 SOLES)");
+    expect(t).toContain("S/ 20,000.00 (VEINTE MIL CON 00/100 SOLES)");
+  });
+
+  it("el monto general de cada ítem queda en corchete (lo fija el área usuaria por ítem)", () => {
+    expect(t).toContain(`[${HUECO_MONTO_EXPERIENCIA}]`);
+  });
+
+  it("un ítem sin cuantía conserva el corchete del 25%", () => {
+    const s = componerExperienciaPorItems([{ nro: 1, cuantia: null }], { objeto: "bienes" });
+    expect(s).toContain(`[${HUECO_MONTO_MYPE}]`);
+  });
+
+  it("sin ítems devuelve cadena vacía", () => {
+    expect(componerExperienciaPorItems([], { objeto: "bienes" })).toBe("");
   });
 });
 

@@ -23,7 +23,19 @@ export type ProcurementProcess = {
   pluralidad_marcas: boolean | null;
   resumen_ejecutivo: string | null;
 
+  // Estrategia de contratación (Art. 46 Reglamento)
+  requisitos_calificacion: string | null;
+  requisitos_precalificacion: string | null;
+  tipo_evaluador_perfil: string | null;
+  factores_evaluacion: string | null;
+  garantias_adelantos: string | null;
+  cronograma_contratacion: string | null;
+  tipo_interaccion_mercado: string | null;
+  tipo_procedimiento: string | null;
+
   // Aprobacion
+  /** Estado de los pasos de las tres fases (jsonb). Es la fuente de la ficha. */
+  hitos?: Record<string, { data?: Record<string, unknown> | null }> | null;
   autoridad_aprobacion: "titular" | "aga" | null;
   delegacion_facultades: boolean | null;
   doc_aprobacion_expediente: string | null;
@@ -93,6 +105,15 @@ export const processUpdateSchema = z.object({
   formulaReajuste: optionalText(2000),
   pluralidadMarcas: z.boolean().optional().nullable(),
   resumenEjecutivo: optionalText(4000),
+
+  requisitosCalificacion: optionalText(2000),
+  requisitosPrecalificacion: optionalText(2000),
+  tipoEvaluadorPerfil: optionalText(500),
+  factoresEvaluacion: optionalText(2000),
+  garantiasAdelantos: optionalText(2000),
+  cronogramaContratacion: optionalText(2000),
+  tipoInteraccionMercado: optionalText(200),
+  tipoProcedimiento: optionalText(200),
 
   autoridadAprobacion: z.enum(["titular", "aga"]).optional().nullable(),
   delegacionFacultades: z.boolean().optional().nullable(),

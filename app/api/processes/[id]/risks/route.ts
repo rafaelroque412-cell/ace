@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { detectRisksForProcess, type ProcessDocumentWithText } from "@/lib/process-agents";
 import type { ProcurementProcess } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
@@ -15,6 +15,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
 
   try {
     const [processes, documents] = await Promise.all([

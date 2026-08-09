@@ -191,6 +191,37 @@ export const TIPOS_REQUISITO_ART72 = [
   },
 ] as const;
 
+/**
+ * Desglose de la capacidad técnica y profesional, tal como lo parte el modelo.
+ *
+ * El Art. 72.3.b la define como UN tipo, pero el formato del requerimiento lo
+ * abre en cuatro literales con reglas propias, y esas reglas son las que se
+ * observan si se incumplen. No son tipos nuevos —seguirían siendo los cinco del
+ * 72.3— sino la guía de qué escribir dentro de este.
+ */
+export const SUBTIPOS_CAPACIDAD_TECNICA = [
+  {
+    clave: "C.1",
+    label: "Experiencia del personal clave",
+    regla: "Se acredita en el Anexo N.º 19. No cuenta la experiencia con antigüedad mayor a 25 años, y el periodo traslapado se computa una sola vez.",
+  },
+  {
+    clave: "C.2.1",
+    label: "Formación académica",
+    regla: "Solo cabe exigir «grado de bachiller» o «título profesional». No cursos, diplomados ni especializaciones.",
+  },
+  {
+    clave: "C.2.2",
+    label: "Capacitación del personal clave",
+    regla: "Hasta 120 horas como máximo, en materia específicamente relacionada con lo que hará ese personal.",
+  },
+  {
+    clave: "C.3",
+    label: "Equipamiento estratégico",
+    regla: "Solo el equipamiento e infraestructura estratégicos. Lo que no sea clave va en las condiciones de la prestación, no aquí.",
+  },
+] as const;
+
 export type TipoRequisitoArt72 = (typeof TIPOS_REQUISITO_ART72)[number]["key"];
 
 function normalizar(nombre: string): string {

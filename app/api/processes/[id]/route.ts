@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability, requireUser } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability, requireUser } from "@/lib/auth";
 import { type ProcessDocument, type ProcurementProcess, processUpdateSchema } from "@/lib/processes";
 import { deleteStorageObjects, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -17,7 +17,7 @@ type EvaluationRow = {
 type RiskRow = { id: string; items: unknown[]; created_at: string };
 
 const SELECT =
-  "id,nomenclature,object_type,procedure_type,amount,entity,status,summary,necesidad_id,valor_estimado,moneda,tipo_cambio,certificacion_presupuestal,sistema_contratacion,modalidad_ejecucion,formula_reajuste,pluralidad_marcas,resumen_ejecutivo,autoridad_aprobacion,delegacion_facultades,doc_aprobacion_expediente,created_at,updated_at";
+  "id,nomenclature,object_type,procedure_type,amount,entity,status,summary,necesidad_id,valor_estimado,moneda,tipo_cambio,certificacion_presupuestal,sistema_contratacion,modalidad_ejecucion,formula_reajuste,pluralidad_marcas,resumen_ejecutivo,requisitos_calificacion,requisitos_precalificacion,tipo_evaluador_perfil,factores_evaluacion,garantias_adelantos,cronograma_contratacion,tipo_interaccion_mercado,tipo_procedimiento,hitos,autoridad_aprobacion,delegacion_facultades,doc_aprobacion_expediente,created_at,updated_at";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
@@ -26,6 +26,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
 
   try {
     const [processes, documents, evaluations, risks] = await Promise.all([
@@ -68,6 +70,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = processUpdateSchema.safeParse(await request.json().catch(() => ({})));
   if (!payload.success) {
     return NextResponse.json({ error: "Solicitud invalida" }, { status: 400 });
@@ -92,6 +96,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (data.formulaReajuste !== undefined) patch.formula_reajuste = data.formulaReajuste || null;
   if (data.pluralidadMarcas !== undefined) patch.pluralidad_marcas = data.pluralidadMarcas;
   if (data.resumenEjecutivo !== undefined) patch.resumen_ejecutivo = data.resumenEjecutivo || null;
+  
+  if (data.requisitosCalificacion !== undefined) patch.requisitos_calificacion = data.requisitosCalificacion || null;
+  if (data.requisitosPrecalificacion !== undefined) patch.requisitos_precalificacion = data.requisitosPrecalificacion || null;
+  if (data.tipoEvaluadorPerfil !== undefined) patch.tipo_evaluador_perfil = data.tipoEvaluadorPerfil || null;
+  if (data.factoresEvaluacion !== undefined) patch.factores_evaluacion = data.factoresEvaluacion || null;
+  if (data.garantiasAdelantos !== undefined) patch.garantias_adelantos = data.garantiasAdelantos || null;
+  if (data.cronogramaContratacion !== undefined) patch.cronograma_contratacion = data.cronogramaContratacion || null;
+  if (data.tipoInteraccionMercado !== undefined) patch.tipo_interaccion_mercado = data.tipoInteraccionMercado || null;
+  if (data.tipoProcedimiento !== undefined) patch.tipo_procedimiento = data.tipoProcedimiento || null;
   
   if (data.autoridadAprobacion !== undefined) patch.autoridad_aprobacion = data.autoridadAprobacion || null;
   if (data.delegacionFacultades !== undefined) patch.delegacion_facultades = data.delegacionFacultades;
@@ -123,8 +136,16 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
 
   try {
+    // Necesidad vinculada: se revierte tras borrar el expediente.
+    const [proc] = await supabaseUserRest<Array<{ necesidad_id: string | null }>>(
+      auth.user.accessToken,
+      `procurement_processes?id=eq.${id}&select=necesidad_id`,
+    ).catch(() => []);
+
     // Limpia los archivos en Storage antes de borrar (el cascade borra las filas).
     const documents = await supabaseUserRest<Array<{ storage_bucket: string | null; storage_path: string | null }>>(
       auth.user.accessToken,
@@ -145,6 +166,15 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     }
 
     await supabaseUserRest(auth.user.accessToken, `procurement_processes?id=eq.${id}`, { method: "DELETE" });
+
+    // Revierte la necesidad de origen para que vuelva a ser editable/eliminable
+    // (deja de estar "incorporada al CMN" al desaparecer su expediente).
+    if (proc?.necesidad_id) {
+      await supabaseUserRest(auth.user.accessToken, `necesidades?id=eq.${proc.necesidad_id}`, {
+        body: JSON.stringify({ process_id: null, status: "conforme" }),
+        method: "PATCH",
+      }).catch(() => undefined);
+    }
 
     await writeAuditLog({
       action: "process.delete",

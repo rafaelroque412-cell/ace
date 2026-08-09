@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import type { ProcurementProcess } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
@@ -23,6 +23,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = (await request.json().catch(() => ({}))) as { motivo?: string };
   const motivo = typeof payload.motivo === "string" ? payload.motivo.trim().slice(0, 500) : "";
 

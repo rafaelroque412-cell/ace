@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { requireEditor } from "@/lib/auth";
-import { getSupabaseServerConfig, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
+import { idsDeRutaInvalidos, requireDec } from "@/lib/auth";
+import { getSupabaseServerConfig, supabaseRest, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,14 +36,20 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
     getSupabaseServerConfig();
     const { id } = await context.params;
+    const malos = idsDeRutaInvalidos(id);
+    if (malos) return malos;
 
-    const [process] = await supabaseRest<ProcessRow[]>(
+    // Lectura por JWT del usuario (RESPETA RLS): antes se leía con service_role,
+    // que SALTA RLS, así que un DEC podía archivar el expediente de otra oficina
+    // que RLS le oculta. Con userRest, solo se archiva lo que el usuario puede ver.
+    const [process] = await supabaseUserRest<ProcessRow[]>(
+      auth.user.accessToken,
       `procurement_processes?id=eq.${id}&select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,valor_estimado,moneda,necesidad_id`,
     );
     if (!process) {
@@ -72,6 +78,13 @@ export async function POST(
       ? mainDoc.storage_path
       : `expedientes/${randomUUID()}-sin-pdf.txt`;
 
+    // Los documentos vinculados van en el METADATA del propio POST: `docs` ya se
+    // leyó arriba, así que no hace falta un PATCH posterior sobre la fila recién
+    // creada (era un round-trip redundante).
+    const docRefs = docs
+      .filter((d) => d.storage_path)
+      .map((d) => ({ docId: d.id, title: d.title, kind: d.kind, storagePath: d.storage_path }));
+
     const [archived] = await supabaseRest<Array<{ id: string }>>("expedientes_archivo?select=id", {
       body: JSON.stringify({
         anio,
@@ -89,28 +102,15 @@ export async function POST(
         metadata: {
           archivedFrom: { processId: id, status: process.status, docsCount: docs.length },
           originalProcessId: id,
+          documents: docRefs,
         },
       }),
       method: "POST",
     });
 
-    // Vincular documentos del proceso como metadata
-    const docRefs = docs
-      .filter((d) => d.storage_path)
-      .map((d) => ({ docId: d.id, title: d.title, kind: d.kind, storagePath: d.storage_path }));
-
-    await supabaseRest(`expedientes_archivo?id=eq.${archived.id}`, {
-      body: JSON.stringify({
-        metadata: {
-          archivedFrom: { processId: id, status: process.status, docsCount: docs.length },
-          originalProcessId: id,
-          documents: docRefs,
-        },
-      }),
-      method: "PATCH",
-    });
-
-    await supabaseRest(`procurement_processes?id=eq.${id}`, {
+    // Flip de estado también por userRest (RLS): la escritura queda acotada a lo
+    // que el usuario puede editar, como el resto de las rutas del expediente.
+    await supabaseUserRest(auth.user.accessToken, `procurement_processes?id=eq.${id}`, {
       body: JSON.stringify({ status: "archivo" }),
       method: "PATCH",
     });

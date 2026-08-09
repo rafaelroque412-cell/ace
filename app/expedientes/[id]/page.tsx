@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "../../components/app-shell";
+import { ExpedienteProvider } from "../../components/expediente-contexto";
 import { ProcessDetail } from "../../components/process-detail";
 import { getSessionUser } from "@/lib/auth";
 
@@ -33,7 +34,12 @@ export default async function ExpedienteDetailPage({
       title="Detalle del expediente"
     >
       <section className="singleWorkspace">
-        <ProcessDetail permisos={permisos} processId={id} />
+        {/* El proveedor carga el expediente UNA vez para toda la página: antes
+            el detalle, los tres paneles de fase y el avance global lo pedían
+            cada uno por su cuenta. */}
+        <ExpedienteProvider processId={id}>
+          <ProcessDetail permisos={permisos} processId={id} />
+        </ExpedienteProvider>
       </section>
     </AppShell>
   );

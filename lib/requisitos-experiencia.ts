@@ -25,6 +25,11 @@ export const HUECO_MONTO_EXPERIENCIA =
 /** El corchete de la segunda frase: qué se considera similar al objeto. */
 export const HUECO_SIMILARES = "CONSIGNAR LOS SERVICIOS SIMILARES AL OBJETO CONVOCADO";
 
+/** El corchete del monto MYPE, cuando no se conoce la cuantía para calcular el 25%. */
+export const HUECO_MONTO_MYPE =
+  "CONSIGNAR EL MONTO DE FACTURACIÓN EXPRESADO EN NÚMEROS Y LETRAS EN LA MONEDA DE LA " +
+  "CONVOCATORIA, MONTO QUE NO DEBE SUPERAR EL 25% DE LA CUANTÍA DE LA CONTRATACIÓN DEL ÍTEM";
+
 /**
  * Cómo se acredita la experiencia del postor, texto literal de las bases estándar.
  *
@@ -91,13 +96,95 @@ export function importeConLetras(monto: string | number | null | undefined, mone
 }
 
 /**
- * El texto completo del requisito, con el monto dentro.
+ * Un monto en números y letras, o el corchete indicado si no hay importe válido.
+ * La experiencia MYPE tiene su propio hueco (25% de la cuantía del ítem).
+ */
+function montoConHueco(
+  monto: string | number | null | undefined,
+  moneda: string | null | undefined,
+  hueco: string,
+): string {
+  const bruto =
+    typeof monto === "number"
+      ? monto
+      : Number.parseFloat(String(monto ?? "").replace(/(?!^-)[^0-9.,]/g, "").replace(/,/g, "."));
+  if (!Number.isFinite(bruto) || bruto <= 0) return `[${hueco}]`;
+  return importeConLetras(bruto, moneda);
+}
+
+/**
+ * Cláusula de la MICRO Y PEQUEÑA EMPRESA (MYPE) del requisito de experiencia.
  *
- * El plazo son QUINCE años, que es lo que el formato fija para la experiencia
- * del postor (mismo tope que vigila `avisosDeTopes`).
+ * El formato reduce la experiencia exigible a las MYPE: hasta el 25% de la
+ * cuantía del ítem y con ventana de DIEZ años. `monto` es ese importe (el 25%):
+ * en el requisito único lo registra el área usuaria; en el modo por ítems se
+ * calcula sobre la cuantía de cada ítem. Aplica a bienes y servicios; en obras y
+ * consultoría de obras la experiencia se mide por especialidad (Art. 157).
+ */
+export function clausulaMype(args: {
+  monto?: string | number | null;
+  moneda?: string | null;
+  objeto?: string | null;
+}): string {
+  const palabra = objetoConvocatoria(args.objeto);
+  // El formato de bienes dice «venta de bienes»; para el resto se usa el verbo
+  // neutro del propio requisito («contratación de …»), que es gramatical.
+  const frase = palabra === "bienes" ? "venta de bienes" : `contratación de ${palabra}`;
+  return (
+    `En el caso de postores que declaren en el Anexo N° 1 tener la condición de micro y pequeña empresa, ` +
+    `se acredita una experiencia de ${montoConHueco(args.monto, args.moneda, HUECO_MONTO_MYPE)}, por la ${frase} ` +
+    `iguales o similares al objeto de la convocatoria, durante los diez años anteriores a la fecha de la ` +
+    `presentación de ofertas, que se computarán desde la fecha de la conformidad o emisión del comprobante ` +
+    `de pago, según corresponda. En el caso de consorcios, todos los integrantes deben contar con la ` +
+    `condición de micro y pequeña empresa.`
+  );
+}
+
+/** Objetos a los que aplica la cláusula MYPE del requisito de experiencia. */
+function aplicaMype(objeto?: string | null): boolean {
+  const palabra = objetoConvocatoria(objeto);
+  return palabra === "bienes" || palabra === "servicios";
+}
+
+/**
+ * La primera frase del requisito, según el objeto.
+ *
+ * En BIENES el formato usa «venta de bienes» y ventana de DIEZ años; el resto
+ * conserva «contratación de …» y los quince años del régimen general (mismo tope
+ * que vigila `avisosDeTopes`).
+ */
+function requisitoGeneral(args: {
+  monto?: string | number | null;
+  moneda?: string | null;
+  objeto?: string | null;
+}): string {
+  const palabra = objetoConvocatoria(args.objeto);
+  const importe = importeConLetras(args.monto, args.moneda);
+  if (palabra === "bienes") {
+    return (
+      `El postor debe acreditar un monto facturado acumulado equivalente a ${importe}, ` +
+      `por la venta de bienes iguales o similares al objeto de la convocatoria, durante los diez años ` +
+      `anteriores a la fecha de la presentación de ofertas, que se computan desde la fecha de la ` +
+      `conformidad o emisión del comprobante de pago, según corresponda.`
+    );
+  }
+  return (
+    `El postor debe acreditar un monto facturado acumulado equivalente a ${importe}, ` +
+    `por la contratación de ${palabra} iguales o similares al objeto de la convocatoria, ` +
+    "durante los quince (15) años anteriores a la fecha de la presentación de ofertas que se computa desde la fecha " +
+    `de la conformidad o emisión del comprobante de pago, según corresponda.`
+  );
+}
+
+/**
+ * El texto completo del requisito, en párrafos: requisito general, cláusula MYPE
+ * (bienes y servicios) y frase de similares —esta al final, para no romper su
+ * relectura—. `montoMype` es el importe de la experiencia MYPE (el 25%).
  */
 export function componerExperienciaPostor(args: {
   monto?: string | number | null;
+  /** Monto de la experiencia MYPE (el 25% de la cuantía del ítem). */
+  montoMype?: string | number | null;
   moneda?: string | null;
   objeto?: string | null;
   /** Qué se considera similar al objeto convocado. Vacío conserva el corchete. */
@@ -105,16 +192,41 @@ export function componerExperienciaPostor(args: {
 }): string {
   const palabra = objetoConvocatoria(args.objeto);
   const similar = (args.similares ?? "").trim();
-  // La segunda frase acompaña SIEMPRE a la primera: es parte del mismo requisito
-  // del formato. Sin registrar lo similar, se ve su corchete —lo que falta en un
-  // documento que se firma tiene que verse—.
   const segunda = `Se consideran ${palabra} similares a los siguientes: ${similar || `[${HUECO_SIMILARES}]`}.`;
-  return (
-    `El postor debe acreditar un monto facturado acumulado equivalente a ${importeConLetras(args.monto, args.moneda)}, ` +
-    `por la contratación de ${palabra} iguales o similares al objeto de la convocatoria, ` +
-    "durante los quince (15) años anteriores a la fecha de la presentación de ofertas que se computa desde la fecha " +
-    `de la conformidad o emisión del comprobante de pago, según corresponda. ${segunda}`
-  );
+
+  const partes = [requisitoGeneral(args)];
+  if (aplicaMype(args.objeto)) {
+    partes.push(clausulaMype({ monto: args.montoMype, moneda: args.moneda, objeto: args.objeto }));
+  }
+  partes.push(segunda);
+  return partes.join("\n\n");
+}
+
+/**
+ * El requisito de experiencia rotulado POR ÍTEM (procedimientos por relación de
+ * ítems, Art. 53).
+ *
+ * Un bloque por ítem, cada uno con la cláusula MYPE calculada sobre el 25% de la
+ * CUANTÍA DE ESE ÍTEM. El monto de la experiencia general queda en corchete: es
+ * el exigido —hasta 3× la cuantía del ítem— que el área usuaria fija por ítem.
+ * Sin ítems devuelve cadena vacía.
+ */
+export function componerExperienciaPorItems(
+  items: ReadonlyArray<{ nro: number; cuantia?: number | null }>,
+  args: { moneda?: string | null; objeto?: string | null; similares?: string | null },
+): string {
+  return items
+    .map((it) => {
+      const cuerpo = componerExperienciaPostor({
+        moneda: args.moneda,
+        objeto: args.objeto,
+        similares: args.similares,
+        montoMype:
+          typeof it.cuantia === "number" && Number.isFinite(it.cuantia) ? it.cuantia * 0.25 : null,
+      });
+      return `Ítem N° ${it.nro}: ${cuerpo}`;
+    })
+    .join("\n\n");
 }
 
 /**
@@ -130,15 +242,30 @@ export function similaresDeExperiencia(detalle: string | null | undefined): stri
   return v.startsWith("[") ? "" : v;
 }
 
+/** Primer importe que aparece tras `ancla` (y antes de `hasta`, si se indica). */
+function importeTras(detalle: string, ancla: string, hasta?: string): string {
+  const i = detalle.indexOf(ancla);
+  if (i < 0) return "";
+  let trozo = detalle.slice(i + ancla.length);
+  if (hasta) {
+    const j = trozo.indexOf(hasta);
+    if (j >= 0) trozo = trozo.slice(0, j);
+  }
+  const [primero] = importesDelTexto(trozo);
+  return primero ? String(primero) : "";
+}
+
 /**
- * Rescata el monto de un detalle ya redactado, para volver a mostrarlo en el
- * campo numérico al reabrir la ficha.
- *
- * El detalle es la fuente de verdad —no hay columna aparte para el monto—, así
- * que se relee de él. `importesDelTexto` descarta lo que no es un importe
- * (plazos, cantidades); el primero es el monto exigido.
+ * Rescata el monto EXIGIDO (experiencia general) de un detalle ya redactado, para
+ * volver a mostrarlo al reabrir la ficha. Se ancla en «equivalente a» y se corta
+ * antes de la cláusula MYPE, para no confundirlo con el 25%. No hay columna
+ * aparte: el detalle es la fuente de verdad.
  */
 export function montoDeExperiencia(detalle: string | null | undefined): string {
-  const [primero] = importesDelTexto(detalle ?? "");
-  return primero ? String(primero) : "";
+  return importeTras(detalle ?? "", "equivalente a", "micro y pequeña empresa");
+}
+
+/** Rescata el monto de la experiencia MYPE (el 25%), anclado en su frase propia. */
+export function montoMypeDeExperiencia(detalle: string | null | undefined): string {
+  return importeTras(detalle ?? "", "se acredita una experiencia de");
 }

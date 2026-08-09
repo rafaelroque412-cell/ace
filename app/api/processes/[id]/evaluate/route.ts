@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCapability } from "@/lib/auth";
+import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { evaluateOfferForProcess, type ProcessDocumentWithText } from "@/lib/process-agents";
 import type { ProcurementProcess } from "@/lib/processes";
 import { reconcileProcessStatus } from "@/lib/process-status";
@@ -16,6 +16,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const { id } = await context.params;
+  const malos = idsDeRutaInvalidos(id);
+  if (malos) return malos;
   const payload = (await request.json().catch(() => ({}))) as { bidderName?: string };
 
   try {

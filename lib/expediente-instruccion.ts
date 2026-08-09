@@ -47,6 +47,11 @@ export type FaseEvaluada = {
   estado: EstadoFase;
   esActual: boolean;
   completa: boolean;
+  /** Insumos que la etapa necesita y artefactos que produce, del catálogo del
+   *  ciclo. Antes solo los enseñaba el mapa del ciclo, que era un segundo riel
+   *  de las mismas once etapas; al fusionarlos vienen aquí. */
+  entradas: string[];
+  salidas: string[];
   requisitos: RequisitoEvaluado[];
   documentosFaltantes: DocumentoRequerido[];
   alertas: string[];
@@ -305,6 +310,10 @@ export function instruirExpediente(input: {
       macroFase: item.etapa.macroFase,
       responsable,
       participantes,
+      entradas: item.etapa.entradas,
+      salidas: item.etapa.salidas.map((s) =>
+        s.formato.length > 0 ? `${s.nombre} (${s.formato.join(", ")})` : s.nombre,
+      ),
       estado,
       esActual: !esDesierto && index === indiceActual,
       completa: item.completa,
