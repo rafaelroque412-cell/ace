@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { entitiesMatch, normalizeEntity } from "@/lib/entity-utils";
+import { esIdSeguro } from "@/lib/supabase-server";
 import {
   type AppRole,
   type Capability,
@@ -20,6 +22,19 @@ export type AppPermission = {
 export type SessionUser = {
   accessToken: string;
   email: string | null;
+  /**
+   * Nombre registrado en el perfil, para saludar a una persona y no a un DNI.
+   *
+   * Puede venir vacío: el nombre es opcional al dar de alta, y las cuentas de
+   * rol del seed no tienen ninguno.
+   */
+  nombreCompleto: string | null;
+  /**
+   * Cargo del perfil (p. ej. "Jefe de la Oficina de Abastecimiento"). Va bajo el
+   * nombre en los documentos que se firman —el Anexo N° 1 identifica al firmante
+   * por nombre y cargo, no por su correo—. Puede venir vacío como el nombre.
+   */
+  cargo: string | null;
   entity: string | null;
   id: string;
   isAdmin: boolean;
@@ -33,6 +48,10 @@ export type SessionUser = {
   capabilities: Capability[];
   permissions: AppPermission[];
   role: AppRole;
+  // Oficina emisora asignada al usuario (para numeracion y scope de expedientes).
+  oficinaId?: string | null;
+  // Jefe de oficina: ve/administra TODO lo de su oficina (no solo lo propio).
+  esJefe: boolean;
 };
 
 function normalizeRole(raw: string | null | undefined): AppRole {
@@ -88,15 +107,36 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const [{ data: sessionData }, profileResult] = await Promise.all([
     supabase.auth.getSession(),
-    supabase.from("profiles").select("role, entity, metadata").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("role, entity, metadata, oficina_id, es_jefe, nombre_completo, cargo")
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
 
-  // Fallback si la columna `entity` aun no existe (migracion del SDD no aplicada):
-  // reintenta leyendo solo `role` para no degradar a todos a rol consulta.
-  let profile = profileResult.data as { role?: string; entity?: string | null; metadata?: unknown } | null;
+  // Fallbacks si las columnas nuevas aun no existen (SQL pendiente): primero sin
+  // `es_jefe`, luego solo `role` para no degradar a todos a rol consulta.
+  type ProfileData = {
+    role?: string;
+    entity?: string | null;
+    metadata?: unknown;
+    oficina_id?: string | null;
+    es_jefe?: boolean | null;
+    nombre_completo?: string | null;
+    cargo?: string | null;
+  };
+  let profile = profileResult.data as ProfileData | null;
   if (!profile && profileResult.error) {
-    const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    profile = data;
+    const retry = await supabase
+      .from("profiles")
+      .select("role, entity, metadata, oficina_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    profile = retry.data as ProfileData | null;
+    if (!profile && retry.error) {
+      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      profile = data as ProfileData | null;
+    }
   }
 
   const role = normalizeRole(profile?.role);
@@ -105,6 +145,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return {
     accessToken: sessionData.session?.access_token ?? "",
     email: user.email ?? null,
+    nombreCompleto: (profile?.nombre_completo as string | null) ?? null,
+    cargo: (profile?.cargo as string | null) ?? null,
     entity: (profile?.entity as string | null) ?? null,
     id: user.id,
     isAdmin,
@@ -114,7 +156,30 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     capabilities: capabilitiesForRole(role),
     permissions: parsePermissions(profile?.metadata),
     role,
+    oficinaId: profile?.oficina_id ?? null,
+    esJefe: Boolean(profile?.es_jefe),
   };
+}
+
+/**
+ * Valida que los identificadores que vienen del CLIENTE (segmentos de la ruta
+ * `[id]`/`[docId]`, o ids en query/body) sean UUID antes de interpolarlos en un
+ * filtro PostgREST. Un id pegado tal cual en `?id=eq.${id}` permite colar `&` y
+ * añadir filtros propios —un PATCH o un DELETE de una fila se vuelve masivo, y
+ * bajo service_role eso salta la RLS—. Se valida la FORMA (un UUID no tiene
+ * caracteres especiales) y se rechaza antes de tocar la base.
+ *
+ * Devuelve un 400 listo para `return`, o `null` si todos son válidos:
+ *   const malos = idsDeRutaInvalidos(id, docId);
+ *   if (malos) return malos;
+ *
+ * NO lo uses con ids que salen de la propia base (p. ej. `doc.id` de una fila ya
+ * leída): esos no son de forma controlable por el cliente.
+ */
+export function idsDeRutaInvalidos(...ids: unknown[]): NextResponse | null {
+  return ids.every((valor) => esIdSeguro(valor))
+    ? null
+    : NextResponse.json({ error: "Identificador de ruta inválido." }, { status: 400 });
 }
 
 type AuthResult = { user: SessionUser } | { error: NextResponse };
@@ -180,6 +245,43 @@ export async function requireLegal(): Promise<AuthResult> {
   }
 
   return result;
+}
+
+// Devuelve la entity normalizada del usuario para filtrar por oficina,
+// o null si es admin (ve todo).
+export function getOfficeFilter(user: SessionUser): string | null {
+  if (user.isAdmin) return null;
+  return normalizeEntity(user.entity) || null;
+}
+
+// ── Scope del archivo de expedientes (buscar / subir / responder) ───────────
+// Modelo jerarquico: admin ve todo; jefe de oficina ve/administra lo de su
+// oficina; el resto SOLO lo que subio o creo (uploaded_by / created_by).
+export type ArchivoScopeLevel = "all" | "oficina" | "own";
+
+export function getArchivoScopeLevel(user: SessionUser): ArchivoScopeLevel {
+  if (user.isAdmin) return "all";
+  // Jefe sin oficina asignada degrada a "own" para no abrir acceso por error.
+  if (user.esJefe && (normalizeEntity(user.entity) || user.oficinaId)) return "oficina";
+  return "own";
+}
+
+// Autoriza una fila del archivo (expediente o respuesta) segun el scope del
+// usuario. `owner` es uploaded_by/created_by; `oficinaId` es la FK resuelta y
+// `oficina` el texto (respaldo). Cuando el perfil del jefe y la fila tienen
+// oficina_id, se compara por id (mismo criterio que las políticas RLS); si no,
+// se cae al match normalizado por texto.
+export function canAccessArchivoRow(
+  user: SessionUser,
+  row: { oficina?: string | null; oficinaId?: string | null; owner?: string | null },
+): boolean {
+  const level = getArchivoScopeLevel(user);
+  if (level === "all") return true;
+  if (level === "oficina") {
+    if (user.oficinaId && row.oficinaId) return row.oficinaId === user.oficinaId;
+    return entitiesMatch(row.oficina, user.entity);
+  }
+  return Boolean(row.owner) && row.owner === user.id;
 }
 
 // Exige una capacidad concreta del expediente (permisos por accion segun rol).

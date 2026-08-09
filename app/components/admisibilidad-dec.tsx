@@ -85,7 +85,7 @@ export function AdmisibilidadDec({
     <div className="admisPanel" data-completo={done === total}>
       <div className="admisHead">
         <ClipboardCheck size={16} aria-hidden />
-        <strong>Admisibilidad (DEC)</strong>
+        <h3 className="panelTitle">Admisibilidad (DEC)</h3>
         <span className="admisCount">{done}/{total}</span>
         {guardando ? <span className="admisGuardando"><Loader size={13} /> guardando…</span> : null}
         {!puedeEditar ? <span className="admisSoloLectura">solo lectura</span> : null}

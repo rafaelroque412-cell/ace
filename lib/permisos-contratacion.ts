@@ -134,6 +134,20 @@ export const ROLE_CAPABILITIES: Record<AppRole, Capability[]> = {
   ],
 };
 
+/**
+ * Roles que tienen una capacidad, con su nombre legible.
+ *
+ * Sirve para explicarle a alguien por qué NO ve un botón. La lista se deriva de
+ * la matriz en vez de escribirse a mano: el aviso de "Necesidades" decía
+ * "Área usuaria, ATE o DEC" y se había quedado corto —admin también puede—,
+ * porque un texto fijo no se entera de que la matriz cambió.
+ */
+export function rolesConCapacidad(capacidad: Capability): string[] {
+  return APP_ROLES.filter((rol) => ROLE_CAPABILITIES[rol.value].includes(capacidad)).map(
+    (rol) => rol.label,
+  );
+}
+
 export function capabilitiesForRole(role: AppRole): Capability[] {
   return ROLE_CAPABILITIES[role] ?? [];
 }
