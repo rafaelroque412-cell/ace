@@ -12,6 +12,65 @@ import { calcularParametrosSegmentacion, cuantiaSegmentacionSinDeterminar, soles
 import { mismaPersona, nombreParaFirma, type Persona } from "@/lib/nombres";
 import { OficinaCombobox, type OficinaOpcion } from "../oficina-combobox";
 
+// ── Estilos migrados de styles.css (clases .seg*) ────────────────────────────
+// Los <input>/<select>/<textarea> nativos llevan `!` en tamaño/radio: la regla
+// global sin capa (`input,…{font:inherit}` + `{border-radius:10px}`) ganaría a
+// las utilidades. Todo vive dentro del `.tw` de process-detail.
+const SEG_FORM = "grid gap-3";
+const SEG_FIELD =
+  "grid gap-1 text-[12.5px] text-muted [&_select]:!rounded-[8px] [&_select]:border [&_select]:border-line [&_select]:px-[9px] [&_select]:py-[7px] [&_select]:!text-[13px] [&_select]:text-ink";
+const SEG_FIELDSET =
+  "m-0 grid gap-[7px] rounded-[9px] border border-line px-3 py-2.5 [&>legend]:px-1 [&>legend]:text-[12px] [&>legend]:font-semibold [&>legend]:text-ink";
+const SEG_OPCION =
+  "grid cursor-pointer grid-cols-[auto_1fr] items-start gap-2 text-[12.5px] leading-[1.4] text-ink [&_input]:mt-0.5";
+const SEG_RESULT_BASE = "grid gap-2 rounded-[10px] border p-3";
+const SEG_RESULT_TONO = {
+  normal: "border-[color-mix(in_srgb,var(--brand)_30%,var(--line))] bg-brand-soft",
+  avanzado: "border-[color-mix(in_srgb,var(--accent)_45%,var(--line))] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]",
+};
+const SEG_RESULT_HEAD =
+  "flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.03em] text-brand-dark";
+const SEG_RESULT_GRID = "grid grid-cols-2 gap-3";
+const SEG_RESULT_LABEL = "block text-[11px] text-muted";
+const SEG_RESULT_CATEGORIA = "text-[16px] text-brand-dark";
+const SEG_RESULT_REQ = "m-0 flex items-center gap-[5px] text-[12px] text-muted";
+const SEG_REFTABLE =
+  "mt-2 text-[12px] text-muted [&_summary]:cursor-pointer [&_summary]:py-1 [&_summary]:font-medium " +
+  "[&_table]:mt-1.5 [&_table]:w-full [&_table]:border-collapse " +
+  "[&_th]:border [&_th]:border-line [&_th]:bg-canvas [&_th]:px-1.5 [&_th]:py-1 [&_th]:text-left [&_th]:text-[11px] [&_th]:font-semibold " +
+  "[&_td]:border [&_td]:border-line [&_td]:px-1.5 [&_td]:py-1 [&_td]:text-left [&_td]:text-[11px]";
+const SEG_REF_ACTIVE = "bg-[#dbeafe] font-semibold text-[#1e40af]";
+const SEG_NOTE = "mt-1 text-[11px] leading-[1.4] text-muted";
+const SEG_NARRATIVA =
+  "mt-2 flex flex-col gap-2.5 [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:px-[9px] [&_textarea]:py-[7px] [&_textarea]:!text-[12px] [&_textarea]:!leading-[1.45]";
+const SEG_CALCULO = "flex flex-col gap-2";
+const SEG_CALCULO_INTRO = "m-0 text-[11px] leading-[1.4] text-muted";
+const SEG_AVISO =
+  "mb-3 rounded-[8px] border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] border-l-[3px] border-l-warning bg-[color-mix(in_srgb,var(--warning)_7%,transparent)] px-3 py-2.5 [&_p]:mt-[5px] [&_p]:text-[12px] [&_p]:leading-[1.5] [&_p]:text-muted";
+const SEG_EXCLUIDO =
+  "rounded-[8px] border-l-[3px] border-l-warning bg-[color-mix(in_srgb,var(--warning)_6%,transparent)] px-3.5 py-3 [&_p]:mt-1.5 [&_p]:text-[12px] [&_p]:leading-[1.5] [&_p]:text-muted";
+const SEG_CALCULO_INPUTS =
+  "grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2 [&_label]:flex [&_label]:flex-col [&_label]:gap-[3px] [&_label]:text-[11px] [&_label]:text-muted [&_input]:w-full [&_input]:px-2 [&_input]:py-[5px] [&_input]:!text-[12px] [&_input]:[font-variant-numeric:tabular-nums]";
+const SEG_CALCULO_LISTA =
+  "m-0 flex flex-col gap-0.5 text-[12px] [&>div]:flex [&>div]:justify-between [&>div]:gap-3 [&>div]:py-[3px] [&_dt]:text-muted [&_dd]:m-0 [&_dd]:whitespace-nowrap [&_dd]:[font-variant-numeric:tabular-nums]";
+const SEG_CALCULO_RES_BASE = "m-0 rounded-[8px] border px-2.5 py-2 text-[12px] leading-[1.5]";
+const SEG_CALCULO_RES_TONO = {
+  ok: "bg-[color-mix(in_srgb,var(--success)_10%,transparent)] border-[color-mix(in_srgb,var(--success)_30%,transparent)]",
+  alta: "bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] border-[color-mix(in_srgb,var(--warning)_30%,transparent)]",
+};
+const SEG_CRONO_LIST = "mt-1.5 flex flex-col gap-1";
+const SEG_CRONO_ROW =
+  "flex items-center gap-1.5 [&_input]:flex-1 [&_input]:border [&_input]:border-line [&_input]:!rounded-[6px] [&_input]:px-[7px] [&_input]:py-[5px] [&_input]:!text-[12px]";
+// El color del borde-izq lo pone cada variante (o `border-l-transparent` en el
+// <em> desnudo): dejarlo en la base ganaba a las variantes por orden de cascada.
+const SEG_FUENTE_BASE =
+  "mt-2 rounded-[8px] border-l-[3px] bg-[#f1f5f9] px-2.5 py-2 text-[12px] leading-[1.45]";
+const SEG_FUENTE_REGL = "border-l-brand bg-[color-mix(in_srgb,var(--brand)_8%,transparent)]";
+const SEG_FUENTE_GUIA = "border-l-muted bg-surface text-muted";
+const SEG_FUENTETAG_BASE =
+  "ml-1.5 whitespace-nowrap rounded-full px-1.5 py-px align-middle text-[10px] font-semibold";
+const SEG_FUENTETAG_GUIA = "border border-line bg-surface text-muted";
+
 type CronoItem = { area: string; fecha: string };
 
 // Insumos para calcular la cuantía: PAC de bienes y servicios (Configuración),
@@ -572,8 +631,8 @@ export function SegmentacionForm({
   // procedimiento puede estar mal registrado y no queremos impedir corregirlo.
   if (parametros?.contratoMenor || parametros?.acuerdoMarco) {
     return (
-      <div className="segForm">
-        <div className="segExcluido">
+      <div className={SEG_FORM}>
+        <div className={SEG_EXCLUIDO}>
           <strong>Este paso no aplica: {parametros?.acuerdoMarco ? "es una compra por catálogo electrónico de acuerdo marco (CEAM)" : "es un contrato menor"}.</strong>
           <p>
             {parametros?.acuerdoMarco
@@ -595,9 +654,9 @@ export function SegmentacionForm({
   const cmnPendiente = parametros?.programada === false && parametros?.enCmn !== true;
 
   return (
-    <div className="segForm">
+    <div className={SEG_FORM}>
       {cmnPendiente ? (
-        <div className="segAviso" role="status">
+        <div className={SEG_AVISO} role="status">
           <strong>Falta verificar el CMN antes de segmentar.</strong>
           <p>
             Esta contratación no está programada en el PAC. El numeral 42.3 del Reglamento exige
@@ -609,7 +668,7 @@ export function SegmentacionForm({
         </div>
       ) : null}
 
-      <label className="segField">
+      <label className={SEG_FIELD}>
         <span>Objeto de la contratación</span>
         <select
           disabled={readOnly}
@@ -621,7 +680,7 @@ export function SegmentacionForm({
         </select>
       </label>
 
-      <label className="segCheck" style={{ marginBottom: 8 }}>
+      <label className={SEG_OPCION} style={{ marginBottom: 8 }}>
         <input
           checked={Boolean(data.centralizada)}
           disabled={readOnly}
@@ -633,11 +692,11 @@ export function SegmentacionForm({
 
       {objeto === "bienes_servicios" ? (
         <>
-          <fieldset className="segFieldset">
+          <fieldset className={SEG_FIELDSET}>
             <legend>Cuantía</legend>
             {calculo ? (
-              <div className="segCalculo">
-                <p className="segCalculoIntro">
+              <div className={SEG_CALCULO}>
+                <p className={SEG_CALCULO_INTRO}>
                   {parametros?.programadaPresumida
                     ? "Se PRESUME programada en el PAC —A1 aún no lo confirma; respóndelo en el paso «Programar en el CMN y el PAC»—. Con esa presunción su monto ya está considerado y la línea de corte es el 10% del monto total del PAC vigente:"
                     : parametros?.programada
@@ -649,13 +708,13 @@ export function SegmentacionForm({
                     umbral; el desglose de la base lo concreta la Guía. Sin
                     distinguirlo, todo el cálculo parecía tener el mismo respaldo
                     y no se sabía qué es discutible con la entidad y qué no. */}
-                <p className="segFuente segFuente-reglamento">
+                <p className={`${SEG_FUENTE_BASE} ${SEG_FUENTE_REGL}`}>
                   <strong>Art. 125.2 (Reglamento):</strong> es de alta cuantía la contratación cuya
                   cuantía en el PAC del CMN vigente al momento de segmentar <em>supera</em> el 10%
                   del monto total para las contrataciones de bienes o servicios. Igualar la línea no
                   la supera.
                 </p>
-                <p className="segFuente segFuente-guia">
+                <p className={`${SEG_FUENTE_BASE} ${SEG_FUENTE_GUIA}`}>
                   <strong>Criterio de la Guía:</strong> la base se toma combinada (bienes y
                   servicios juntos) y se le suman las no programadas ya convocadas y las otras que
                   se segmenten a la vez. El Art. 125.2 no detalla ese desglose.
@@ -663,7 +722,7 @@ export function SegmentacionForm({
 
                 {/* La Guía exige sumar a la base, además del PAC inicial, las no
                     programadas ya convocadas y las otras que se segmenten a la vez. */}
-                <div className="segCalculoInputs">
+                <div className={SEG_CALCULO_INPUTS}>
                   <label>
                     <span>No programadas ya convocadas (S/)</span>
                     <input
@@ -689,12 +748,12 @@ export function SegmentacionForm({
                     />
                   </label>
                 </div>
-                <p className="segCronoNote" style={{ marginTop: 0 }}>
+                <p className={SEG_NOTE} style={{ marginTop: 0 }}>
                   Déjalos en 0 si no aplican. Si los omites cuando sí existen, la base queda corta
                   y una contratación de baja cuantía puede salir como alta.
                 </p>
 
-                <dl className="segCalculoLista">
+                <dl className={SEG_CALCULO_LISTA}>
                   <div>
                     <dt>Monto inicial PAC (bienes/servicios)</dt>
                     <dd>{soles(calculo.montoInicialPac)}</dd>
@@ -728,7 +787,7 @@ export function SegmentacionForm({
                     </dd>
                   </div>
                 </dl>
-                <p className="segCalculoResultado" data-alta={calculo.cuantiaAlta ? "1" : "0"}>
+                <p className={`${SEG_CALCULO_RES_BASE} ${calculo.cuantiaAlta ? SEG_CALCULO_RES_TONO.alta : SEG_CALCULO_RES_TONO.ok}`} data-alta={calculo.cuantiaAlta ? "1" : "0"}>
                   Cuantía de la contratación {soles(calculo.valorEstimado)} = <strong>{calculo.porcentaje}%</strong>{" "}
                   del total actualizado ⇒ cuantía{" "}
                   <strong>{calculo.cuantiaAlta ? "ALTA" : "BAJA"}</strong>{" "}
@@ -737,14 +796,14 @@ export function SegmentacionForm({
               </div>
             ) : (
               <>
-                <p className="segCronoNote">
+                <p className={SEG_NOTE}>
                   {objeto === "bienes_servicios" && parametros && !parametros.valorEstimado
                     ? "El expediente aún no tiene cuantía de la contratación, así que se determina a mano."
                     : "Registra el monto del PAC de bienes y servicios en Configuración → Municipalidad para que la cuantía se calcule sola y quede sustentada en el informe."}
                 </p>
                 {/* Tres estados: ninguno marcado hasta que se responda. Así una
                     cuantía sin determinar no se cuenta como "baja" por defecto. */}
-                <label className="segRadio">
+                <label className={SEG_OPCION}>
                   <input
                     checked={data.cuantiaAlta === false}
                     disabled={readOnly}
@@ -754,7 +813,7 @@ export function SegmentacionForm({
                   />
                   <span>Baja — ≤ 10% del monto total del PAC para el objeto</span>
                 </label>
-                <label className="segRadio">
+                <label className={SEG_OPCION}>
                   <input
                     checked={data.cuantiaAlta === true}
                     disabled={readOnly}
@@ -765,7 +824,7 @@ export function SegmentacionForm({
                   <span>Alta — &gt; 10% del monto total del PAC para el objeto</span>
                 </label>
                 {cuantiaSinDeterminar ? (
-                  <p className="segAviso" role="status" style={{ marginTop: 8 }}>
+                  <p className={SEG_AVISO} role="status" style={{ marginTop: 8 }}>
                     <strong>Falta determinar la cuantía.</strong> Elige <em>Alta</em> o <em>Baja</em>
                     {" "}(o registra el valor estimado y el PAC para calcularla): de esto depende que
                     la categoría salga Rutinaria/Crítico (baja) u Operacional/Estratégico (alta). Sin
@@ -776,10 +835,10 @@ export function SegmentacionForm({
             )}
           </fieldset>
 
-          <fieldset className="segFieldset">
+          <fieldset className={SEG_FIELDSET}>
             <legend>Condiciones de alto riesgo (marca las que apliquen · basta una)</legend>
             {CONDICIONES_RIESGO_BS.map((c) => (
-              <label className="segCheck" key={c.key}>
+              <label className={SEG_OPCION} key={c.key}>
                 <input
                   checked={condiciones.includes(c.key)}
                   disabled={readOnly}
@@ -788,7 +847,7 @@ export function SegmentacionForm({
                 />
                 <span>
                   {c.label}{" "}
-                  <em className="segFuente">
+                  <em className={`${SEG_FUENTE_BASE} border-l-transparent`}>
                     {c.fuente === "reglamento" ? "Art. 125.3 Reglamento" : "Guía de Act. Preparatorias"}
                   </em>
                 </span>
@@ -797,17 +856,17 @@ export function SegmentacionForm({
           </fieldset>
         </>
       ) : (
-        <fieldset className="segFieldset">
+        <fieldset className={SEG_FIELDSET}>
           <legend>Criterios concurrentes de “contratación básica” (todos deben cumplirse · Art. 153)</legend>
           {parametros?.esIoarr ? (
-            <p className="segFuente segFuente-reglamento">
+            <p className={`${SEG_FUENTE_BASE} ${SEG_FUENTE_REGL}`}>
               <strong>Requerimiento de IOARR.</strong> El Art. 153.2 los clasifica como{" "}
               <strong>contratación básica</strong> sin exigir los cuatro criterios de abajo. Se
               conservan visibles porque el informe deja constancia de cuáles se cumplen.
             </p>
           ) : null}
           {CRITERIOS_OBRA_BASICA.map((c) => (
-            <label className="segCheck" key={c.key}>
+            <label className={SEG_OPCION} key={c.key}>
               <input
                 checked={criterios.includes(c.key)}
                 disabled={readOnly}
@@ -820,72 +879,72 @@ export function SegmentacionForm({
         </fieldset>
       )}
 
-      <div className="segResult" data-nivel={resultado.nivel} data-provisional={cuantiaSinDeterminar ? "1" : undefined}>
-        <div className="segResultHead">
+      <div className={`${SEG_RESULT_BASE} ${resultado.nivel === "consulta_mercado_avanzada" || resultado.nivel === "indagacion_avanzada" ? SEG_RESULT_TONO.avanzado : SEG_RESULT_TONO.normal}`} data-nivel={resultado.nivel} data-provisional={cuantiaSinDeterminar ? "1" : undefined}>
+        <div className={SEG_RESULT_HEAD}>
           <Calculator size={15} />
           <span>Resultado de la segmentación{cuantiaSinDeterminar ? " (provisional — falta la cuantía)" : ""}</span>
         </div>
-        <div className="segResultGrid">
+        <div className={SEG_RESULT_GRID}>
           <div>
-            <span className="segResultLabel">Categoría</span>
-            <strong className="segResultCategoria">{resultado.categoriaLabel}</strong>
+            <span className={SEG_RESULT_LABEL}>Categoría</span>
+            <strong className={SEG_RESULT_CATEGORIA}>{resultado.categoriaLabel}</strong>
           </div>
           <div>
-            <span className="segResultLabel">Nivel mínimo de interacción</span>
+            <span className={SEG_RESULT_LABEL}>Nivel mínimo de interacción</span>
             <strong>{resultado.nivelLabel}</strong>
           </div>
         </div>
-        <p className="segResultReq">
+        <p className={SEG_RESULT_REQ}>
           <Info size={13} /> {resultado.nivelRequisito}
         </p>
       </div>
 
       {/* Tabla de referencia: categoría ↔ nivel de interacción */}
-      <details className="segRefTable">
+      <details className={SEG_REFTABLE}>
         <summary>Tabla de referencia: categoría ↔ nivel de interacción (Guía de Act. Preparatorias; categorías del Art. 125 Reglamento)</summary>
         <table>
           <thead>
             <tr><th>Categoría</th><th>Cuantía</th><th>Riesgo</th><th>Interacción mínima</th></tr>
           </thead>
           <tbody>
-            <tr className={resultado.categoria === "rutinaria" ? "segRefActive" : undefined}>
+            <tr className={resultado.categoria === "rutinaria" ? SEG_REF_ACTIVE : undefined}>
               <td>Rutinaria</td><td>Baja (≤10% PAC)</td><td>Bajo</td><td>Indagación básica (1 fuente)</td>
             </tr>
-            <tr className={resultado.categoria === "operacional" ? "segRefActive" : undefined}>
+            <tr className={resultado.categoria === "operacional" ? SEG_REF_ACTIVE : undefined}>
               <td>Operacional</td><td>Alta (&gt;10% PAC)</td><td>Bajo</td><td>Indagación avanzada (2+ fuentes)</td>
             </tr>
-            <tr className={resultado.categoria === "critico" ? "segRefActive" : undefined}>
+            <tr className={resultado.categoria === "critico" ? SEG_REF_ACTIVE : undefined}>
               <td>Crítico</td><td>Baja (≤10% PAC)</td><td>Alto</td><td>Consulta mercado básica (1 herramienta)</td>
             </tr>
-            <tr className={resultado.categoria === "estrategico" ? "segRefActive" : undefined}>
+            <tr className={resultado.categoria === "estrategico" ? SEG_REF_ACTIVE : undefined}>
               <td>Estratégico</td><td>Alta (&gt;10% PAC)</td><td>Alto</td><td>Consulta mercado avanzada (2+ herramientas)</td>
             </tr>
           </tbody>
         </table>
-        <p className="segRefNote">Para obras/consultoría de obras: Contratación básica ↔ Consulta mercado básica; Contratación avanzada ↔ Consulta mercado avanzada (Art. 153 Reglamento). Las compras centralizadas o corporativas fuerzan la categoría: Estratégico (bienes/servicios) o Contratación avanzada (obras/consultoría).</p>
+        <p className={SEG_NOTE}>Para obras/consultoría de obras: Contratación básica ↔ Consulta mercado básica; Contratación avanzada ↔ Consulta mercado avanzada (Art. 153 Reglamento). Las compras centralizadas o corporativas fuerzan la categoría: Estratégico (bienes/servicios) o Contratación avanzada (obras/consultoría).</p>
       </details>
 
       {/* Texto del informe: solo hace falta al exportar el .docx, así que va
           plegado para no alargar el paso. */}
-      <details className="segRefTable" style={{ marginTop: 12 }}>
+      <details className={SEG_REFTABLE} style={{ marginTop: 12 }}>
         <summary>Texto del Informe de Segmentación (justificación y gestión de riesgos)</summary>
-        <p className="segCronoNote" style={{ marginBottom: 8 }}>
+        <p className={SEG_NOTE} style={{ marginBottom: 8 }}>
           Estos textos se incorporan al documento .docx que se exporta. Se dejan en blanco si no aplican:
           su bloque se omite del informe. Admiten <strong>**negrita**</strong>, <em>*cursiva*</em> y
           __subrayado__.
         </p>
-        <p className="segFuente segFuente-guia">
+        <p className={`${SEG_FUENTE_BASE} ${SEG_FUENTE_GUIA}`}>
           <strong>Criterio de la Guía:</strong> la justificación y los tres campos de riesgo no los
           exige el Reglamento. El Art. 125.4 orienta a disminuir riesgos la <em>estrategia de
           contratación</em> (paso A4), no la segmentación: aquí se anticipan. Rellénalos si tu
           entidad los pide en el Anexo N.° 3.
         </p>
-        <div className="segNarrativa">
+        <div className={SEG_NARRATIVA}>
           {CAMPOS_NARRATIVA.map((campo) => (
-            <label className="segField" key={campo.key}>
+            <label className={SEG_FIELD} key={campo.key}>
               <span>
                 {campo.label}
-                <span className="segFuenteTag segFuenteTag-guia">Guía</span>
+                <span className={`${SEG_FUENTETAG_BASE} ${SEG_FUENTETAG_GUIA}`}>Guía</span>
               </span>
               <textarea
                 disabled={readOnly}
@@ -904,15 +963,15 @@ export function SegmentacionForm({
           requerimiento ya llegó (es lo que dispara la segmentación, Art. 42.3),
           así que no hay nada que calendarizar. */}
       {parametros?.programada === false ? null : (
-      <fieldset className="segFieldset" style={{ marginTop: 12 }}>
+      <fieldset className={SEG_FIELDSET} style={{ marginTop: 12 }}>
         <legend>Cronograma de presentación de requerimientos (Art. 42.2)</legend>
-        <p className="segCronoNote">
+        <p className={SEG_NOTE}>
           Culminada la segmentación de las contrataciones programadas, la DEC elabora el cronograma con las fechas estimadas para la remisión de los requerimientos por parte de las áreas usuarias, y lo comunica mediante documento interno.
         </p>
         {Array.isArray(data.cronogramaItems) && data.cronogramaItems.length > 0 ? (
-          <div className="segCronoList">
+          <div className={SEG_CRONO_LIST}>
             {data.cronogramaItems.map((item, i) => (
-              <div className="segCronoRow" key={i}>
+              <div className={SEG_CRONO_ROW} key={i}>
                 {readOnly ? (
                   <input disabled placeholder="Área usuaria" value={item.area} />
                 ) : (

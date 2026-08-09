@@ -58,6 +58,8 @@
 @source "./components/requisitos-calificacion-editor.tsx";
 @source "./components/modal-shell.tsx";
 @source "./components/hoja-preview.tsx";
+@source "./components/fase-preparatoria/torre-control.tsx";
+@source "./components/fase-preparatoria/segmentacion-form.tsx";
 @source "./configuracion/page.tsx";
 @source "./components/configuracion-workspace.tsx";
 @source "./components/configuracion/municipalidad-tab.tsx";

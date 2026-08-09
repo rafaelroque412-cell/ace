@@ -13,6 +13,25 @@ const ICONO: Record<NivelControl, typeof Info> = {
   mute: CircleDashed,
 };
 
+// Fondo/borde de la tarjeta y color de su etiqueta según el nivel. Mapa JS (no
+// variantes data-[...]) para pintar los `color-mix` y colorear la etiqueta/valor
+// sin depender de selectores descendientes con clase.
+const CARD_TONO: Record<NivelControl, string> = {
+  stop: "bg-[color-mix(in_srgb,var(--danger)_7%,var(--panel))] border-[color-mix(in_srgb,var(--danger)_40%,var(--line))]",
+  warn: "bg-[color-mix(in_srgb,var(--warning)_8%,var(--panel))] border-[color-mix(in_srgb,var(--warning)_38%,var(--line))]",
+  ok: "",
+  mute: "bg-surface",
+};
+const LABEL_TONO: Record<NivelControl, string> = {
+  stop: "text-danger",
+  warn: "text-warning",
+  ok: "text-success",
+  mute: "text-muted",
+};
+
+const PILL = "rounded-full px-[9px] py-[3px] text-[11px] font-semibold whitespace-nowrap";
+const IR = "self-start cursor-pointer p-0 !text-[11.5px] !font-semibold text-brand underline focus-visible:rounded-[3px] focus-visible:shadow-[var(--focus)] focus-visible:outline-none";
+
 /**
  * Estado del expediente, antes de las diez fases.
  *
@@ -45,32 +64,32 @@ export function TorreControl({
   const pendientes = faltan ?? [];
 
   return (
-    <section aria-label="Estado del expediente" className="torre">
-      <header className="torreHead">
+    <section aria-label="Estado del expediente" className="mb-4 grid gap-3 rounded-[10px] border border-line bg-panel p-3.5">
+      <header className="flex flex-wrap items-center justify-between gap-2 [&>h3]:m-0 [&>h3]:!text-[14px]">
         <h3>Estado del expediente</h3>
         {bloquean > 0 ? (
-          <span className="torrePill torrePillStop">
+          <span className={`${PILL} bg-[color-mix(in_srgb,var(--danger)_12%,var(--surface))] text-danger`}>
             {bloquean === 1 ? "1 cosa bloquea" : `${bloquean} cosas bloquean`}
           </span>
         ) : (
-          <span className="torrePill torrePillOk">Sin contradicciones</span>
+          <span className={`${PILL} bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-success`}>Sin contradicciones</span>
         )}
       </header>
 
-      <div className="torreGrid">
+      <div className="grid gap-2.5 grid-cols-[repeat(auto-fit,minmax(210px,1fr))]">
         {tarjetas.map((t) => {
           const Icono = ICONO[t.nivel];
           return (
-            <article className={`torreCard torreCard-${t.nivel}`} key={t.clave}>
-              <p className="torreLabel">
+            <article className={`flex flex-col gap-1.5 rounded-[8px] border px-3 py-[11px] ${CARD_TONO[t.nivel]}`} key={t.clave}>
+              <p className={`m-0 flex items-center gap-[5px] text-[10.5px] uppercase tracking-[0.06em] ${LABEL_TONO[t.nivel]}`}>
                 <Icono size={12} /> {t.etiqueta}
               </p>
-              <p className="torreValor">{t.valor}</p>
-              <p className="torreNota">{t.nota}</p>
+              <p className={`m-0 text-[18px] font-[650] tracking-[-0.02em] [font-variant-numeric:tabular-nums] [overflow-wrap:anywhere] ${t.nivel === "stop" ? "text-danger" : ""}`}>{t.valor}</p>
+              <p className="m-0 text-[11.5px] leading-[1.45] text-muted">{t.nota}</p>
               {/* Solo hay botón si hay algo que resolver: en una tarjeta
                   conforme sería una invitación a tocar lo que ya está bien. */}
               {t.paso && onAbrirPaso && (t.nivel === "stop" || t.nivel === "warn") ? (
-                <button className="torreIr" onClick={() => onAbrirPaso(t.paso!)} type="button">
+                <button className={IR} onClick={() => onAbrirPaso(t.paso!)} type="button">
                   Ir a {hitoLabel(t.paso)}
                 </button>
               ) : null}
@@ -82,20 +101,20 @@ export function TorreControl({
       {/* Qué falta para aprobar el expediente (Art. 54.2). Si no falta nada, no
           se pinta: la píldora "Sin contradicciones" ya lo dice. */}
       {pendientes.length > 0 ? (
-        <div className="torreFaltan">
-          <p className="torreFaltanTitulo">
+        <div className="mt-3 border-t border-line pt-2.5">
+          <p className="m-0 mb-1.5 flex items-center gap-[5px] text-[11.5px] font-bold uppercase tracking-[0.02em] text-muted">
             <AlertTriangle size={12} /> Para aprobar el expediente falta (Art. 54.2):
           </p>
-          <ul className="torreFaltanLista">
+          <ul className="m-0 grid list-none gap-[5px] p-0">
             {pendientes.map((f) => (
-              <li className="torreFaltanItem" key={f.literal}>
-                <span className="torreFaltanTexto">
+              <li className="flex items-baseline justify-between gap-2.5 text-[12.5px]" key={f.literal}>
+                <span>
                   <strong>{f.literal}</strong> · {f.etiqueta}
-                  {f.detalle ? <span className="torreFaltanDetalle"> — {f.detalle}</span> : null}
+                  {f.detalle ? <span className="text-muted"> — {f.detalle}</span> : null}
                 </span>
                 {f.paso && onAbrirPaso ? (
                   <button
-                    className="torreIr"
+                    className={IR}
                     onClick={() => onAbrirPaso(f.paso!)}
                     type="button"
                   >
