@@ -4,11 +4,9 @@ import {
   Document,
   Header,
   Packer,
+  PageNumber,
   Paragraph,
-  TabStopPosition,
-  TabStopType,
   TextRun,
-  WidthType,
 } from "docx";
 
 export type RespuestaInput = {
@@ -18,10 +16,36 @@ export type RespuestaInput = {
   cargoDestinatario: string;
   asunto: string;
   cuerpo: string;
-  baseLegal: { referencia: string; texto: string }[];
+  // @deprecated baseLegal ya NO se incluye en el documento. Se mantiene
+  // como opcional por compatibilidad; si viene, se ignora.
+  baseLegal?: { referencia: string; texto: string }[];
   remitente: string;
   cargoRemitente: string;
+  // Ciudad institucional del encabezado: "Challhuahuacho, 6 de julio de 2026".
+  lugar?: string;
+  // REF.: numero del documento anterior al que se responde (opcional).
+  referencia?: string;
+  // Tipo de documento (OFICIO, CARTA, ...): CARTA y OFICIO usan el modelo
+  // oficial peruano (lugar y fecha arriba, Señor(a), ASUNTO/REF.).
+  tipoDocumento?: string;
 };
+
+// El cuerpo llega como texto plano con saltos de linea: cada bloque separado
+// por lineas en blanco es un parrafo justificado del documento.
+function cuerpoParagraphs(cuerpo: string): Paragraph[] {
+  return cuerpo
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(
+      (line) =>
+        new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
+          children: [new TextRun({ font: "Calibri", size: 22, text: line })],
+          spacing: { after: 120 },
+        }),
+    );
+}
 
 export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer> {
   const today = new Date().toLocaleDateString("es-PE", {
@@ -29,6 +53,13 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
     month: "long",
     year: "numeric",
   });
+  // "Lugar, fecha" (modelo oficial peruano) cuando hay ciudad configurada.
+  const lugarFecha = input.lugar?.trim() ? `${input.lugar.trim()}, ${today}` : today;
+  const tipo = (input.tipoDocumento ?? "").toUpperCase();
+  const isCarta = tipo.includes("CARTA");
+  const isOficio = tipo.includes("OFICIO");
+  // CARTA y OFICIO siguen el modelo epistolar/protocolar: fecha arriba.
+  const fechaArriba = isCarta || isOficio;
 
   const children: Paragraph[] = [];
 
@@ -61,7 +92,18 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
     }),
   );
 
-  // ── Número de oficio ──
+  // ── Lugar y fecha (CARTA y OFICIO: arriba, alineada a la derecha) ──
+  if (fechaArriba) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        children: [new TextRun({ font: "Calibri", size: 22, text: lugarFecha })],
+        spacing: { after: 120 },
+      }),
+    );
+  }
+
+  // ── Número del documento ──
   children.push(
     new Paragraph({
       alignment: AlignmentType.RIGHT,
@@ -72,11 +114,15 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
     }),
   );
 
-  // ── Señor(es) ──
+  // ── Destinatario ──
+  // "Señor(a):" para carta y oficio simple; "Señor(es):" para el resto
+  // (oficio multiple, memorandum, etc.).
+  const labelDestinatario =
+    isCarta || (isOficio && !tipo.includes("MULTIPLE")) ? "Señor(a):" : "Señor(es):";
   children.push(
     new Paragraph({
       children: [
-        new TextRun({ font: "Calibri", size: 22, text: "Señor(es):" }),
+        new TextRun({ font: "Calibri", size: 22, text: labelDestinatario }),
       ],
       spacing: { after: 20 },
     }),
@@ -94,59 +140,52 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
     }),
   );
 
-  // ── Asunto ──
-  children.push(
-    new Paragraph({
-      children: [
-        new TextRun({ bold: true, font: "Calibri", size: 22, text: "Asunto: " }),
-        new TextRun({ font: "Calibri", size: 22, text: input.asunto }),
-      ],
-      spacing: { after: 60 },
-    }),
-  );
-
-  // ── Fecha ──
-  children.push(
-    new Paragraph({
-      children: [
-        new TextRun({ font: "Calibri", size: 22, text: `Fecha: ${today}` }),
-      ],
-      spacing: { after: 200 },
-    }),
-  );
-
-  // ── Cuerpo ──
-  children.push(
-    new Paragraph({
-      children: [
-        new TextRun({ font: "Calibri", size: 22, text: input.cuerpo }),
-      ],
-      spacing: { after: 200 },
-    }),
-  );
-
-  // ── Base legal ──
-  if (input.baseLegal.length > 0) {
+  // ── Asunto (en la carta es opcional; en el oficio va en mayúsculas) ──
+  const hayRef = Boolean(input.referencia?.trim());
+  if (!isCarta || input.asunto.trim()) {
     children.push(
       new Paragraph({
-        children: [new TextRun({ bold: true, font: "Calibri", size: 22, text: "Base legal:" })],
-        spacing: { after: 80 },
+        children: [
+          new TextRun({
+            bold: true,
+            font: "Calibri",
+            size: 22,
+            text: isOficio ? "ASUNTO: " : "Asunto: ",
+          }),
+          new TextRun({ font: "Calibri", size: 22, text: input.asunto }),
+        ],
+        spacing: { after: hayRef ? 60 : fechaArriba ? 200 : 60 },
       }),
     );
-    for (const ref of input.baseLegal) {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({ bold: true, font: "Calibri", size: 20, text: `${ref.referencia}: ` }),
-            new TextRun({ font: "Calibri", size: 20, text: ref.texto.slice(0, 500) }),
-          ],
-          spacing: { after: 60 },
-          indent: { left: 400 },
-        }),
-      );
-    }
-    children.push(new Paragraph({ spacing: { after: 200 }, text: "" }));
   }
+
+  // ── REF.: documento anterior al que se responde (opcional) ──
+  if (hayRef) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ bold: true, font: "Calibri", size: 22, text: "REF.: " }),
+          new TextRun({ font: "Calibri", size: 22, text: input.referencia?.trim() ?? "" }),
+        ],
+        spacing: { after: fechaArriba ? 200 : 60 },
+      }),
+    );
+  }
+
+  // ── Fecha (los demás tipos la llevan aquí; carta y oficio la ponen arriba) ──
+  if (!fechaArriba) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ font: "Calibri", size: 22, text: `Fecha: ${lugarFecha}` }),
+        ],
+        spacing: { after: 200 },
+      }),
+    );
+  }
+
+  // ── Cuerpo (en la carta empieza con el saludo/vocativo que redacta la IA) ──
+  children.push(...cuerpoParagraphs(input.cuerpo));
 
   // ── Despedida ──
   children.push(
@@ -154,24 +193,14 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
       children: [
         new TextRun({ font: "Calibri", size: 22, text: "Atentamente," }),
       ],
-      spacing: { after: 400 },
+      spacing: { after: 400, before: 200 },
     }),
   );
 
   // ── Firma ──
+  // El nombre y cargo del responsable NO se imprimen: tras "Atentamente,"
+  // queda el espacio libre para la firma manuscrita y el sello.
   children.push(
-    new Paragraph({
-      children: [
-        new TextRun({ bold: true, font: "Calibri", size: 22, text: input.remitente }),
-      ],
-      spacing: { after: 20 },
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({ font: "Calibri", size: 20, text: input.cargoRemitente }),
-      ],
-      spacing: { after: 20 },
-    }),
     new Paragraph({
       children: [
         new TextRun({ color: "888888", font: "Calibri", italics: true, size: 18, text: "Documento generado por ACE IA Jurídica. Revise y valide antes de emitir." }),
@@ -180,18 +209,39 @@ export async function buildRespuestaDocx(input: RespuestaInput): Promise<Buffer>
     }),
   );
 
+  // Margen de 2 cm en los 4 lados (1 cm = 567 twips → 2 cm = 1134).
+  const MARGIN_2CM = 1134;
+
   const document = new Document({
     sections: [
       {
         properties: {
           page: {
             margin: {
-              bottom: 1100,
-              left: 1100,
-              right: 1100,
-              top: 1100,
+              bottom: MARGIN_2CM,
+              left: MARGIN_2CM,
+              right: MARGIN_2CM,
+              top: MARGIN_2CM,
             },
           },
+        },
+        // Numeración "Página X de Y" en la esquina superior derecha.
+        headers: {
+          default: new Header({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                children: [
+                  new TextRun({
+                    font: "Calibri",
+                    size: 18,
+                    color: "555555",
+                    children: ["Página ", PageNumber.CURRENT, " de ", PageNumber.TOTAL_PAGES],
+                  }),
+                ],
+              }),
+            ],
+          }),
         },
         children,
       },

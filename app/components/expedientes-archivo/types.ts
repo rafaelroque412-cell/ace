@@ -230,6 +230,8 @@ export type BulkMoveModalProps = {
   count: number;
   onClose: () => void;
   onApply: (updates: Record<string, unknown>) => void;
+  // Solo admin puede reasignar expedientes a otra oficina.
+  canChangeOficina?: boolean;
 };
 
 export type ReplaceFileModalProps = {

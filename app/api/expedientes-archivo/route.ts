@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { getArchivoScopeLevel, requireDec, requireUser } from "@/lib/auth";
+import { entitiesMatch } from "@/lib/entity-utils";
 import {
   ARCHIVO_COLORES,
   type ExpedienteArchivo,
@@ -77,6 +78,25 @@ export async function GET(request: Request) {
     const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
     const offset = (page - 1) * limit;
 
+    // Scope: admin todo; jefe su oficina; el resto SOLO lo que subió. Se filtra
+    // por `oficina_id` (mismo criterio que las políticas RLS de la BD) cuando el
+    // perfil del jefe lo tiene resuelto; si no, se cae al filtro por texto como
+    // respaldo. Así el enforcement en código (service_role bypassa RLS) queda
+    // alineado con la defensa en profundidad de la base de datos.
+    const scope = getArchivoScopeLevel(auth.user);
+    const useOficinaId = scope === "oficina" && Boolean(auth.user.oficinaId);
+    const scopeClause = () => {
+      if (scope === "oficina") {
+        return useOficinaId
+          ? `&oficina_id=eq.${encodeURIComponent(auth.user.oficinaId ?? "")}`
+          : `&oficina=eq.${encodeURIComponent(auth.user.entity ?? "")}`;
+      }
+      if (scope === "own") {
+        return `&uploaded_by=eq.${encodeURIComponent(auth.user.id)}`;
+      }
+      return "";
+    };
+
     let query = `expedientes_archivo?select=${SELECT}&order=created_at.desc&limit=${limit}&offset=${offset}`;
     if (status) {
       query += `&status=eq.${encodeURIComponent(status)}`;
@@ -84,30 +104,40 @@ export async function GET(request: Request) {
     if (anio) {
       query += `&anio=eq.${encodeURIComponent(anio)}`;
     }
+    query += scopeClause();
 
     const expedientes = await supabaseRest<ExpedienteArchivo[]>(query);
 
-    // Conteos globales (todo el archivo, no solo la página) para el dashboard.
-    // Se traen status + file_size de todas las filas que matchean los filtros;
-    // así el total, el desglose por estado y el tamaño no quedan limitados a los
-    // 50 de la página actual.
-    let countQuery = `expedientes_archivo?select=id,status,file_size`;
+    // Con oficina_id el filtro ya es exacto; solo el respaldo por texto necesita
+    // el post-filtro normalizado (cubre diferencias de tildes/mayúsculas).
+    const filtered =
+      scope === "oficina" && !useOficinaId
+        ? expedientes.filter((e) => entitiesMatch(e.oficina, auth.user.entity))
+        : expedientes;
+
+    // Conteos globales (todo el archivo visible, no solo la página) para el dashboard.
+    let countQuery = `expedientes_archivo?select=id,status,file_size,oficina`;
     if (status) countQuery += `&status=eq.${encodeURIComponent(status)}`;
     if (anio) countQuery += `&anio=eq.${encodeURIComponent(anio)}`;
-    const allRows = await supabaseRest<Array<{ id: string; status: string; file_size: number }>>(
+    countQuery += scopeClause();
+    const allRows = await supabaseRest<Array<{ id: string; status: string; file_size: number; oficina: string | null }>>(
       countQuery,
     );
-    const total = allRows.length;
+    const countRows =
+      scope === "oficina" && !useOficinaId
+        ? allRows.filter((r) => entitiesMatch(r.oficina, auth.user.entity))
+        : allRows;
+    const total = countRows.length;
     const counts = {
       total,
-      indexed: allRows.filter((r) => r.status === "indexed").length,
-      pending: allRows.filter((r) => r.status === "uploaded" || r.status === "processing").length,
-      error: allRows.filter((r) => r.status === "error").length,
-      totalBytes: allRows.reduce((sum, r) => sum + (r.file_size ?? 0), 0),
+      indexed: countRows.filter((r) => r.status === "indexed").length,
+      pending: countRows.filter((r) => r.status === "uploaded" || r.status === "processing").length,
+      error: countRows.filter((r) => r.status === "error").length,
+      totalBytes: countRows.reduce((sum, r) => sum + (r.file_size ?? 0), 0),
     };
 
     return NextResponse.json({
-      expedientes,
+      expedientes: filtered,
       counts,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
@@ -125,7 +155,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -191,7 +221,12 @@ export async function POST(request: Request) {
       ["asunto", formText(formData, "asunto")],
       ["materia", formText(formData, "materia", 200)],
       ["resumen", formText(formData, "resumen", 2000)],
-      ["oficina", formText(formData, "oficina", 200)],
+      ["oficina", (() => {
+        const fromForm = formText(formData, "oficina", 200);
+        if (auth.user.isAdmin) return fromForm;
+        if (fromForm && !entitiesMatch(fromForm, auth.user.entity)) return auth.user.entity;
+        return fromForm || auth.user.entity;
+      })()],
       ["folio", formText(formData, "folio", 60)],
       ["observaciones", formText(formData, "observaciones", 1000)],
       ["nro_archivador", formText(formData, "nroArchivador", 60)],

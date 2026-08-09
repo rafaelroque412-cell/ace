@@ -1,4 +1,3 @@
-import { z } from "zod";
 
 // Biblioteca de Expedientes Archivados: expedientes/documentos terminados de la
 // entidad, escaneados (OCR) e indexados en su PROPIO namespace de Pinecone
@@ -99,6 +98,8 @@ export type ExpedienteArchivo = {
   resumen: string | null;
   title: string;
   oficina: string | null;
+  // Oficina emisora resuelta (FK a expedientes_oficinas), poblada por trigger.
+  oficina_id: string | null;
   // Almacenamiento físico
   tipo_almacenamiento: ContenedorTipo | null;
   nro_archivador: string | null;
@@ -133,26 +134,6 @@ export type ExpedienteArchivo = {
 export function normalizePersonaTipo(value: unknown): PersonaTipo | null {
   return value === "natural" || value === "juridica" ? value : null;
 }
-
-// ── Esquemas de consulta ──────────────────────────────────────────────────────
-
-export const expedienteSearchSchema = z.object({
-  query: z.string().trim().min(2, "Escribe al menos 2 caracteres").max(500),
-  serieDocumento: z.string().trim().optional(),
-  oficina: z.string().trim().max(200).optional(),
-  materia: z.string().trim().max(200).optional(),
-  anio: z.coerce.number().int().min(1900).max(2200).optional(),
-  topK: z.number().int().min(1).max(30).optional(),
-});
-
-export type ExpedienteSearchInput = z.infer<typeof expedienteSearchSchema>;
-
-export const expedienteChatSchema = z.object({
-  query: z.string().trim().min(3, "Escribe una pregunta").max(800),
-  anio: z.coerce.number().int().min(1900).max(2200).optional(),
-});
-
-export type ExpedienteChatInput = z.infer<typeof expedienteChatSchema>;
 
 // ── Extractores deterministas ─────────────────────────────────────────────────
 
@@ -227,6 +208,94 @@ export function extractExpedienteNumber(title: string, text: string): string | n
 
   const generic = source.match(new RegExp(`\\bn[°ºo.\\s]*\\s*(${numeroToken})`, "i"));
   return generic?.[1] ? generic[1].replace(/\s+/g, "").replace(/[.,;:]+$/, "") : null;
+}
+
+// ── Cabecera oficial municipal ───────────────────────────────────────────────
+// Los documentos del archivo llevan SIEMPRE su denominación oficial en la
+// cabecera de la primera página: "INFORME N°1555-2026-MDCH/SGEIM-OAD-RTC",
+// "MEMORANDO NRO 22-2026-MDCH/OL", "OFICIO MÚLTIPLE N° 012-2024-MDCH-A"...
+// De ahí salen la SERIE DOCUMENTAL (literal), el TIPO de documento y el AÑO.
+
+export type SerieDocumentalDetectada = {
+  serie: string;
+  tipoDocumento: string;
+  numero: string;
+  anio: number | null;
+};
+
+// Mapea el tipo de la cabecera al catálogo del formulario de subida.
+const SERIE_TIPO_LABEL: Record<string, string> = {
+  CARTA: "Carta",
+  INFORME: "Informe",
+  MEMORANDO: "Memorando",
+  MEMORANDUM: "Memorando",
+  OFICIO: "Oficio",
+};
+
+// "N°", "Nº", "Nª", "N.", "NRO", "Nro." (variantes reales + ruido de OCR).
+// Case-sensitive a propósito: la cabecera va en MAYÚSCULAS; así no captura
+// menciones del cuerpo ("mediante informe administrativo...").
+const seriePattern = new RegExp(
+  "\\b(INFORME|MEMOR[ÁA]NDUM|MEMORANDO|OFICIO|CARTA)" +
+    "(\\s+(?:M[ÚU]LTIPLE|CIRCULAR|T[ÉE]CNICO|LEGAL))?" +
+    "\\s*N(?:RO|ro)?\\.?\\s*[°ºª]?\\s*" +
+    "(\\d{1,6})\\s*[-–]\\s*(\\d{4})" +
+    "((?:\\s*[-/.]\\s*[A-ZÑ][A-ZÑ0-9]*(?:[-/.][A-ZÑ0-9]+)*)*)",
+);
+
+export function extractSerieDocumental(text: string): SerieDocumentalDetectada | null {
+  // Solo el inicio del documento (cabecera de la primera página): el PRIMER
+  // match gana; las menciones posteriores (REF., cuerpo) quedan descartadas.
+  const source = text.slice(0, 4000);
+  const match = seriePattern.exec(source);
+  if (!match) {
+    return null;
+  }
+
+  const [, tipoRaw, , numero, anioRaw] = match;
+  const tipoKey = tipoRaw.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const anio = Number.parseInt(anioRaw, 10);
+
+  return {
+    // Literal de la cabecera con espacios colapsados y sin puntuación final.
+    serie: match[0].replace(/\s+/g, " ").replace(/[\s.,;:]+$/, "").trim(),
+    tipoDocumento: SERIE_TIPO_LABEL[tipoKey] ?? "Otro",
+    numero,
+    anio: Number.isFinite(anio) && anio >= 1950 && anio <= 2100 ? anio : null,
+  };
+}
+
+// "ASUNTO : ..." de la primera página, hasta el siguiente rótulo de la cabecera
+// (-REF., REFERENCIA, FECHA, C.C., ATENCIÓN) o un doble salto de línea.
+export function extractAsunto(text: string): string | null {
+  const source = text.slice(0, 6000);
+  const match = source.match(
+    /\bASUNTO\s*[:\-.]{0,2}\s*([\s\S]{4,500}?)(?=\s*(?:[-–]\s*)?(?:REF(?:ERENCIA)?\.?|FECHA|C\.?C\.?|ATENCI[ÓO]N|SE ADJUNTA)\s*[:.]|\n{2,})/,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const asunto = match[1].replace(/\s+/g, " ").replace(/[\s:;,.-]+$/, "").trim();
+  return asunto.length >= 4 ? asunto : null;
+}
+
+// Remitente de la cabecera: rótulo "DE :" o "DEL :" (quien emite/firma).
+// Mayúsculas estrictas para no capturar preposiciones del cuerpo.
+export function extractRemitente(text: string): string | null {
+  const source = text.slice(0, 6000);
+  const match = source.match(/\bDEL?\s*:\s*([^\n]{4,160})/);
+  if (!match) {
+    return null;
+  }
+
+  // Si el OCR aplanó los saltos de línea, cortar en el siguiente rótulo.
+  const remitente = match[1]
+    .split(/\s+(?=(?:ASUNTO|ATENCI[ÓO]N|FECHA|REF\.?|C\.?C\.?)\s*[:.])/)[0]
+    .replace(/\s+/g, " ")
+    .replace(/[\s:;,]+$/, "")
+    .trim();
+  return remitente.length >= 4 ? remitente : null;
 }
 
 export function getExpedientesNamespace() {

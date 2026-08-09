@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { normalizeEntity } from "./entity-utils";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { estimateCostUsd, roundCostUsd } from "./openai-cost";
 import { supabaseRest, writeAuditLog } from "./supabase-server";
@@ -359,6 +360,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       document_type: "expediente",
       page_end: chunk.page_end ?? undefined,
       page_start: chunk.page_start ?? undefined,
+      source_entity: normalizeEntity(oficina) || undefined,
       source_role: "expediente-archivo",
       status: "indexed",
       text: buildExpedienteEmbeddingText({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getOfficeFilter, requireUser } from "@/lib/auth";
+import { entitiesMatch } from "@/lib/entity-utils";
 import { buildRespuestaDocx } from "@/lib/respuesta-generator";
 import { buildRespuestaPdf } from "@/lib/respuesta-pdf";
 import { downloadStorageObject, supabaseRest, writeAuditLog } from "@/lib/supabase-server";
@@ -26,24 +27,50 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       format = "docx",
+      tipoDocumento = "",
       oficinaId,
       entity,
       nroOficio,
       destinatario,
       cargoDestinatario,
+      lugar,
+      referencia,
       asunto,
       cuerpo,
-      baseLegal,
+      // baseLegal se ignora intencionalmente: la base legal NO se incluye
+      // en el documento descargado. Solo se uso como contexto para que
+      // la IA redactara el cuerpo. El usuario la ve en la UI (BorradorEditor).
       remitente,
       cargoRemitente,
     } = body;
 
-    if (!cuerpo || !asunto) {
+    // En la CARTA el asunto es opcional (modelo epistolar peruano).
+    const isCarta = String(tipoDocumento).toUpperCase().includes("CARTA");
+    if (!cuerpo || (!asunto && !isCarta)) {
       return NextResponse.json({ error: "Faltan datos obligatorios: asunto y cuerpo." }, { status: 400 });
     }
 
-    const slug = slugify(asunto);
-    const fecha = new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" });
+    const slug = slugify(asunto ?? "");
+    const hoy = new Date().toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" });
+
+    // Validar que la oficina pertenece al usuario (evita fuga de membrete ajeno).
+    const officeFilter = getOfficeFilter(auth.user);
+    if (officeFilter && oficinaId) {
+      type OfiRow = { id: string; nombre: string | null; entidad: string | null };
+      const [ofi] = await supabaseRest<OfiRow[]>(
+        `expedientes_oficinas?id=eq.${encodeURIComponent(oficinaId)}&select=id,nombre,entidad&limit=1`,
+      ).catch(() => [] as OfiRow[]);
+      const allowed = ofi && (entitiesMatch(ofi.nombre, auth.user.entity) || entitiesMatch(ofi.entidad, auth.user.entity));
+      if (!allowed) {
+        return NextResponse.json({ error: "No tienes acceso a esta oficina" }, { status: 403 });
+      }
+    }
+
+    // "Lugar" (ciudad institucional): "Challhuahuacho, 6 de julio de 2026".
+    const ciudad = typeof lugar === "string" && lugar.trim() ? lugar.trim() : "";
+    const fecha = ciudad ? `${ciudad}, ${hoy}` : hoy;
+    // REF.: numero del documento anterior al que se responde (opcional).
+    const ref = typeof referencia === "string" && referencia.trim() ? referencia.trim() : "";
 
     // ── PDF sobre la hoja membretada de la OFICINA ──
     if (format === "pdf") {
@@ -83,9 +110,9 @@ export async function POST(request: Request) {
         fecha,
         destinatario: destinatario ?? "",
         cargoDestinatario: cargoDestinatario ?? "",
-        asunto,
+        asunto: asunto ?? "",
         cuerpo,
-        baseLegal: Array.isArray(baseLegal) ? baseLegal : [],
+        referencia: ref,
         remitente: remitente || ofiResponsable || "",
         cargoRemitente: cargoRemitente || ofiCargo || "",
       });
@@ -107,25 +134,47 @@ export async function POST(request: Request) {
     }
 
     // ── DOCX con membrete de texto ──
-    if (!entity?.name) {
+    // Enriquecer entity con los datos completos de entity_settings (address,
+    // executingUnit) que el cliente no tiene. Fallback al body si la BD falla.
+    type EntityRow = { name: string | null; ruc: string | null; address: string | null; executing_unit: string | null };
+    let fullEntity = {
+      name: entity?.name ?? "",
+      ruc: entity?.ruc ?? "",
+      address: entity?.address ?? "",
+      executingUnit: entity?.executingUnit ?? "",
+    };
+    try {
+      const [row] = await supabaseRest<EntityRow[]>(
+        "entity_settings?id=eq.default&select=name,ruc,address,executing_unit&limit=1",
+      );
+      if (row) {
+        fullEntity = {
+          name: fullEntity.name || row.name || "",
+          ruc: fullEntity.ruc || row.ruc || "",
+          address: row.address || fullEntity.address,
+          executingUnit: row.executing_unit || fullEntity.executingUnit,
+        };
+      }
+    } catch {
+      // Continuar con lo que el cliente envió.
+    }
+
+    if (!fullEntity.name) {
       return NextResponse.json({ error: "Para .docx indica el nombre de la entidad (membrete)." }, { status: 400 });
     }
 
     const buffer = await buildRespuestaDocx({
-      entity: {
-        name: entity.name,
-        ruc: entity.ruc ?? "",
-        address: entity.address ?? "",
-        executingUnit: entity.executingUnit ?? "",
-      },
-      nroOficio: nroOficio ?? "OFICIO N° ___ -2026",
+      entity: fullEntity,
+      nroOficio: nroOficio ?? `${isCarta ? "CARTA" : "OFICIO"} N° ___ -${new Date().getFullYear()}`,
       destinatario: destinatario ?? "[DESTINATARIO]",
       cargoDestinatario: cargoDestinatario ?? "",
-      asunto,
+      lugar: ciudad,
+      referencia: ref,
+      asunto: asunto ?? "",
       cuerpo,
-      baseLegal: baseLegal ?? [],
-      remitente: remitente ?? entity.name,
+      remitente: remitente ?? entity?.name ?? "",
       cargoRemitente: cargoRemitente ?? "",
+      tipoDocumento: String(tipoDocumento),
     });
 
     await writeAuditLog({

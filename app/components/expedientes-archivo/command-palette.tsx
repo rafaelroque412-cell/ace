@@ -1,5 +1,6 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import { memo, useState, useEffect, useRef, useMemo } from "react";
 import {
   Search,
@@ -46,9 +47,6 @@ export const CommandPalette = memo(function CommandPalette({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 10);
-  }, []);
 
   const baseActions: CommandAction[] = useMemo(
     () => [
@@ -171,17 +169,31 @@ export const CommandPalette = memo(function CommandPalette({
       event.preventDefault();
       const item = allItems[activeIndex];
       if (item) item.onSelect();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
     }
+    // Escape lo cierra Radix desde el contenedor.
   }
 
   if (!open) return null;
 
+  // Radix aporta el foco atrapado, el bloqueo de scroll y el cierre con Escape;
+  // el foco inicial se dirige al campo de búsqueda en lugar del primer botón.
   return (
-    <div className="expCmdOverlay" onClick={onClose} role="dialog" aria-label="Búsqueda rápida">
-      <div className="expCmd" onClick={(e) => e.stopPropagation()}>
+    <Dialog.Root
+      open
+      onOpenChange={(abierto) => {
+        if (!abierto) onClose();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="expCmdOverlay" />
+        <Dialog.Content
+          aria-label="Búsqueda rápida"
+          className="expCmd expCmdPortal"
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
         <div className="expCmd-header">
           <Search size={18} />
           <input
@@ -274,7 +286,8 @@ export const CommandPalette = memo(function CommandPalette({
             <X size={12} /> Click fuera
           </span>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 });

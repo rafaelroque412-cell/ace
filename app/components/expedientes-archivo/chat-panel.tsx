@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useState, useRef, useEffect } from "react";
-import { Bot, X, Sparkles, Send } from "lucide-react";
+import { Bot, Sparkles, Send } from "lucide-react";
+import { ExpSlideOver } from "./slide-over-shell";
 import type { ChatPanelProps } from "./types";
 
 export const ChatPanel = memo(function ChatPanel({ query, onClose, onAsk, searching, messages, onOpenExpediente }: ChatPanelProps) {
@@ -38,30 +39,15 @@ export const ChatPanel = memo(function ChatPanel({ query, onClose, onAsk, search
   const lastAi = [...messages].reverse().find((m) => m.role === "ai");
   const showSuggestion = !searching && lastAi && (!lastAi.sources || lastAi.sources.length === 0);
 
+  // Escape, foco atrapado y bloqueo de scroll los aporta ExpSlideOver (Radix).
   return (
-    <div className="expSlideOverOverlay" onClick={onClose}>
-      <aside
-        className="expChatPanel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Chat con IA"
-      >
-        <div className="expSlideOver-header">
-          <div>
-            <h3 className="expSlideOver-title">Chat con IA</h3>
-            <p className="expSlideOver-subtitle">
-              Pregunta en lenguaje natural sobre los expedientes
-            </p>
-          </div>
-          <button
-            type="button"
-            className="expSlideOver-close"
-            onClick={onClose}
-            aria-label="Cerrar chat"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <ExpSlideOver
+      clasePanel="expChatPanel"
+      etiquetaCerrar="Cerrar chat"
+      onClose={onClose}
+      subtitulo="Pregunta en lenguaje natural sobre los expedientes"
+      titulo="Chat con IA"
+    >
         <div className="expChat-body">
           {messages.length === 0 ? (
             <div className="expChatEmpty">
@@ -171,7 +157,6 @@ export const ChatPanel = memo(function ChatPanel({ query, onClose, onAsk, search
             <Send size={16} /> Preguntar
           </button>
         </div>
-      </aside>
-    </div>
+    </ExpSlideOver>
   );
 });

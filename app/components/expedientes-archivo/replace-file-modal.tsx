@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, UploadCloud, FileText, AlertTriangle } from "lucide-react";
+import { UploadCloud, FileText, AlertTriangle } from "lucide-react";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import { ExpSlideOver } from "./slide-over-shell";
 import type { ReplaceFileModalProps } from "./types";
 
 export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProps) {
@@ -35,28 +36,14 @@ export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProp
     onApply(file);
   }
 
+  // Escape, foco atrapado y bloqueo de scroll los aporta ExpSlideOver (Radix).
   return (
-    <div className="expSlideOverOverlay" onClick={onClose}>
-      <aside
-        className="expSlideOver expSlideOver-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Reemplazar PDF"
-      >
-        <div className="expSlideOver-header">
-          <div>
-            <h3 className="expSlideOver-title">Reemplazar PDF</h3>
-            <p className="expSlideOver-subtitle">&ldquo;{exp.title}&rdquo; se reprocesará automáticamente</p>
-          </div>
-          <button
-            type="button"
-            className="expSlideOver-close"
-            onClick={onClose}
-            aria-label="Cerrar"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <ExpSlideOver
+      modificador="expSlideOver-modal"
+      onClose={onClose}
+      subtitulo={<>&ldquo;{exp.title}&rdquo; se reprocesará automáticamente</>}
+      titulo="Reemplazar PDF"
+    >
         <div className="expSlideOver-body">
           <div className="expReplaceCurrent">
             <FileText size={16} />
@@ -140,7 +127,6 @@ export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProp
             <UploadCloud size={16} /> Confirmar reemplazo
           </button>
         </div>
-      </aside>
-    </div>
+    </ExpSlideOver>
   );
 }

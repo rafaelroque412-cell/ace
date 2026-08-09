@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireEditor } from "@/lib/auth";
+import { requireDec } from "@/lib/auth";
 import { drainStuckExpedientes } from "@/lib/expedientes-archivo-queue";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ async function authorize(request: Request): Promise<NextResponse | null> {
   if (cronSecret && header === `Bearer ${cronSecret}`) {
     return null;
   }
-  const auth = await requireEditor();
+  const auth = await requireDec();
   if ("error" in auth) {
     return auth.error;
   }

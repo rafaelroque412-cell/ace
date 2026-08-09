@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getOfficeFilter, requireUser } from "@/lib/auth";
+import { entitiesMatch } from "@/lib/entity-utils";
 import { type ExpedienteArchivo } from "@/lib/expedientes-archivo";
 import { getSupabaseServerConfig, supabaseRest } from "@/lib/supabase-server";
 
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
       return auth.error;
     }
     getSupabaseServerConfig();
+
+    const officeFilter = getOfficeFilter(auth.user);
 
     const url = new URL(request.url);
     const title = url.searchParams.get("title")?.trim();
@@ -49,17 +52,28 @@ export async function GET(request: Request) {
     if (serie) filters.push(`serie_documento.eq.${quote(serie)}`);
 
     let query = `expedientes_archivo?select=${SELECT}&status=eq.indexed&order=created_at.desc&limit=10`;
+    if (officeFilter) query += `&oficina=eq.${encodeURIComponent(officeFilter)}`;
     if (filters.length > 0) query += `&or=(${filters.join(",")})`;
     if (excludeId) query += `&id=neq.${excludeId}`;
 
-    const duplicates = await supabaseRest<ExpedienteArchivo[]>(query);
+    let duplicates = await supabaseRest<ExpedienteArchivo[]>(query);
+
+    // Post-filter robusto: el filtro PostgREST es case-sensitive, asi que
+    // re-verificamos con entitiesMatch (normaliza acentos/mayusculas/espacios).
+    if (officeFilter) {
+      duplicates = duplicates.filter((d) => entitiesMatch(d.oficina, auth.user.entity));
+    }
 
     // Si no hay nada con numero/sgd/serie, igual devolver los que tengan título similar
     if (duplicates.length === 0 && title) {
       const prefix = title.slice(0, 12).replace(/[%_]/g, (m) => `\\${m}`);
-      const fuzzy = `expedientes_archivo?select=${SELECT}&status=eq.indexed&title=ilike.${encodeURIComponent(prefix + "%")}&order=created_at.desc&limit=5${excludeId ? `&id=neq.${excludeId}` : ""}`;
+      let fuzzy = `expedientes_archivo?select=${SELECT}&status=eq.indexed&title=ilike.${encodeURIComponent(prefix + "%")}&order=created_at.desc&limit=5${excludeId ? `&id=neq.${excludeId}` : ""}`;
+      if (officeFilter) fuzzy += `&oficina=eq.${encodeURIComponent(officeFilter)}`;
       const fuzzy2 = await supabaseRest<ExpedienteArchivo[]>(fuzzy);
-      return NextResponse.json({ duplicates: fuzzy2, matchType: "fuzzy" });
+      const filteredFuzzy = officeFilter
+        ? fuzzy2.filter((d) => entitiesMatch(d.oficina, auth.user.entity))
+        : fuzzy2;
+      return NextResponse.json({ duplicates: filteredFuzzy, matchType: "fuzzy" });
     }
 
     return NextResponse.json({ duplicates, matchType: duplicates.length > 0 ? "exact" : "none" });

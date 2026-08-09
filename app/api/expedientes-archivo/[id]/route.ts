@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { requireEditor, requireUser } from "@/lib/auth";
+import { canAccessArchivoRow, requireDec, requireUser } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
   type ExpedienteArchivo,
@@ -35,7 +35,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const SELECT =
-  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,oficina_id,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
 
 // Columnas editables vía PATCH (whitelist; nunca status/storage/uploaded_by).
 const PATCHABLE_COLUMNS = new Set<string>([
@@ -90,9 +90,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 
-    // ?meta=1 devuelve la metadata del expediente en JSON (sin el PDF). Lo usa la
-    // UI para abrir el detalle de un resultado de búsqueda que no esté en la
-    // página cargada de la lista (la búsqueda es global, la lista es paginada).
+    if (!canAccessArchivoRow(auth.user, { oficina: expediente.oficina, oficinaId: expediente.oficina_id, owner: expediente.uploaded_by })) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+
     const wantsMeta = new URL(_request.url).searchParams.get("meta") === "1";
     if (wantsMeta) {
       return NextResponse.json({ expediente });
@@ -115,7 +116,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -135,6 +136,9 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       `expedientes_archivo?id=eq.${id}&select=${SELECT}`,
     );
     if (!expediente) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+    if (!canAccessArchivoRow(auth.user, { oficina: expediente.oficina, oficinaId: expediente.oficina_id, owner: expediente.uploaded_by })) {
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 
@@ -179,7 +183,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -187,9 +191,12 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     const { id } = await context.params;
 
     const [expediente] = await supabaseRest<ExpedienteArchivo[]>(
-      `expedientes_archivo?id=eq.${id}&select=id,title,storage_bucket,storage_path`,
+      `expedientes_archivo?id=eq.${id}&select=id,title,oficina,uploaded_by,storage_bucket,storage_path`,
     );
     if (!expediente) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+    if (!canAccessArchivoRow(auth.user, { oficina: expediente.oficina, oficinaId: expediente.oficina_id, owner: expediente.uploaded_by })) {
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 
@@ -219,18 +226,31 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 // PATCH: edita metadata del expediente (whitelist). No toca el PDF ni reindexa.
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
     getSupabaseServerConfig();
     const { id } = await context.params;
 
+    const [existing] = await supabaseRest<ExpedienteArchivo[]>(
+      `expedientes_archivo?id=eq.${id}&select=id,oficina,oficina_id,uploaded_by`,
+    );
+    if (!existing) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+    if (!canAccessArchivoRow(auth.user, { oficina: existing.oficina, oficinaId: existing.oficina_id, owner: existing.uploaded_by })) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+
     const body = (await request.json()) as Record<string, unknown>;
     const updates: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(body)) {
       if (!PATCHABLE_COLUMNS.has(key)) {
+        continue;
+      }
+      if (key === "oficina" && !auth.user.isAdmin) {
         continue;
       }
       if (key === "empastado") {
@@ -282,7 +302,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 // reprocesa el nuevo en segundo plano (status -> processing -> indexed/error).
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -311,6 +331,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       `expedientes_archivo?id=eq.${id}&select=${SELECT}`,
     );
     if (!expediente) {
+      return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+    }
+    if (!canAccessArchivoRow(auth.user, { oficina: expediente.oficina, oficinaId: expediente.oficina_id, owner: expediente.uploaded_by })) {
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 

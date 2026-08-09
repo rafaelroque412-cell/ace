@@ -80,7 +80,10 @@
   line-height: 1.3;
 }
 
+/* Medida de lectura: es la unica prosa de bloque a ancho completo de esta
+   pantalla. Sin tope se estiraba con la columna de contenido. */
 .expPanelHeaderSubtitle {
+  max-width: 78ch;
   margin: 4px 0 0;
   font-size: 14px;
   color: var(--exp-muted);
@@ -112,6 +115,23 @@
   z-index: 10;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+/* La lista de pestañas se separó de la barra para que `role="tablist"` no
+   envolviese también el botón de atajos. Hereda el reparto que tenía la barra,
+   así que el aspecto no cambia: el botón sigue empujado a la derecha por su
+   propio `margin-left: auto`. */
+.expTabBarPestanas {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Antes iba en línea; se trae a clase al cablear el ARIA de la lista. */
+.expSubirModos {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .expTabBar::-webkit-scrollbar {
@@ -2246,6 +2266,24 @@
   background: var(--exp-line-soft);
 }
 
+/* Radix saca el panel a un portal, donde deja de ser hijo flex del overlay y
+   pierde el anclaje que le daba su `justify-content: flex-end`. Estas reglas se
+   lo devuelven sin tocar el aspecto. */
+.expSlideOverPortal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 101;
+}
+
+/* La variante centrada no puede centrarse con `transform`: `expPopIn` anima esa
+   misma propiedad y la desplazaría a mitad de animación. `inset` + `margin:auto`
+   centra sin gastarla. */
+.expSlideOver-modal.expSlideOverPortal {
+  inset: 0;
+  margin: auto;
+}
+
 /* --- Chat panel --- */
 .expChatPanel {
   width: min(420px, 92vw);
@@ -2486,6 +2524,17 @@
   justify-content: center;
   padding-top: 10vh;
   animation: expFadeIn 120ms ease;
+}
+
+/* Portada por Radix, la paleta deja de ser hija flex del overlay. Se ancla con
+   márgenes automáticos y no con `transform`, que ya lo gasta `expPopIn`. */
+.expCmd.expCmdPortal {
+  position: fixed;
+  top: 10vh;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  z-index: 201;
 }
 
 .expCmd {
@@ -3189,7 +3238,12 @@
    ========================================================================== */
 
 /* --- Onboarding tour --- */
+/* El ancho y el z-index venían en línea desde el cálculo de posición a mano.
+   Ahora los coloca Radix, que copia a su envoltorio el z-index calculado de la
+   tarjeta: tiene que quedar por encima del foco de luz (200). */
 .expTour {
+  width: min(360px, calc(100vw - 32px));
+  z-index: 201;
   background: var(--exp-panel);
   border: 1px solid var(--exp-line);
   border-radius: var(--exp-radius-lg);
@@ -3506,6 +3560,16 @@
   justify-content: center;
   padding: 20px;
   animation: expFadeIn 160ms ease;
+}
+
+/* Igual que la paleta: portado por Radix pierde el centrado que le daba el
+   overlay, y `expPopIn` ya usa `transform`. Márgenes automáticos, entonces. */
+.expConfirmDialog.expConfirmPortal {
+  position: fixed;
+  inset: 20px;
+  margin: auto;
+  height: fit-content;
+  z-index: 251;
 }
 
 .expConfirmDialog {

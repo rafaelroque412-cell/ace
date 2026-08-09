@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { X, ChevronLeft, ChevronRight, Sparkles, HelpCircle } from "lucide-react";
 
 export type TourStep = {
@@ -21,30 +22,56 @@ type Props = {
 
 export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [objetivo, setObjetivo] = useState<Element | null>(null);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
   const step = steps[currentStep];
   const isLast = currentStep === steps.length - 1;
   const isFirst = currentStep === 0;
 
-  const updateTargetRect = useCallback(() => {
+  // Localiza el elemento del paso, lo trae a la vista y mantiene medido su
+  // recuadro. Se remide también al hacer scroll —antes solo al redimensionar—,
+  // porque el foco de luz se quedaba atrás en cuanto la página se movía.
+  //
+  // El elemento va en estado y no en una referencia a propósito: Radix lee el
+  // ancla desde un efecto propio, y los efectos del hijo corren antes que los
+  // del padre, así que una referencia mutada aquí llegaría un render tarde.
+  useEffect(() => {
     if (!open || !step) return;
     const el = document.querySelector(step.target);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        const rect = el.getBoundingClientRect();
-        setTargetRect(rect);
-      }, 200);
+    setObjetivo(el);
+    if (!el) {
+      setTargetRect(null);
+      return;
     }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const medir = () => setTargetRect(el.getBoundingClientRect());
+    medir();
+    // El desplazamiento suave sigue en marcha: cada evento de scroll corrige la
+    // medida, así que no hace falta adivinar cuánto tarda con un temporizador.
+    window.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      window.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
   }, [open, step]);
 
-  useEffect(() => {
-    updateTargetRect();
-    const handleResize = () => updateTargetRect();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [updateTargetRect]);
+  // Ancla para Radix: un elemento real vale tal cual, porque lo único que se le
+  // pide es `getBoundingClientRect`. Sin objetivo, se ancla al centro de la
+  // ventana. La identidad del objeto cambia con el paso, que es como Radix se
+  // entera de que debe recolocarse.
+  const anclaje = useMemo<React.RefObject<{ getBoundingClientRect(): DOMRect } | null>>(
+    () => ({
+      current:
+        objetivo ??
+        {
+          getBoundingClientRect: () =>
+            new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 0, 0),
+        },
+    }),
+    [objetivo],
+  );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -82,54 +109,29 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
       }
     : {};
 
-  const popoverStyle: React.CSSProperties = (() => {
-    if (!targetRect) {
-      return {
-        position: "fixed",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        zIndex: 201,
-      };
-    }
-    const popoverWidth = 360;
-    const popoverHeight = 240;
-    const margin = 16;
-    const pos = step.position ?? "bottom";
-
-    let top = 0;
-    let left = 0;
-
-    if (pos === "bottom") {
-      top = targetRect.bottom + margin;
-      left = targetRect.left + targetRect.width / 2 - popoverWidth / 2;
-    } else if (pos === "top") {
-      top = targetRect.top - popoverHeight - margin;
-      left = targetRect.left + targetRect.width / 2 - popoverWidth / 2;
-    } else if (pos === "right") {
-      top = targetRect.top + targetRect.height / 2 - popoverHeight / 2;
-      left = targetRect.right + margin;
-    } else if (pos === "left") {
-      top = targetRect.top + targetRect.height / 2 - popoverHeight / 2;
-      left = targetRect.left - popoverWidth - margin;
-    }
-
-    left = Math.max(margin, Math.min(left, window.innerWidth - popoverWidth - margin));
-    top = Math.max(margin, Math.min(top, window.innerHeight - popoverHeight - margin));
-
-    return {
-      position: "fixed",
-      top,
-      left,
-      width: popoverWidth,
-      zIndex: 201,
-    };
-  })();
-
+  // La colocación la resuelve Radix (Floating UI): voltea de lado cuando no
+  // cabe y se remide al hacer scroll. El cálculo a mano que había aquí daba por
+  // hecho que la tarjeta medía 240px de alto —no es cierto, depende del texto de
+  // cada paso— y, al no poder voltear, se limitaba a pegarse al borde de la
+  // ventana, con lo que a veces tapaba justo el elemento que estaba señalando.
   return (
     <>
       {targetRect ? <div style={spotlightStyle} aria-hidden="true" /> : null}
-      <div className="expTour" style={popoverStyle} role="dialog" aria-label="Tutorial guiado">
+      {/* Controlado sin `onOpenChange` a propósito: solo lo cierran el aspa, el
+          Escape global y el último paso. Un clic fuera no debe cerrarlo, porque
+          fuera está precisamente lo que el tour te pide que toques. */}
+      <Popover.Root open>
+        {/* El ancla real es `virtualRef`; el div que Radix renderiza aquí no se
+            usa para medir, así que se oculta para no dejar una caja suelta. */}
+        <Popover.Anchor style={{ display: "none" }} virtualRef={anclaje} />
+        <Popover.Portal>
+          <Popover.Content
+            aria-label="Tutorial guiado"
+            className="expTour"
+            collisionPadding={16}
+            side={step.position ?? "bottom"}
+            sideOffset={16}
+          >
         <div className="expTourHeader">
           <div className="expTourBadge">
             <Sparkles size={12} /> Paso {currentStep + 1} de {steps.length}
@@ -193,7 +195,9 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
             )}
           </div>
         </div>
-      </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
     </>
   );
 }

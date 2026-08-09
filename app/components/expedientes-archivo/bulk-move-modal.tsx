@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X, Save } from "lucide-react";
+import { Save } from "lucide-react";
+import { ExpSlideOver } from "./slide-over-shell";
 import type { BulkMoveModalProps } from "./types";
 
-export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
+export function BulkMoveModal({ count, onClose, onApply, canChangeOficina = true }: BulkMoveModalProps) {
   const [oficina, setOficina] = useState("");
   const [nroEstante, setNroEstante] = useState("");
   const [nroPiso, setNroPiso] = useState("");
@@ -26,32 +27,14 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
     onApply(updates);
   }
 
+  // Escape, foco atrapado y bloqueo de scroll los aporta ExpSlideOver (Radix).
   return (
-    <div className="expSlideOverOverlay" onClick={onClose}>
-      <aside
-        className="expSlideOver expSlideOver-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Mover o reasignar expedientes"
-      >
-        <div className="expSlideOver-header">
-          <div>
-            <h3 className="expSlideOver-title">
-              Mover / reasignar {count} expediente{count === 1 ? "" : "s"}
-            </h3>
-            <p className="expSlideOver-subtitle">
-              Solo se aplican los campos con valor. El resto se preserva.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="expSlideOver-close"
-            onClick={onClose}
-            aria-label="Cerrar"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <ExpSlideOver
+      modificador="expSlideOver-modal"
+      onClose={onClose}
+      subtitulo="Solo se aplican los campos con valor. El resto se preserva."
+      titulo={`Mover / reasignar ${count} expediente${count === 1 ? "" : "s"}`}
+    >
         <div className="expSlideOver-body">
           <div className="expMessage expMessage-info" style={{ margin: 0 }}>
             <strong style={{ fontWeight: 700 }}>
@@ -59,15 +42,17 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
             </strong>
           </div>
           <div className="expBulkMove-grid">
-            <div className="expField" style={{ gridColumn: "1 / -1" }}>
-              <label className="expField-label">Oficina</label>
-              <input
-                value={oficina}
-                onChange={(e) => setOficina(e.target.value)}
-                placeholder="Si lo dejas vacío no se cambia"
-                className="expField-input"
-              />
-            </div>
+            {canChangeOficina ? (
+              <div className="expField" style={{ gridColumn: "1 / -1" }}>
+                <label className="expField-label">Oficina</label>
+                <input
+                  value={oficina}
+                  onChange={(e) => setOficina(e.target.value)}
+                  placeholder="Si lo dejas vacío no se cambia"
+                  className="expField-input"
+                />
+              </div>
+            ) : null}
             <div className="expField">
               <label className="expField-label">Estante</label>
               <input
@@ -139,7 +124,6 @@ export function BulkMoveModal({ count, onClose, onApply }: BulkMoveModalProps) {
             <Save size={16} /> Aplicar a {count} ({filledCount} campo{filledCount === 1 ? "" : "s"})
           </button>
         </div>
-      </aside>
-    </div>
+    </ExpSlideOver>
   );
 }

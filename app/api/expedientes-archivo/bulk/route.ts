@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireEditor } from "@/lib/auth";
+import { canAccessArchivoRow, getArchivoScopeLevel, requireDec } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
   normalizeCatalogValue,
@@ -25,7 +25,7 @@ function asString(body: Record<string, unknown>, key: string, max = 500): string
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }
@@ -90,6 +90,26 @@ export async function POST(request: Request) {
     }
 
     const inList = body.ids.map((id) => `"${id}"`).join(",");
+
+    if (getArchivoScopeLevel(auth.user) !== "all") {
+      const targets = await supabaseRest<Array<{ id: string; oficina: string | null; oficina_id: string | null; uploaded_by: string | null }>>(
+        `expedientes_archivo?id=in.(${inList})&select=id,oficina,oficina_id,uploaded_by`,
+      );
+      const unauthorized = targets.filter(
+        (t) => !canAccessArchivoRow(auth.user, { oficina: t.oficina, oficinaId: t.oficina_id, owner: t.uploaded_by }),
+      );
+      if (unauthorized.length > 0 || targets.length !== body.ids.length) {
+        return NextResponse.json(
+          { error: "No tienes acceso a todos los expedientes seleccionados" },
+          { status: 403 },
+        );
+      }
+    }
+
+    if (!auth.user.isAdmin && "oficina" in updates) {
+      delete updates.oficina;
+    }
+
     await supabaseRest(`expedientes_archivo?id=in.(${inList})`, {
       body: JSON.stringify(updates),
       method: "PATCH",

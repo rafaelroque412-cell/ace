@@ -1,233 +1,292 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Building2,
-  Download,
-  FileSignature,
-  History,
-  Library,
-  Loader2,
-  MapPin,
-  Save,
-  ScrollText,
-  Settings,
-  Sparkles,
-  UploadCloud,
-} from "lucide-react";
+import { useCallback, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import {
   DOC_TIPOS,
-  type DocTipo,
   exportRespuestaDocx,
   generateRespuesta,
-  leerDocumentoPdf,
-  listOficinas,
-  listRespuestas,
-  type OficinaOption,
+  previewRespuestaPdf,
+  refinarRespuesta,
   saveRespuesta,
-  type RespuestaAntecedente,
-  type RespuestaResult,
-  type RespuestaTokenUsage,
   type SavedRespuesta,
 } from "@/lib/expedientes-archivo-actions";
-import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import { rememberDestinatario } from "@/lib/destinatarios-frecuentes";
+import { ConfirmDialog } from "../confirm-dialog";
+import { useRespuestaState } from "./use-respuesta-state";
+import { DocumentoRecibido } from "./respuesta/documento-recibido";
+import { ResumenTecnicoBanner } from "./respuesta/resumen-tecnico-banner";
+import { ConfiguracionRespuesta } from "./respuesta/configuracion-respuesta";
+import { BorradorEditor } from "./respuesta/borrador-editor";
+import { DatosDocumento } from "./respuesta/datos-documento";
+import { HistorialRespuestas } from "./respuesta/historial-respuestas";
 
 type ToastKind = "success" | "error" | "warning" | "info";
-type BaseLegalItem = { referencia: string; texto: string };
 
-function formatCost(u: RespuestaTokenUsage | undefined): string | null {
-  if (!u) return null;
-  const total = u.inputTokens + u.outputTokens;
-  return `${total.toLocaleString("es-PE")} tokens${u.estimatedCostUsd > 0 ? ` · ~$${u.estimatedCostUsd.toFixed(4)}` : ""}`;
-}
-
-// Panel "mesa de partes". El PDF recibido es antecedente; el usuario elige la
-// OFICINA emisora (configurada por el admin), escribe qué responder y la IA
-// redacta el cuerpo. La numeración, firma y hoja membretada salen de la oficina.
+// Orquestador de la pestana Responder. Antes: 663 lineas con 18 useState.
+// Ahora: usa useRespuestaState() + 5 sub-componentes (< 250 lineas).
 export function RespuestaPanel({
-  showToast,
+  showToast: externalShowToast,
 }: {
   showToast: (message: string, kind?: ToastKind) => void;
 }) {
-  // Documento recibido (antecedente)
-  const [documentoTexto, setDocumentoTexto] = useState("");
-  const [remitenteDoc, setRemitenteDoc] = useState("");
-  const [asunto, setAsunto] = useState("");
-  const [reading, setReading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Tu respuesta
-  const [oficinas, setOficinas] = useState<OficinaOption[]>([]);
-  const [oficinaId, setOficinaId] = useState("");
-  const [tipoDocumento, setTipoDocumento] = useState<DocTipo>("OFICIO");
-  const [intencion, setIntencion] = useState("");
-  const [tone, setTone] = useState<"cercano" | "formal" | "tecnico">("formal");
-  const [length, setLength] = useState<"concisa" | "media" | "detallada">("media");
-  const [includeAntecedentes, setIncludeAntecedentes] = useState(true);
-
-  // Resultado / edición
-  const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState<RespuestaResult | null>(null);
-  const [cuerpo, setCuerpo] = useState("");
-  const [baseLegal, setBaseLegal] = useState<BaseLegalItem[]>([]);
-  const [antecedentes, setAntecedentes] = useState<RespuestaAntecedente[]>([]);
-  const [genUsage, setGenUsage] = useState<RespuestaTokenUsage | undefined>(undefined);
-
-  // Export
-  const [nroOficio, setNroOficio] = useState("");
-  const [nroAsignado, setNroAsignado] = useState(false);
-  const [destinatario, setDestinatario] = useState("");
-  const [cargoDestinatario, setCargoDestinatario] = useState("");
-  const [exportFormat, setExportFormat] = useState<"pdf" | "docx">("pdf");
+  const state = useRespuestaState();
+  const [confirmSave, setConfirmSave] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const [savingRespuesta, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [savingRespuesta, setSavingRespuesta] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [result, setResult] = useState<{
+    respuesta: string;
+    sources: Array<{ citation: string; title: string; documentNumber: string | null; excerpt: string }>;
+    antecedentes: Array<{ anio: number | null; excerpt: string; expedienteId: string; serie: string | null; title: string; ubicacion: string }>;
+    tokenUsage?: { inputTokens: number; outputTokens: number; estimatedCostUsd: number };
+  } | null>(null);
 
-  const [saved, setSaved] = useState<SavedRespuesta[]>([]);
-
-  const reloadSaved = useCallback(() => {
-    void listRespuestas(20).then(setSaved).catch(() => undefined);
-  }, []);
-
-  // Lista de oficinas con su oficina por defecto segun el usuario logueado.
-  // - admin: recibe TODAS las oficinas
-  // - dec/consulta/legal: solo las de SU entidad
-  // El backend devuelve `defaultOficinaId` (la oficina del usuario) para
-  // pre-seleccionarla en el dropdown sin que tenga que elegir manualmente.
-  const [isAdminOficinas, setIsAdminOficinas] = useState(false);
-  const [userEntity, setUserEntity] = useState<string | null>(null);
-  const [totalActivas, setTotalActivas] = useState(0);
-  const reloadOficinas = useCallback(() => {
-    void listOficinas()
-      .then((data) => {
-        setOficinas(data.oficinas);
-        setIsAdminOficinas(data.isAdmin);
-        setUserEntity(data.userEntity);
-        setTotalActivas(data.totalActivas);
-        setOficinaId((prev) => prev || data.defaultOficinaId || data.oficinas[0]?.id || "");
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    reloadOficinas();
-    reloadSaved();
-  }, [reloadOficinas, reloadSaved]);
-
-  const oficina = oficinas.find((o) => o.id === oficinaId) ?? null;
-  const previewNumero = oficina?.previews?.[tipoDocumento] ?? "";
-  const numeroEfectivo = nroOficio.trim() || previewNumero;
-
-  const handleFile = useCallback(
-    async (file: File | null | undefined) => {
-      if (!file) return;
-      if (file.type !== "application/pdf") return showToast("Solo se permiten archivos PDF.", "warning");
-      if (file.size > maxPdfSizeBytes) return showToast(`El PDF supera ${maxPdfSizeLabel}.`, "warning");
-      setReading(true);
-      try {
-        const res = await leerDocumentoPdf(file);
-        setDocumentoTexto(res.texto);
-        if (res.asunto) setAsunto((prev) => prev || res.asunto || "");
-        if (res.remitente) setRemitenteDoc((prev) => prev || res.remitente || "");
-        showToast("PDF leído como antecedente. Ahora escribe qué quieres responder.", "success");
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : "No se pudo leer el PDF", "error");
-      } finally {
-        setReading(false);
-      }
-    },
-    [showToast],
+  // Adaptamos el showToast del panel padre a la firma interna
+  const showToast = useCallback(
+    (msg: string, kind?: ToastKind) => externalShowToast(msg, kind ?? "info"),
+    [externalShowToast],
   );
 
   async function handleGenerate() {
-    if (intencion.trim().length < 10) return showToast("Escribe qué quieres responder (mín. 10 caracteres).", "warning");
-    setGenerating(true);
+    if (state.intencion.trim().length < 10) {
+      showToast("Escribe qué quieres responder (mín. 10 caracteres).", "warning");
+      return;
+    }
+    state.setGenerating(true);
     try {
       const res = await generateRespuesta({
-        intencion: intencion.trim(),
-        tipoDocumento,
-        documentoTexto: documentoTexto.trim() || undefined,
-        remitente: remitenteDoc.trim() || undefined,
-        asunto: asunto.trim() || undefined,
-        tone,
-        length,
-        includeAntecedentes,
+        intencion: state.intencion.trim(),
+        tipoDocumento: state.tipoDocumento,
+        documentoTexto: state.documentoTexto.trim() || undefined,
+        remitente: state.remitenteDoc.trim() || undefined,
+        destinatario: state.destinatario.trim() || undefined,
+        cargoDestinatario: state.cargoDestinatario.trim() || undefined,
+        asunto: state.asunto.trim() || undefined,
+        tone: state.tone,
+        length: state.length,
+        includeAntecedentes: state.includeAntecedentes,
+        normativaIds: state.normativaIds.length > 0 ? state.normativaIds : undefined,
+        adjuntosIds: state.adjuntos.length > 0 ? state.adjuntos.map((a) => a.documentId) : undefined,
+        antecedenteId: state.antecedenteId ?? undefined,
+        entityName: state.oficina?.entidad || undefined,
+        oficinaId: state.oficinaId || undefined,
       });
-      setResult(res);
-      setCuerpo(res.respuesta);
-      setBaseLegal((res.sources ?? []).map((s) => ({ referencia: s.citation || s.title, texto: s.excerpt })));
-      setAntecedentes(res.antecedentes ?? []);
-      setGenUsage(res.tokenUsage);
+      setResult(res as never);
+      state.setCuerpo(res.respuesta);
+      state.setBaseLegal(
+        (res.sources ?? []).map((s) => ({ referencia: s.citation || s.title, texto: s.excerpt })),
+      );
+      state.setAntecedentes((res.antecedentes ?? []) as never);
+      state.setGenUsage(res.tokenUsage);
       const partes = [
-        res.sources.length > 0 ? `${res.sources.length} norma(s)` : "sin normativa directa",
-        (res.antecedentes?.length ?? 0) > 0 ? `${res.antecedentes?.length} antecedente(s)` : null,
+        (res.sources ?? []).length > 0 ? `${(res.sources ?? []).length} norma(s)` : "sin normativa directa",
+        (res.antecedentes ?? []).length > 0 ? `${(res.antecedentes ?? []).length} antecedente(s)` : null,
       ].filter(Boolean);
-      showToast(`Cuerpo generado (${partes.join(", ")}). Revísalo antes de emitir.`, res.sources.length === 0 ? "warning" : "success");
+      showToast(
+        `Cuerpo generado (${partes.join(", ")}). Revísalo antes de emitir.`,
+        (res.sources ?? []).length === 0 ? "warning" : "success",
+      );
     } catch (err) {
       showToast(err instanceof Error ? err.message : "No se pudo generar la respuesta", "error");
     } finally {
-      setGenerating(false);
+      state.setGenerating(false);
     }
   }
 
-  async function handleSaveRespuesta() {
-    if (!cuerpo.trim()) return showToast("No hay cuerpo de respuesta para guardar.", "warning");
-    if (!oficinaId) return showToast("Elige la oficina emisora.", "warning");
-    setSavingRespuesta(true);
+  // Refinamiento conversacional: aplica SOLO el cambio pedido al borrador.
+  async function handleRefine(instruccion: string) {
+    if (!state.cuerpo.trim()) {
+      showToast("Primero genera o escribe el borrador.", "warning");
+      return;
+    }
+    setRefining(true);
     try {
-      const res = await saveRespuesta({
-        nroOficio: numeroEfectivo || undefined,
-        tipoDocumento,
-        oficinaId,
-        assignNumber: !nroAsignado,
-        anio: new Date().getFullYear(),
-        asunto: asunto.trim() || undefined,
-        destinatario: destinatario.trim() || remitenteDoc.trim() || undefined,
-        cargoDestinatario: cargoDestinatario.trim() || undefined,
-        remitente: oficina?.responsableNombre ?? undefined,
-        documentoTexto: documentoTexto.trim() || undefined,
-        cuerpo: cuerpo.trim(),
-        baseLegal,
-        antecedentes,
-        entity: { name: oficina?.entidad ?? "", ruc: oficina?.ruc ?? "" },
-        expedienteId: antecedentes[0]?.expedienteId ?? null,
-        tone,
-        length,
-        tokenUsage: genUsage,
+      const res = await refinarRespuesta({
+        cuerpo: state.cuerpo,
+        instruccion,
+        tipoDocumento: state.tipoDocumento,
+        tone: state.tone,
       });
-      if (res.nroOficio) {
-        setNroOficio(res.nroOficio);
-        setNroAsignado(true);
+      state.setCuerpo(res.cuerpo);
+      if (res.tokenUsage) state.setGenUsage(res.tokenUsage);
+      showToast("Cambio aplicado al borrador.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "No se pudo aplicar el cambio", "error");
+    } finally {
+      setRefining(false);
+    }
+  }
+
+  // Vista previa del PDF real (con membrete) sin descargar.
+  async function handlePreviewPdf(): Promise<string | null> {
+    if (!state.cuerpo.trim()) {
+      showToast("No hay cuerpo de respuesta para previsualizar.", "warning");
+      return null;
+    }
+    try {
+      return await previewRespuestaPdf({
+        asunto:
+          state.asunto.trim() ||
+          (state.tipoDocumento === "CARTA" ? "" : "Respuesta a su solicitud"),
+        cargoDestinatario: state.cargoDestinatario.trim() || undefined,
+        cargoRemitente: state.oficina?.responsableCargo ?? undefined,
+        cuerpo: state.cuerpo.trim(),
+        destinatario: state.destinatario.trim() || state.remitenteDoc.trim() || "[DESTINATARIO]",
+        entity: { name: state.oficina?.entidad ?? "", ruc: state.oficina?.ruc ?? "" },
+        lugar: state.lugar.trim() || undefined,
+        nroOficio: state.numeroEfectivo || undefined,
+        oficinaId: state.oficinaId,
+        referencia: state.referencia.trim() || undefined,
+        remitente: state.oficina?.responsableNombre ?? undefined,
+        tipoDocumento: state.tipoDocumento,
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "No se pudo generar la vista previa", "error");
+      return null;
+    }
+  }
+
+  function validateSave(): string | null {
+    if (!state.cuerpo.trim()) return "No hay cuerpo de respuesta para guardar.";
+    if (!state.oficinaId) return "Elige la oficina emisora.";
+    if (
+      // Cubre tambien OFICIO/MEMORANDUM MULTIPLE. CONTRATO e INFORME no
+      // llevan destinatario epistolar.
+      (state.tipoDocumento.includes("OFICIO") ||
+        state.tipoDocumento.includes("CARTA") ||
+        state.tipoDocumento.includes("MEMORANDUM")) &&
+      !state.destinatario.trim() &&
+      !state.remitenteDoc.trim()
+    ) {
+      return "Indica el destinatario o el remitente para guardar la respuesta.";
+    }
+    if (!state.asunto.trim()) return "Indica el asunto del documento antes de guardar.";
+    return null;
+  }
+
+  // Guarda/archiva la respuesta (asigna correlativo si aun no tiene).
+  // Devuelve el numero asignado o null si la validacion fallo.
+  async function saveRespuestaNow(): Promise<{
+    ok: boolean;
+    nro: string | null;
+    /** Relleno si se pidió correlativo y no se pudo asignar: se guardó sin número. */
+    numeracionError?: string | null;
+  }> {
+    const error = validateSave();
+    if (error) {
+      showToast(error, "warning");
+      return { ok: false, nro: null };
+    }
+    const res = await saveRespuesta({
+      anio: new Date().getFullYear(),
+      antecedentes: state.antecedentes as never,
+      antecedenteId: state.antecedenteId ?? undefined,
+      assignNumber: !state.nroAsignado,
+      baseLegal: state.baseLegal,
+      cargoDestinatario: state.cargoDestinatario.trim() || undefined,
+      cuerpo: state.cuerpo.trim(),
+      destinatario: state.destinatario.trim() || state.remitenteDoc.trim() || undefined,
+      documentoTexto: state.documentoTexto.trim() || undefined,
+      entity: { name: state.oficina?.entidad ?? "", ruc: state.oficina?.ruc ?? "" },
+      expedienteId: (state.antecedentes[0] as { expedienteId?: string } | undefined)?.expedienteId ?? null,
+      length: state.length,
+      nroOficio: state.numeroEfectivo || undefined,
+      oficinaId: state.oficinaId,
+      remitente: state.oficina?.responsableNombre ?? undefined,
+      // Sin tipoDocumento el backend no puede asignar el correlativo
+      // (RPC expedientes_next_doc_number es por oficina + tipo).
+      tipoDocumento: state.tipoDocumento,
+      tone: state.tone,
+    });
+    if (res.nroOficio) {
+      state.setNroOficio(res.nroOficio);
+      state.setNroAsignado(true);
+    }
+    // Recordar el destinatario para autocompletar futuros documentos.
+    rememberDestinatario(state.destinatario, state.cargoDestinatario);
+    state.reloadSaved();
+    state.reloadOficinas?.();
+    return { ok: true, nro: res.nroOficio ?? null, numeracionError: res.numeracionError ?? null };
+  }
+
+  async function handleSaveRespuesta() {
+    setSaving(true);
+    try {
+      const saved = await saveRespuestaNow();
+      if (saved.ok && saved.numeracionError) {
+        // Se guardó, pero sin número: sin él el documento no se puede emitir,
+        // así que no vale con decir "archivada".
+        showToast(
+          "Respuesta archivada SIN número: no se pudo asignar el correlativo. Revisa la numeración de la oficina en Configuración.",
+          "warning",
+        );
+      } else if (saved.ok) {
+        showToast(`Respuesta archivada${saved.nro ? ` como ${saved.nro}` : ""}.`, "success");
       }
-      showToast(`Respuesta archivada${res.nroOficio ? ` como ${res.nroOficio}` : ""}.`, "success");
-      reloadSaved();
-      reloadOficinas();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "No se pudo guardar la respuesta", "error");
     } finally {
-      setSavingRespuesta(false);
+      setSaving(false);
     }
   }
 
   async function handleExport() {
-    if (!cuerpo.trim()) return showToast("No hay cuerpo de respuesta para exportar.", "warning");
-    if (!oficinaId) return showToast("Elige la oficina emisora.", "warning");
+    if (!state.cuerpo.trim()) {
+      showToast("No hay cuerpo de respuesta para exportar.", "warning");
+      return;
+    }
     setExporting(true);
     try {
+      // El documento FINAL siempre queda archivado: si aun no tiene numero,
+      // se guarda y numera antes de descargar (asi el PDF/Word sale con el
+      // correlativo real y el contenido queda registrado).
+      let numero = state.numeroEfectivo;
+      if (!state.nroAsignado) {
+        const saved = await saveRespuestaNow();
+        if (!saved.ok) {
+          setExporting(false);
+          return;
+        }
+        if (saved.nro) numero = saved.nro;
+        if (saved.numeracionError) {
+          // Se descarga igual, pero el documento sale sin correlativo: hay que
+          // decirlo antes de que alguien lo firme creyendo que está numerado.
+          showToast(
+            "Se archivó SIN número: el documento se descargará sin correlativo. Revisa la numeración de la oficina en Configuración.",
+            "warning",
+          );
+        } else {
+          showToast(`Documento archivado${saved.nro ? ` como ${saved.nro}` : ""} antes de descargar.`, "info");
+        }
+      }
       await exportRespuestaDocx({
-        format: exportFormat,
-        oficinaId,
-        entity: { name: oficina?.entidad ?? "", ruc: oficina?.ruc ?? "" },
-        nroOficio: numeroEfectivo || undefined,
-        destinatario: destinatario.trim() || remitenteDoc.trim() || undefined,
-        cargoDestinatario: cargoDestinatario.trim() || undefined,
-        asunto: asunto.trim() || "Respuesta a su solicitud",
-        cuerpo: cuerpo.trim(),
-        baseLegal,
-        remitente: oficina?.responsableNombre ?? undefined,
-        cargoRemitente: oficina?.responsableCargo ?? undefined,
+        // En la CARTA el asunto es opcional; en los demas tipos siempre va.
+        asunto:
+          state.asunto.trim() ||
+          (state.tipoDocumento === "CARTA" ? "" : "Respuesta a su solicitud"),
+        // baseLegal NO se envia al export: solo se usa como contexto
+        // para la IA en /generate. El usuario la ve en la UI del borrador.
+        cargoDestinatario: state.cargoDestinatario.trim() || undefined,
+        cargoRemitente: state.oficina?.responsableCargo ?? undefined,
+        cuerpo: state.cuerpo.trim(),
+        destinatario: state.destinatario.trim() || state.remitenteDoc.trim() || "[DESTINATARIO]",
+        entity: { name: state.oficina?.entidad ?? "", ruc: state.oficina?.ruc ?? "" },
+        format: state.exportFormat,
+        lugar: state.lugar.trim() || undefined,
+        nroOficio: numero || undefined,
+        oficinaId: state.oficinaId,
+        referencia: state.referencia.trim() || undefined,
+        remitente: state.oficina?.responsableNombre ?? undefined,
+        tipoDocumento: state.tipoDocumento,
       });
-      showToast(`Documento .${exportFormat} descargado.`, "success");
+      showToast(`Documento .${state.exportFormat} descargado.`, "success");
+      rememberDestinatario(state.destinatario, state.cargoDestinatario);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "No se pudo exportar el documento", "error");
     } finally {
@@ -236,306 +295,251 @@ export function RespuestaPanel({
   }
 
   function openSaved(r: SavedRespuesta) {
-    setCuerpo(r.cuerpo);
-    setBaseLegal(Array.isArray(r.base_legal) ? r.base_legal : []);
-    setAntecedentes(Array.isArray(r.antecedentes) ? r.antecedentes : []);
-    setAsunto(r.asunto ?? "");
-    setRemitenteDoc(r.remitente ?? "");
-    setNroOficio(r.nro_oficio ?? "");
-    setNroAsignado(Boolean(r.nro_oficio));
-    setDestinatario(r.destinatario ?? "");
-    if (r.tipo_documento && DOC_TIPOS.includes(r.tipo_documento as DocTipo)) setTipoDocumento(r.tipo_documento as DocTipo);
-    setGenUsage(r.token_usage ?? undefined);
-    setResult({ respuesta: r.cuerpo, sources: [], antecedentes: r.antecedentes });
-    showToast("Respuesta cargada en el editor.", "info");
+    state.setCuerpo(r.cuerpo);
+    state.setBaseLegal(Array.isArray(r.base_legal) ? r.base_legal : []);
+    state.setAntecedentes((r.antecedentes ?? []) as never);
+    state.setAsunto(r.asunto ?? "");
+    state.setRemitenteDoc(r.remitente ?? "");
+    state.setNroOficio(r.nro_oficio ?? "");
+    state.setNroAsignado(Boolean(r.nro_oficio));
+    state.setDestinatario(r.destinatario ?? "");
+    if (r.tipo_documento && (DOC_TIPOS as readonly string[]).includes(r.tipo_documento)) {
+      state.setTipoDocumento(r.tipo_documento as never);
+    }
+    state.setGenUsage(r.token_usage ?? undefined);
+    setResult({
+      antecedentes: r.antecedentes as never,
+      respuesta: r.cuerpo,
+      sources: [],
+      tokenUsage: r.token_usage ?? undefined,
+    } as never);
+    state.setDocumentoTexto(r.documento_texto ?? "");
+    state.setAntecedenteId(r.antecedente_id ?? null);
+    state.setAntecedenteMeta(null);
+    showToast(
+      r.version && r.version > 1
+        ? `Version v${r.version} cargada en el editor.`
+        : "Respuesta cargada en el editor.",
+      "info",
+    );
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Guía visual para usuarios no técnicos: en qué paso del flujo están.
+  // Cada chip lleva a su sección al hacer clic.
+  const pasos: Array<{ label: string; done: boolean; anchor: string; ready: boolean }> = [
+    {
+      label: "Sube el documento",
+      done: Boolean(state.documentoTexto.trim() || state.antecedenteId),
+      anchor: "paso-documento",
+      ready: true,
+    },
+    {
+      label: "Di qué responder",
+      done: state.intencion.trim().length >= 10,
+      anchor: "paso-respuesta",
+      ready: true,
+    },
+    {
+      label: "Revisa el borrador",
+      done: Boolean(state.cuerpo.trim()),
+      anchor: "paso-borrador",
+      ready: Boolean(result) || Boolean(state.cuerpo.trim()),
+    },
+    {
+      label: "Numera y descarga",
+      done: state.nroAsignado,
+      anchor: "paso-emitir",
+      ready: Boolean(result) || Boolean(state.cuerpo.trim()),
+    },
+  ];
+  const pasoActual = pasos.findIndex((p) => !p.done);
+
+  function goToPaso(p: (typeof pasos)[number]) {
+    if (!p.ready) {
+      showToast("Primero genera el borrador con la IA (paso 2).", "info");
+      return;
+    }
+    document.getElementById(p.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
     <div className="expTabContent">
-      {oficinas.length === 0 ? (
-        <div className="expMessage expMessage-info" role="status" style={{ marginBottom: 12 }}>
-          <Settings size={16} />
-          {isAdminOficinas ? (
-            <span>
-              No hay oficinas activas. Crea la primera en{" "}
-              <strong>Configuración → Oficinas y numeración → Áreas</strong>.
-            </span>
-          ) : (
-            <span>
-              No tienes una oficina asignada. Tu entidad es{" "}
-              <strong>{userEntity ?? "(sin entidad)"}</strong>. Pídele al
-              administrador que cree la oficina con esa entidad o que te
-              vincule.
-              {totalActivas > 0 ? ` Hay ${totalActivas} oficina(s) activa(s) en el sistema.` : ""}
-            </span>
-          )}
-        </div>
-      ) : isAdminOficinas && totalActivas > oficinas.length ? (
-        <div
-          className="expMessage expMessage-info"
-          role="status"
-          style={{ marginBottom: 12 }}
-        >
-          <Building2 size={16} />
-          <span>
-            Eres administrador: ves <strong>{oficinas.length}</strong> oficina(s) de tu entidad. Hay{" "}
-            <strong>{totalActivas}</strong> activas en total.
-          </span>
-        </div>
-      ) : null}
-
-      {/* 1) Documento recibido (antecedente) */}
-      <div className="expFormSection">
-        <div className="expFormSectionHeader">
-          <h3 className="expFormSectionTitle">
-            <ScrollText size={16} /> Documento recibido (antecedente)
-            <span className="expFormSectionHint">Sube el PDF: la IA lo usa como referencia. Opcional.</span>
-          </h3>
-        </div>
-        <label
-          className={"expFilePicker" + (isDragging ? " dragging" : "")}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setIsDragging(false); void handleFile(e.dataTransfer.files?.[0]); }}
-          style={{ marginBottom: 12 }}
-        >
-          <div className="expFilePickerIcon">
-            {reading ? <Loader2 size={22} className="expSpin" /> : <UploadCloud size={22} />}
-          </div>
-          <p className="expFilePickerTitle">
-            {reading ? "Leyendo el PDF…" : isDragging ? "Suelta el PDF aquí" : "Arrastra el PDF recibido o haz clic"}
-          </p>
-          <p className="expFilePickerSub">Se lee con OCR como antecedente. Máx {maxPdfSizeLabel}.</p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => { void handleFile(e.target.files?.[0]); if (inputRef.current) inputRef.current.value = ""; }}
-          />
-        </label>
-        {documentoTexto ? (
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-doc">Texto del documento recibido</label>
-            <textarea id="resp-doc" className="expField-input" value={documentoTexto} onChange={(e) => setDocumentoTexto(e.target.value)} rows={5} />
-          </div>
-        ) : null}
+      <div
+        role="list"
+        aria-label="Progreso de la respuesta"
+        style={{
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginBottom: 12,
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "var(--bg, #fff)",
+          padding: "8px 0",
+        }}
+      >
+        {pasos.map((p, i) => {
+          const isCurrent = i === pasoActual;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              role="listitem"
+              onClick={() => goToPaso(p)}
+              title={p.ready ? `Ir a: ${p.label}` : "Disponible cuando generes el borrador"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                fontWeight: isCurrent ? 700 : 500,
+                borderRadius: 999,
+                padding: "4px 12px",
+                cursor: p.ready ? "pointer" : "not-allowed",
+                opacity: p.ready ? 1 : 0.55,
+                background: p.done
+                  ? "#d1fae5"
+                  : isCurrent
+                    ? "rgba(15,118,110,0.1)"
+                    : "#f1f5f9",
+                color: p.done ? "#065f46" : isCurrent ? "var(--brand, #0f766e)" : "#64748b",
+                border: isCurrent ? "1.5px solid var(--brand, #0f766e)" : "1px solid transparent",
+              }}
+            >
+              {p.done ? <CheckCircle2 size={13} /> : <span style={{ fontWeight: 700 }}>{i + 1}.</span>}
+              {p.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 2) Tu respuesta */}
-      <div className="expFormSection" style={{ marginTop: 16 }}>
-        <div className="expFormSectionHeader">
-          <h3 className="expFormSectionTitle">
-            <FileSignature size={16} /> Tu respuesta
-            <span className="expFormSectionHint">Oficina emisora, tipo y qué quieres responder</span>
-          </h3>
-        </div>
+      <ResumenTecnicoBanner
+        analisis={state.analisis}
+        onDismiss={() => state.setAnalisis(null)}
+      />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-oficina"><Building2 size={12} /> Oficina emisora</label>
-            <select
-              id="resp-oficina"
-              className="expField-select"
-              value={oficinaId}
-              onChange={(e) => { setOficinaId(e.target.value); setNroAsignado(false); }}
-            >
-              {oficinas.length === 0 ? <option value="">— Sin oficinas —</option> : null}
-              {oficinas.map((o) => (
-                <option key={o.id} value={o.id}>{o.nombre}</option>
-              ))}
-            </select>
-          </div>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-tipo">Tipo de documento</label>
-            <select
-              id="resp-tipo"
-              className="expField-select"
-              value={tipoDocumento}
-              onChange={(e) => { setTipoDocumento(e.target.value as DocTipo); setNroAsignado(false); }}
-            >
-              {DOC_TIPOS.map((t) => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}
-            </select>
-          </div>
-          <div className="expField">
-            <label className="expField-label">Nº a asignar</label>
-            <input className="expField-input" value={previewNumero || "Configura la numeración (admin)"} readOnly />
-          </div>
-        </div>
-
-        {oficina ? (
-          <span className="expHelpText" style={{ marginTop: 4 }}>
-            Firma: <strong>{oficina.responsableNombre || "—"}</strong>{oficina.responsableCargo ? ` · ${oficina.responsableCargo}` : ""}
-            {oficina.tieneMembrete ? " · ✓ hoja membretada" : " · sin hoja membretada"}
-          </span>
-        ) : null}
-
-        <div className="expField" style={{ marginTop: 8 }}>
-          <label className="expField-label" htmlFor="resp-intencion">¿Qué quieres responder?</label>
-          <textarea
-            id="resp-intencion"
-            className="expField-input"
-            value={intencion}
-            onChange={(e) => setIntencion(e.target.value)}
-            rows={5}
-            placeholder="Ej. Comunicar que la solicitud de licencia procede, otorgar plazo de 5 días para subsanar, etc. La IA lo convierte en el cuerpo formal."
-          />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-rem">Dirigido a</label>
-            <input id="resp-rem" className="expField-input" value={remitenteDoc} onChange={(e) => setRemitenteDoc(e.target.value)} placeholder="Destinatario de la respuesta" />
-          </div>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-asunto">Asunto</label>
-            <input id="resp-asunto" className="expField-input" value={asunto} onChange={(e) => setAsunto(e.target.value)} placeholder="Sumilla" />
-          </div>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-tone">Tono</label>
-            <select id="resp-tone" className="expField-select" value={tone} onChange={(e) => setTone(e.target.value as typeof tone)}>
-              <option value="formal">Formal e institucional</option>
-              <option value="cercano">Cercano y didáctico</option>
-              <option value="tecnico">Técnico-jurídico</option>
-            </select>
-          </div>
-          <div className="expField">
-            <label className="expField-label" htmlFor="resp-length">Extensión</label>
-            <select id="resp-length" className="expField-select" value={length} onChange={(e) => setLength(e.target.value as typeof length)}>
-              <option value="concisa">Concisa</option>
-              <option value="media">Media</option>
-              <option value="detallada">Detallada</option>
-            </select>
-          </div>
-        </div>
-
-        <label className="expCheckRow" style={{ marginTop: 12 }}>
-          <input type="checkbox" checked={includeAntecedentes} onChange={(e) => setIncludeAntecedentes(e.target.checked)} />
-          <span><Library size={13} /> Buscar <strong>antecedentes</strong> en los expedientes archivados.</span>
-        </label>
-
-        <button type="button" className="expBtn expBtn-primary expBtn-large" onClick={handleGenerate} disabled={generating || reading} style={{ marginTop: 12 }}>
-          {generating ? <Loader2 size={16} className="expSpin" /> : <Sparkles size={16} />}
-          {generating ? "Generando cuerpo…" : "Generar cuerpo del documento"}
-        </button>
-        <span className="expHelpText">
-          <Sparkles size={12} /> La IA redacta el cuerpo a partir de tu intención, fundamentado en normativa{includeAntecedentes ? " y antecedentes" : ""}.
-        </span>
+      <div id="paso-documento" style={{ scrollMarginTop: 56 }}>
+        <DocumentoRecibido
+          antecedenteId={state.antecedenteId}
+          antecedenteMeta={state.antecedenteMeta}
+          analisis={state.analisis}
+          documentoTexto={state.documentoTexto}
+          handleFile={state.handleFile}
+          inputRef={state.inputRef}
+          isDragging={state.isDragging}
+          reading={state.reading}
+          removeAntecedente={state.removeAntecedente}
+          setDocumentoTexto={state.setDocumentoTexto}
+          setIsDragging={state.setIsDragging}
+          showToast={showToast}
+        />
       </div>
 
-      {/* 3) Borrador */}
-      {result ? (
-        <div className="expFormSection" style={{ marginTop: 16 }}>
-          <div className="expFormSectionHeader">
-            <h3 className="expFormSectionTitle">
-              <FileSignature size={16} /> Borrador
-              <span className="expFormSectionHint">Edita antes de exportar</span>
-            </h3>
-            {genUsage ? (
-              <span className="expHelpText" style={{ marginTop: 0 }} title="Tokens de IA consumidos">
-                <Sparkles size={12} /> {formatCost(genUsage)}
-              </span>
-            ) : null}
-          </div>
-          <div className="expField">
-            <textarea className="expField-input" value={cuerpo} onChange={(e) => setCuerpo(e.target.value)} rows={14} />
-          </div>
+      <div id="paso-respuesta" style={{ scrollMarginTop: 56 }} />
+      <ConfiguracionRespuesta
+        adjuntos={state.adjuntos}
+        asunto={state.asunto}
+        clearBorrador={state.clearBorrador}
+        cuerpo={state.cuerpo}
+        destinoNumero={state.previewNumero}
+        intencion={state.intencion}
+        isAdminOficinas={state.isAdminOficinas}
+        length={state.length}
+        normativaIds={state.normativaIds}
+        oficina={state.oficina}
+        oficinaId={state.oficinaId}
+        oficinas={state.oficinas}
+        onChangeOficina={state.handleChangeOficina}
+        remitenteDoc={state.remitenteDoc}
+        setAdjuntos={state.setAdjuntos}
+        setIncludeAntecedentes={state.setIncludeAntecedentes}
+        setIntencion={state.setIntencion}
+        setLength={state.setLength}
+        setNormativaIds={state.setNormativaIds}
+        setTipoDocumento={state.setTipoDocumento}
+        setTone={state.setTone}
+        setRemitenteDoc={state.setRemitenteDoc}
+        setAsunto={state.setAsunto}
+        includeAntecedentes={state.includeAntecedentes}
+        tipoDocumento={state.tipoDocumento}
+        tone={state.tone}
+        totalActivas={state.totalActivas}
+        userEntity={state.userEntity}
+        showToast={showToast}
+        onGenerate={handleGenerate}
+        generating={state.generating}
+      />
 
-          {baseLegal.length > 0 ? (
-            <div className="expField">
-              <label className="expField-label">Base legal citada ({baseLegal.length})</label>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--exp-muted)" }}>
-                {baseLegal.map((s, i) => <li key={i} style={{ marginBottom: 4 }}><strong>{s.referencia}</strong>: {s.texto}</li>)}
-              </ul>
-            </div>
-          ) : null}
-
-          {antecedentes.length > 0 ? (
-            <div className="expField">
-              <label className="expField-label">Antecedentes del archivo ({antecedentes.length})</label>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--exp-muted)" }}>
-                {antecedentes.map((a) => (
-                  <li key={a.expedienteId} style={{ marginBottom: 4 }}>
-                    <strong>{a.title}</strong>{a.serie ? ` (${a.serie})` : ""}{a.anio ? `, ${a.anio}` : ""} · <MapPin size={11} /> {a.ubicacion}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <button type="button" className="expBtn expBtn-ghost" onClick={handleSaveRespuesta} disabled={savingRespuesta} style={{ marginTop: 12 }}>
-            {savingRespuesta ? <Loader2 size={16} className="expSpin" /> : <Save size={16} />}
-            {savingRespuesta ? "Guardando…" : "Guardar y numerar"}
-          </button>
-        </div>
+      <div id="paso-borrador" style={{ scrollMarginTop: 56 }} />
+      {/* Se muestra tambien cuando el cuerpo viene del borrador restaurado
+          de localStorage (sin `result` en memoria). */}
+      {result || state.cuerpo.trim() ? (
+        <BorradorEditor
+          antecedentes={state.antecedentes as never}
+          baseLegal={state.baseLegal}
+          cuerpo={state.cuerpo}
+          genUsage={state.genUsage as never}
+          intencion={state.intencion}
+          oficinaId={state.oficinaId}
+          refining={refining}
+          savingRespuesta={savingRespuesta}
+          setBaseLegal={state.setBaseLegal}
+          setCuerpo={state.setCuerpo}
+          showToast={showToast}
+          tipoDocumento={state.tipoDocumento}
+          onRefine={handleRefine}
+          onSave={handleSaveRespuesta}
+        />
       ) : null}
 
-      {/* 4) Datos del documento + exportar */}
-      {result ? (
-        <div className="expFormSection" style={{ marginTop: 16 }}>
-          <div className="expFormSectionHeader">
-            <h3 className="expFormSectionTitle">
-              <Building2 size={16} /> Datos del documento
-              <span className="expFormSectionHint">Nº, destinatario y formato</span>
-            </h3>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="expField">
-              <label className="expField-label">Nº de documento</label>
-              <input className="expField-input" value={numeroEfectivo} onChange={(e) => setNroOficio(e.target.value)} placeholder={previewNumero} />
-            </div>
-            <div className="expField">
-              <label className="expField-label">Destinatario</label>
-              <input className="expField-input" value={destinatario} onChange={(e) => setDestinatario(e.target.value)} placeholder={remitenteDoc || "Nombre"} />
-            </div>
-            <div className="expField">
-              <label className="expField-label">Cargo del destinatario</label>
-              <input className="expField-input" value={cargoDestinatario} onChange={(e) => setCargoDestinatario(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div className="expField">
-              <label className="expField-label">Formato de salida</label>
-              <select className="expField-select" value={exportFormat} onChange={(e) => setExportFormat(e.target.value as "pdf" | "docx")}>
-                <option value="pdf">PDF (sobre hoja membretada de la oficina)</option>
-                <option value="docx">Word (.docx)</option>
-              </select>
-            </div>
-          </div>
-
-          <button type="button" className="expBtn expBtn-primary expBtn-large" onClick={handleExport} disabled={exporting} style={{ marginTop: 12 }}>
-            {exporting ? <Loader2 size={16} className="expSpin" /> : <Download size={16} />}
-            {exporting ? "Generando…" : `Descargar (.${exportFormat})`}
-          </button>
-          {exportFormat === "pdf" && oficina && !oficina.tieneMembrete ? (
-            <span className="expHelpText"><Settings size={12} /> Esta oficina no tiene hoja membretada cargada (config admin); el PDF saldrá en blanco.</span>
-          ) : null}
-        </div>
+      <div id="paso-emitir" style={{ scrollMarginTop: 56 }} />
+      {result || state.cuerpo.trim() ? (
+        <DatosDocumento
+          asunto={state.asunto}
+          cargoDestinatario={state.cargoDestinatario}
+          cuerpo={state.cuerpo}
+          destinatario={state.destinatario}
+          exportFormat={state.exportFormat}
+          exporting={exporting}
+          lugar={state.lugar}
+          nroAsignado={state.nroAsignado}
+          numeroEfectivo={state.numeroEfectivo}
+          oficina={state.oficina}
+          referencia={state.referencia}
+          setCargoDestinatario={state.setCargoDestinatario}
+          setDestinatario={state.setDestinatario}
+          setExportFormat={state.setExportFormat}
+          setLugar={state.setLugar}
+          setReferencia={state.setReferencia}
+          showToast={showToast}
+          tipoDocumento={state.tipoDocumento}
+          onExport={handleExport}
+          onPreviewPdf={handlePreviewPdf}
+        />
       ) : null}
 
-      {/* 5) Historial */}
-      {saved.length > 0 ? (
-        <div className="expFormSection" style={{ marginTop: 16 }}>
-          <div className="expFormSectionHeader">
-            <h3 className="expFormSectionTitle">
-              <History size={16} /> Respuestas archivadas
-              <span className="expFormSectionHint">Haz clic para reabrir y reexportar</span>
-            </h3>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {saved.map((r) => (
-              <button key={r.id} type="button" className="expResultCard" style={{ gridTemplateColumns: "1fr auto", textAlign: "left" }} onClick={() => openSaved(r)}>
-                <div className="expResultBody">
-                  <h4 className="expResultTitle">{r.nro_oficio || r.asunto || "Respuesta"}</h4>
-                  <div className="expResultMeta">
-                    {r.tipo_documento ? <span className="expResultMetaItem">{r.tipo_documento}</span> : null}
-                    {r.asunto ? <span className="expResultMetaItem">{r.asunto}</span> : null}
-                    {r.destinatario ? <span className="expResultMetaItem">→ {r.destinatario}</span> : null}
-                    <span className="expResultMetaItem">{new Date(r.created_at).toLocaleDateString("es-PE")}</span>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+      <HistorialRespuestas
+        onOpen={openSaved}
+        saved={state.saved as never}
+        onVersionCreated={() => {
+          state.reloadSaved();
+        }}
+        showToast={showToast}
+      />
+
+      {confirmSave ? (
+        <ConfirmDialog
+          open={true}
+          title={confirmSave.title}
+          message={confirmSave.message}
+          tone="warning"
+          confirmLabel={confirmSave.confirmLabel}
+          onConfirm={confirmSave.onConfirm}
+          onCancel={() => setConfirmSave(null)}
+        />
       ) : null}
     </div>
   );

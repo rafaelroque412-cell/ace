@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { expedienteChatSchema } from "@/lib/expedientes-archivo";
+import { getArchivoScopeLevel, getOfficeFilter, requireUser } from "@/lib/auth";
+import { expedienteChatSchema } from "@/lib/expedientes-archivo-schema";
 import { answerExpedienteQuestion } from "@/lib/expedientes-archivo-search";
 import { estimateCostUsd, roundCostUsd } from "@/lib/openai-cost";
 import { writeAuditLog } from "@/lib/supabase-server";
@@ -33,7 +33,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await answerExpedienteQuestion(payload.data);
+    // Scope: admin consulta todo; jefe su oficina; el resto solo lo que subió.
+    const scope = getArchivoScopeLevel(auth.user);
+    const result = await answerExpedienteQuestion({
+      ...payload.data,
+      oficina: scope === "oficina" ? getOfficeFilter(auth.user) ?? undefined : payload.data.oficina,
+      uploadedBy: scope === "own" ? auth.user.id : undefined,
+    });
 
     const usage = result.usage;
     await writeAuditLog({

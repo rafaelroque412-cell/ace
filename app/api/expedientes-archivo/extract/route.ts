@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireEditor } from "@/lib/auth";
+import { requireDec } from "@/lib/auth";
 import { extractExpedienteInventory } from "@/lib/expedientes-archivo-processing";
 import { writeAuditLog } from "@/lib/supabase-server";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 // registro del archivo fisico. No guarda nada ni indexa.
 export async function POST(request: Request) {
   try {
-    const auth = await requireEditor();
+    const auth = await requireDec();
     if ("error" in auth) {
       return auth.error;
     }

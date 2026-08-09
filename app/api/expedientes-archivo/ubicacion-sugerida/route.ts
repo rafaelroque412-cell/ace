@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getOfficeFilter, requireUser } from "@/lib/auth";
+import { entitiesMatch } from "@/lib/entity-utils";
 import { type ExpedienteArchivo } from "@/lib/expedientes-archivo";
 import { getSupabaseServerConfig, supabaseRest } from "@/lib/supabase-server";
 
@@ -74,15 +75,23 @@ export async function GET(request: Request) {
     }
     getSupabaseServerConfig();
 
+    const officeFilter = getOfficeFilter(auth.user);
+
     const url = new URL(request.url);
     const serie = url.searchParams.get("serie")?.trim();
     const anio = url.searchParams.get("anio")?.trim();
 
     let scope = `expedientes_archivo?select=${LOC_SELECT}&order=created_at.desc&limit=50`;
+    if (officeFilter) scope += `&oficina=eq.${encodeURIComponent(officeFilter)}`;
     if (serie) scope += `&serie_documento=eq.${encodeURIComponent(serie)}`;
     if (anio) scope += `&anio=eq.${encodeURIComponent(anio)}`;
 
-    const rows = await supabaseRest<ExpedienteArchivo[]>(scope);
+    let rows = await supabaseRest<ExpedienteArchivo[]>(scope);
+
+    // Post-filter robusto: re-verificar oficina con normalizacion de acentos.
+    if (officeFilter) {
+      rows = rows.filter((r) => entitiesMatch(r.oficina, auth.user.entity));
+    }
 
     const conUbicacion = rows.map(pickUbicacion).filter(hasUbicacion);
     const ultima = conUbicacion[0] ?? null;

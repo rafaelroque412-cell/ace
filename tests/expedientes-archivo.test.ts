@@ -1,15 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  ARCHIVO_COLORES,
-  CONTENEDOR_TIPOS,
-  contenedorTipoLabel,
-  expedienteSearchSchema,
-  extractExpedienteNumber,
-  extractFecha,
-  getExpedientesNamespace,
-  normalizeCatalogValue,
-  normalizeContenedorTipo,
-} from "@/lib/expedientes-archivo";
+import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, contenedorTipoLabel, extractExpedienteNumber, extractFecha, getExpedientesNamespace, normalizeCatalogValue, normalizeContenedorTipo } from "@/lib/expedientes-archivo";
+import { expedienteSearchSchema } from "@/lib/expedientes-archivo-schema";
 
 describe("extractExpedienteNumber", () => {
   it("detecta el numero anclado a la palabra clave", () => {

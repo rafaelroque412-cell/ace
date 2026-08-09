@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getArchivoScopeLevel, requireUser } from "@/lib/auth";
+import { entitiesMatch } from "@/lib/entity-utils";
 import { type ExpedienteArchivo } from "@/lib/expedientes-archivo";
 import { getSupabaseServerConfig, supabaseRest } from "@/lib/supabase-server";
 
@@ -43,7 +44,22 @@ export async function GET(request: Request) {
     if (oficina) query += `&oficina=eq.${encodeURIComponent(oficina)}`;
     if (estante) query += `&nro_estante=eq.${encodeURIComponent(estante)}`;
 
-    const rows = await supabaseRest<ExpedienteArchivo[]>(query);
+    // Scope: admin todo; jefe su oficina (por oficina_id, igual que el RLS, con
+    // respaldo por texto); el resto SOLO lo que subió.
+    const scope = getArchivoScopeLevel(auth.user);
+    const useOficinaId = scope === "oficina" && Boolean(auth.user.oficinaId);
+    if (scope === "oficina") {
+      query += useOficinaId
+        ? `&oficina_id=eq.${encodeURIComponent(auth.user.oficinaId ?? "")}`
+        : `&oficina=eq.${encodeURIComponent(auth.user.entity ?? "")}`;
+    } else if (scope === "own") {
+      query += `&uploaded_by=eq.${encodeURIComponent(auth.user.id)}`;
+    }
+
+    let rows = await supabaseRest<ExpedienteArchivo[]>(query);
+    if (scope === "oficina" && !useOficinaId) {
+      rows = rows.filter((r) => entitiesMatch(r.oficina, auth.user.entity));
+    }
 
     if (formato === "json") {
       return NextResponse.json({ count: rows.length, rows });

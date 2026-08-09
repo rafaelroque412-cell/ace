@@ -1,12 +1,9 @@
+import { normalizeEntity } from "./entity-utils";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { type SearchFilters, searchTextRecords } from "./pinecone";
 import { supabaseRest } from "./supabase-server";
-import {
-  type ExpedienteChatInput,
-  type ExpedienteSearchInput,
-  contenedorTipoLabel,
-  getExpedientesNamespace,
-} from "./expedientes-archivo";
+import { contenedorTipoLabel, getExpedientesNamespace } from "./expedientes-archivo";
+import { type ExpedienteChatInput, type ExpedienteSearchInput } from "./expedientes-archivo-schema";
 
 // Ubicación física del expediente (dónde está en papel).
 export type ExpedienteUbicacion = {
@@ -46,6 +43,7 @@ export type ExpedienteSearchResult = {
 type ChunkRow = { id: string; content: string };
 type ExpRow = {
   id: string;
+  uploaded_by: string | null;
   title: string;
   asunto: string | null;
   materia: string | null;
@@ -68,7 +66,7 @@ type ExpRow = {
 };
 
 const EXP_SELECT =
-  "id,title,asunto,materia,anio,sgd_expediente,serie_documento,tipo_documento,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,storage_path,storage_bucket";
+  "id,uploaded_by,title,asunto,materia,anio,sgd_expediente,serie_documento,tipo_documento,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,storage_path,storage_bucket";
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -115,14 +113,20 @@ function buildUbicacion(exp?: ExpRow): { ubicacion: ExpedienteUbicacion; resumen
   return { ubicacion, resumen: resumen || "Ubicación física no registrada" };
 }
 
+// `uploadedBy` (scope "own"): limita los resultados a los expedientes subidos
+// por ese usuario. Se aplica como post-filtro contra la fila de la BD; los hits
+// cuyo expediente no se puede verificar se descartan.
 export async function searchExpedientes(
-  input: ExpedienteSearchInput,
+  input: ExpedienteSearchInput & { uploadedBy?: string },
 ): Promise<ExpedienteSearchResult[]> {
   const namespace = getExpedientesNamespace();
-  const filters: SearchFilters | undefined = input.anio ? { year: input.anio } : undefined;
-  // Con filtros de metadata (oficina/materia) se traen más candidatos porque el
-  // filtrado se hace después de recuperar (no es nativo de Pinecone).
-  const hasMetaFilter = Boolean(input.oficina || input.materia);
+  const filters: SearchFilters = {};
+  if (input.anio) filters.year = input.anio;
+  const normalizedOficina = normalizeEntity(input.oficina);
+  if (normalizedOficina) filters.sourceEntity = normalizedOficina;
+  // Con filtros de metadata (oficina/materia/usuario) se traen más candidatos
+  // porque el filtrado se hace después de recuperar (no es nativo de Pinecone).
+  const hasMetaFilter = Boolean(input.oficina || input.materia || input.uploadedBy);
   const topK = input.topK ?? (hasMetaFilter ? 24 : 8);
   const oficinaFilter = input.oficina?.toLowerCase().trim() || null;
   const materiaFilter = input.materia?.toLowerCase().trim() || null;
@@ -169,6 +173,11 @@ export async function searchExpedientes(
     }
 
     const exp = expById.get(expedienteId);
+
+    // Scope "own": solo expedientes subidos por el usuario (verificado en BD).
+    if (input.uploadedBy && exp?.uploaded_by !== input.uploadedBy) {
+      continue;
+    }
 
     // Post-filtro por oficina / materia (coincidencia parcial, sin acentos-sensible).
     if (oficinaFilter && !(exp?.oficina ?? "").toLowerCase().includes(oficinaFilter)) {
@@ -242,9 +251,15 @@ function buildContext(sources: ExpedienteSearchResult[]) {
 // archivados. Si no hay fuentes, lo dice; no inventa. Cita con [E#] e indica la
 // ubicación física cuando es relevante ("dónde está").
 export async function answerExpedienteQuestion(
-  input: ExpedienteChatInput,
+  input: ExpedienteChatInput & { uploadedBy?: string },
 ): Promise<ExpedienteAnswer> {
-  const sources = await searchExpedientes({ query: input.query, anio: input.anio, topK: 8 });
+  const sources = await searchExpedientes({
+    query: input.query,
+    anio: input.anio,
+    oficina: input.oficina,
+    uploadedBy: input.uploadedBy,
+    topK: input.uploadedBy ? 24 : 8,
+  });
 
   if (sources.length === 0) {
     return {

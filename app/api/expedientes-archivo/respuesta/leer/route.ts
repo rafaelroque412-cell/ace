@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getOpenAIClient, legalAnswerModel } from "@/lib/openai-server";
+import { extractResponseText } from "@/lib/openai-response";
 import { estimateCostUsd, roundCostUsd } from "@/lib/openai-cost";
 import { extractPdfPlainText } from "@/lib/pdf-processing";
 import { writeAuditLog } from "@/lib/supabase-server";
@@ -53,7 +54,8 @@ export async function POST(request: Request) {
 
     let texto = "";
     try {
-      const extracted = await extractPdfPlainText(file, { forceOcr: true });
+      // Primero texto seleccionable; OCR solo si no hay texto suficiente.
+      const extracted = await extractPdfPlainText(file, { forceOcr: false });
       texto = extracted.text ?? "";
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -97,7 +99,7 @@ ${texto.slice(0, analysisLimit)}`,
       });
       inputTokens = response.usage?.input_tokens ?? 0;
       outputTokens = response.usage?.output_tokens ?? 0;
-      const parsed = parseJsonObject(response.output_text);
+      const parsed = parseJsonObject(extractResponseText(response));
       asunto = asText(parsed.asunto);
       remitente = asText(parsed.remitente);
     } catch {

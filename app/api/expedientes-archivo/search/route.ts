@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { expedienteSearchSchema } from "@/lib/expedientes-archivo";
+import { getArchivoScopeLevel, getOfficeFilter, requireUser } from "@/lib/auth";
+import { expedienteSearchSchema } from "@/lib/expedientes-archivo-schema";
 import { searchExpedientes } from "@/lib/expedientes-archivo-search";
 import { writeAuditLog } from "@/lib/supabase-server";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
@@ -31,7 +31,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const results = await searchExpedientes(payload.data);
+    // Scope: admin busca en todo; jefe en su oficina; el resto solo en lo suyo.
+    const scope = getArchivoScopeLevel(auth.user);
+    const results = await searchExpedientes({
+      ...payload.data,
+      oficina: scope === "oficina" ? getOfficeFilter(auth.user) ?? payload.data.oficina : payload.data.oficina,
+      uploadedBy: scope === "own" ? auth.user.id : undefined,
+    });
 
     await writeAuditLog({
       action: "expedientes.search",
