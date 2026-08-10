@@ -113,6 +113,11 @@ export function useFichaForm({
   const focoPendiente = useRef<string | null>(null);
   /** Sello de version con el que se abrio: el servidor rechaza si ya no cuadra. */
   const baseUpdatedAtRef = useRef<string | null>(null);
+  // Serializa el autoguardado: solo uno en vuelo. `pendiente` recuerda que
+  // llegaron cambios mientras uno corría, para vaciarlos al terminar con el
+  // sello ya avanzado —así el autoguardado no choca CONSIGO MISMO con un 409—.
+  const guardandoRef = useRef(false);
+  const pendienteRef = useRef(false);
 
 
   const DRAFT_KEY = `ficha-draft-${necesidadId}`;
@@ -381,6 +386,16 @@ export function useFichaForm({
    * sería mentira.
    */
   async function autoguardarFicha() {
+    // Ya hay un autoguardado en vuelo: no arranques otro en paralelo (mandaría el
+    // sello viejo -> 409 propio, que es justo lo que el copiloto disparaba al
+    // insertar varios campos seguidos). Marca pendiente y sal; el que corre lo
+    // re-lanza al terminar con el sello ya fresco.
+    if (guardandoRef.current) {
+      pendienteRef.current = true;
+      return;
+    }
+    guardandoRef.current = true;
+    let exito = false;
     const payload = construirPayload();
     // El schema pide min(3) y max(NOMBRE_MAX): con un nombre a medio escribir
     // se guarda todo lo demás y se deja el nombre para el guardado explícito.
@@ -426,8 +441,18 @@ export function useFichaForm({
       setAutoguardado("guardado");
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignora */ }
       setCamposBorrador([]);
+      exito = true;
     } catch {
       setAutoguardado("error");
+    } finally {
+      // Libera el turno. Si llegaron cambios mientras guardaba, vacíalos ahora
+      // —con el sello ya avanzado—. Solo tras ÉXITO: en 409/error no se re-lanza
+      // (el usuario recupera con «Recargar» / «Guardar ficha»), para no insistir.
+      guardandoRef.current = false;
+      if (pendienteRef.current && exito) {
+        pendienteRef.current = false;
+        void autoguardarFicha();
+      }
     }
   }
 

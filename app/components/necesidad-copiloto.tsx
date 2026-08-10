@@ -351,7 +351,7 @@ export function NecesidadCopiloto({
                 {m.campoKey ? (
                   <button
                     className="copilotoLink"
-                    onClick={() => { console.log("[ copiloto ] insertar", m.campoKey, "len:", m.content.length); onAplicarCampo(m.campoKey!, m.content); }}
+                    onClick={() => onAplicarCampo(m.campoKey!, m.content)}
                     type="button"
                   >
                     <WandSparkles size={12} /> Insertar en «{m.campoLabel}»
