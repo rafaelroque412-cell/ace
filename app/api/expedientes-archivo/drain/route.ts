@@ -4,11 +4,13 @@ import { drainStuckExpedientes } from "@/lib/expedientes-archivo-queue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// El OCR de un expediente escaneado es pesado; damos margen amplio por invocación.
-export const maxDuration = 300;
+// El OCR de un expediente escaneado es pesado. Ajustado al plan Hobby de Vercel,
+// que topa las funciones en 60 s (en Pro se puede subir a 300).
+export const maxDuration = 60;
 
-// OCR pesado: lotes pequeños por invocación.
-const batchSize = Number.parseInt(process.env.EXPEDIENTES_DRAIN_BATCH ?? "2", 10);
+// OCR pesado: 1 por invocación para caber en los 60 s del Hobby. En Pro se sube
+// con EXPEDIENTES_DRAIN_BATCH.
+const batchSize = Number.parseInt(process.env.EXPEDIENTES_DRAIN_BATCH ?? "1", 10);
 
 // Autoriza al scheduled function / cron (Authorization: Bearer CRON_SECRET) o a un
 // editor/admin que dispare el drenado manualmente.

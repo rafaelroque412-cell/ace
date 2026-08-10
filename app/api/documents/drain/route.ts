@@ -4,10 +4,13 @@ import { drainStuckDocuments } from "@/lib/indexing-queue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Acotamos la duracion: el drainer procesa pocos documentos por invocacion.
-export const maxDuration = 300;
+// Ajustado al plan Hobby de Vercel: sus funciones se topan en 60 s (en Pro se
+// puede subir a 300). El drainer procesa pocos documentos por invocacion.
+export const maxDuration = 60;
 
-const batchSize = Number.parseInt(process.env.INDEXING_DRAIN_BATCH ?? "3", 10);
+// Por defecto 1 para caber en los 60 s del Hobby (un OCR escaneado ya se come
+// media ventana). En Pro se sube con INDEXING_DRAIN_BATCH.
+const batchSize = Number.parseInt(process.env.INDEXING_DRAIN_BATCH ?? "1", 10);
 
 // Autoriza al cron de Vercel (Authorization: Bearer CRON_SECRET) o a un editor/admin
 // que dispare el drenado manualmente desde el panel.
