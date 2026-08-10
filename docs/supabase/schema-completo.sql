@@ -1854,3 +1854,12 @@ create policy seguimientos_owner on public.seguimientos as permissive for all to
 create unique index if not exists profiles_dni_unique
   on public.profiles (dni)
   where dni is not null and dni <> '';
+
+-- ══ Storage ══
+-- El bucket de PDFs. La app accede SIEMPRE con la service_role (salta RLS), así
+-- que NO hay políticas de storage.objects que replicar (el proyecto viejo tiene
+-- cero). Privado, tope 100 MB, solo application/pdf. Debe coincidir con la
+-- variable de entorno SUPABASE_STORAGE_BUCKET.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('documents', 'documents', false, 104857600, array['application/pdf'])
+on conflict (id) do nothing;
