@@ -63,3 +63,4 @@ docs/requerimientos/
 
 # Dump de datos con PII y hashes de Auth — NO commitear (migración manual)
 docs/supabase/datos.sql
+docs/supabase/datos/
