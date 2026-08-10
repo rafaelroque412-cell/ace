@@ -84,8 +84,11 @@ describe("f) requisitos de calificación", () => {
         var_f_requisitos_calificacion: "FACULTATIVOS:\n- CAPACIDAD LEGAL — Sustento: Vigencia de poder",
       }),
     );
-    expect(c("B44")).toContain("Capacidad técnica");
-    expect(c("B45")).toContain("Experiencia del postor");
+    // Orden de TIPOS_REQUISITO_ART72: experiencia_postor va antes que
+    // capacidad_tecnica desde el reordenamiento. Ambos son obligatorios por
+    // bases estándar en Concurso.
+    expect(c("B44")).toContain("Experiencia del postor");
+    expect(c("B45")).toContain("Capacidad técnica");
     expect(c("B45")).toContain("Obligatorio por bases estándar");
     expect(c("B49")).toBe("CAPACIDAD LEGAL");
     expect(c("C49")).toContain("Vigencia de poder");

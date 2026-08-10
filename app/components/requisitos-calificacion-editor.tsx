@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Gavel, Info, Loader, PencilLine, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
@@ -57,6 +57,29 @@ const RC_RESUMEN =
   "mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-[5px] text-[11.5px] text-muted";
 const RC_RESUMEN_CUENTA = "font-semibold text-ink";
 const RC_RESUMEN_FALTA = "inline-flex items-center gap-1 text-warning [&>svg]:flex-none";
+// Estructura oficial del 3.5 (Bases Estándar): los 5 tipos del Art. 72.3 se
+// agrupan en dos subsecciones y se rotulan con letras. Es solo PRESENTACIÓN de
+// la ficha: no cambia las claves, los datos ni la funcionalidad. `capacidad_economica`
+// no tiene letra en el formato oficial; queda en «adicionales» sin prefijo.
+const GRUPO_TIPO: Record<string, "obligatorios" | "adicionales"> = {
+  capacidad_legal: "obligatorios",
+  experiencia_postor: "obligatorios",
+  capacidad_tecnica: "adicionales",
+  consorcio: "adicionales",
+  capacidad_economica: "adicionales",
+};
+const LETRA_TIPO: Record<string, string> = {
+  capacidad_legal: "A",
+  experiencia_postor: "B",
+  capacidad_tecnica: "C",
+  consorcio: "D",
+};
+const TITULO_GRUPO: Record<"obligatorios" | "adicionales", string> = {
+  obligatorios: "3.5.1 Requisitos de calificación obligatorios",
+  adicionales: "3.5.2 Requisitos de calificación adicionales",
+};
+const RC_GRUPOTITULO =
+  "mt-2 mb-0.5 text-[11.5px] font-[750] uppercase tracking-[0.03em] text-brand";
 const RC_TIPOS = "grid gap-1.5";
 const RC_TIPO =
   "grid gap-1.5 rounded-[9px] border border-line border-l-[3px] border-l-line px-2.5 py-2 " +
@@ -483,7 +506,7 @@ export function RequisitosCalificacionEditor({
       ) : null}
 
       <div className={RC_TIPOS}>
-        {tiposAplicables.map((tipo) => {
+        {tiposAplicables.map((tipo, i) => {
           const e = porTipo.get(tipo.key);
           // La matriz de bases estándar manda: si fija el tipo como obligatorio, el
           // estado efectivo es "obligatorio" aunque el valor guardado diga otra cosa.
@@ -495,11 +518,20 @@ export function RequisitosCalificacionEditor({
           // ¿La DEC excluye un facultativo que el área usuaria propuso? → no
           // objeción (Art. 44.8). El conjunto lo calcula la función pura testeada.
           const excluidoRequiereNoObjecion = excluidos.has(tipo.key);
+          // Agrupación 3.5.1/3.5.2 y letra A–D del formato oficial. El encabezado
+          // sale antes del PRIMER tipo aplicable de su grupo (robusto a que la
+          // matriz oculte alguno). Es solo presentación: no toca datos ni claves.
+          const grupo = GRUPO_TIPO[tipo.key] ?? "adicionales";
+          const abreGrupo =
+            tiposAplicables.findIndex((t) => (GRUPO_TIPO[t.key] ?? "adicionales") === grupo) === i;
+          const letra = LETRA_TIPO[tipo.key];
           return (
-            <div className={RC_TIPO} data-estado={estado} key={tipo.key}>
+            <Fragment key={tipo.key}>
+              {abreGrupo ? <p className={RC_GRUPOTITULO}>{TITULO_GRUPO[grupo]}</p> : null}
+              <div className={RC_TIPO} data-estado={estado}>
               <div className={RC_TIPOHEAD}>
                 <div className={RC_TIPONOMBRE}>
-                  <strong>{tipo.label}</strong>
+                  <strong>{letra ? `${letra}. ` : ""}{tipo.label}</strong>
                   {requisitosModelo?.has(tipo.key) ? (
                     <span className={RC_DELMODELO} title="El modelo de requerimiento de este procedimiento trae este apartado">
                       · lo pide el modelo
@@ -648,7 +680,11 @@ export function RequisitosCalificacionEditor({
                   />
                 </label>
               ) : null}
-              {tipo.key !== "consorcio" && estado !== "no" ? (
+              {/* En «Capacidad técnica y profesional» (C) NO se pide el detalle
+                  genérico cuando se muestran los cuadros C.1–C.4 (onCampoFicha):
+                  esos ya recogen lo que se exige y cómo se acredita. En otros
+                  modos (sin onCampoFicha) se conserva como reserva. */}
+              {tipo.key !== "consorcio" && estado !== "no" && !(tipo.key === "capacidad_tecnica" && onCampoFicha) ? (
                 <label className={RC_CAMPO}>
                   <span>
                     {modo === "decision" ? "¿Qué se exige? · valida o perfecciona" : "¿Qué se exige exactamente?"}
@@ -692,7 +728,7 @@ export function RequisitosCalificacionEditor({
                   formato de estrategia. Por eso solo se captura en modo propuesta
                   (Necesidad/A3); en A4 (decisión) se oculta —no produciría salida—
                   para que el editor muestre solo lo que la DEC decide y exporta. */}
-              {estado !== "no" && modo !== "decision" ? (
+              {estado !== "no" && modo !== "decision" && !(tipo.key === "capacidad_tecnica" && onCampoFicha) ? (
                 <label className={RC_CAMPO}>
                   <span className={tipo.key === "consorcio" ? "reqCalSpanConBoton" : undefined}>
                     ¿Con qué se acredita?
@@ -719,12 +755,13 @@ export function RequisitosCalificacionEditor({
               ) : null}
 
               {/* CAPACIDAD TÉCNICA Y PROFESIONAL · Experiencia del personal clave
-                  (Art. 72.3.b). La entidad la pide DENTRO de la experiencia del
-                  postor, así que va aquí, tras «¿Con qué se acredita?». El texto
-                  lo fija el formato y tiene tres huecos; «Redactar del formato» lo
+                  (Art. 72.3.b). Va en su PROPIA sección —el tipo `capacidad_tecnica`,
+                  rotulado «Requisitos de calificación adicionales»—, entre
+                  «Experiencia del postor» y «Condiciones de consorcio». El texto lo
+                  fija el formato y tiene tres huecos; «Redactar del formato» lo
                   compone con ellos. Se guarda en columnas propias de la
                   necesidad (personalClave*), por eso escribe con `onCampoFicha`. */}
-              {tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha ? (
+              {tipo.key === "capacidad_tecnica" && estado !== "no" && onCampoFicha ? (
                 <div className={RC_CAPTECNICA}>
                   <button
                     aria-expanded={capTecnicaAbierta}
@@ -733,12 +770,12 @@ export function RequisitosCalificacionEditor({
                     type="button"
                   >
                     {capTecnicaAbierta ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    Capacidad técnica y profesional
+                    Detalle · C.1 a C.4
                     <small>personal clave, formación, capacitación, equipamiento e infraestructura</small>
                   </button>
                   {capTecnicaAbierta ? (
                   <div className={RC_PERSONALCLAVE}>
-                  <p className={RC_PCTITULO}>Capacidad técnica y profesional · Experiencia del personal clave</p>
+                  <p className={RC_PCTITULO}>C.1 Experiencia del personal clave</p>
                   <p className={RC_PCAYUDA}>
                     Un puesto por fila. En el requerimiento sale como cuadro (Art. 72.3.b).
                   </p>
@@ -776,9 +813,9 @@ export function RequisitosCalificacionEditor({
                   {/* CALIFICACIONES DEL PERSONAL CLAVE · Formación académica
                       (Art. 72.3.b, C.2.1). Un puesto por fila; el requisito de
                       cada uno se redacta con el grado y el puesto de su fila. */}
-                  <p className={RC_PCTITULO}>Calificaciones del personal clave</p>
+                  <p className={RC_PCTITULO}>C.2 Calificaciones del personal clave</p>
                   <p className={RC_PCAYUDA}>
-                    Formación académica · solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.
+                    C.2.1 Formación académica · solo cabe exigir el GRADO o el TÍTULO, no cursos ni especializaciones.
                   </p>
                   <FormacionAcademicaEditor
                     actividades={actividadesExperiencia}
@@ -814,7 +851,7 @@ export function RequisitosCalificacionEditor({
                       Un puesto por fila (heredado del cuadro de experiencia); el
                       requisito de cada uno se redacta con sus horas, materia y
                       puesto. La capacitación se exige hasta un máximo de 120 horas. */}
-                  <p className={RC_PCTITULO}>Capacitación del personal clave</p>
+                  <p className={RC_PCTITULO}>C.2.2 Capacitación del personal clave</p>
                   <p className={RC_PCAYUDA}>
                     Horas (máximo 120), materia relacionada con la actividad que realizará el personal clave, y el
                     puesto del que se acredita.
@@ -851,7 +888,7 @@ export function RequisitosCalificacionEditor({
 
                   {/* EQUIPAMIENTO ESTRATÉGICO (Art. 72.3.b, C.3). No es cuadro:
                       dos textos —el requisito, con su hueco, y su acreditación—. */}
-                  <p className={RC_PCTITULO}>Equipamiento estratégico</p>
+                  <p className={RC_PCTITULO}>C.3 Equipamiento estratégico</p>
                   <label className={RC_CAMPO}>
                     <span className={RC_SPANBOTON}>
                       Requisitos (equipamiento estratégico)
@@ -897,7 +934,7 @@ export function RequisitosCalificacionEditor({
 
                   {/* INFRAESTRUCTURA ESTRATÉGICA (Art. 72.3.b, C.3). Igual que el
                       equipamiento: el requisito, con su hueco, y su acreditación. */}
-                  <p className={RC_PCTITULO}>Infraestructura estratégica</p>
+                  <p className={RC_PCTITULO}>C.4 Infraestructura estratégica</p>
                   <label className={RC_CAMPO}>
                     <span className={RC_SPANBOTON}>
                       Requisitos (infraestructura estratégica)
@@ -960,6 +997,7 @@ export function RequisitosCalificacionEditor({
                 </label>
               ) : null}
             </div>
+            </Fragment>
           );
         })}
       </div>

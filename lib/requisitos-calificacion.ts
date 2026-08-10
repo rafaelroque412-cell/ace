@@ -166,16 +166,20 @@ export const TIPOS_REQUISITO_ART72 = [
     ejemplo: "RNP vigente en el capítulo de bienes; licencia de funcionamiento.",
   },
   {
-    key: "capacidad_tecnica",
-    label: "Capacidad técnica y profesional",
-    ayuda: "Experiencia y calificaciones del personal clave, equipamiento e infraestructura estratégicos. En formación académica solo cabe exigir el GRADO o título, no cursos ni especializaciones.",
-    ejemplo: "Un (1) ingeniero de sistemas con 3 años de experiencia; servidor de pruebas.",
-  },
-  {
     key: "experiencia_postor",
     label: "Experiencia del postor en la especialidad",
     ayuda: "Monto facturado acumulado en contrataciones iguales o similares al objeto. El formato pone dos topes: no puede superar TRES VECES la cuantía de la contratación o del ítem, y se cuenta en los QUINCE años anteriores a la presentación de ofertas. En obras y consultoría de obras, por especialidad y subespecialidad (Art. 157).",
     ejemplo: "Monto facturado acumulado de S/ 180,000 en servicios iguales o similares, en los quince años anteriores a la presentación de ofertas.",
+  },
+  {
+    // Va tras «Experiencia del postor» y antes de «Consorcio». En la FICHA se
+    // agrupa bajo el encabezado «3.5.2 Requisitos de calificación adicionales» y
+    // se rotula con la letra «C» (lo pinta el editor); su nombre canónico —el que
+    // viaja al documento y a los datos— sigue siendo el del Art. 72.3.b.
+    key: "capacidad_tecnica",
+    label: "Capacidad técnica y profesional",
+    ayuda: "Experiencia y calificaciones del personal clave, equipamiento e infraestructura estratégicos. En formación académica solo cabe exigir el GRADO o título, no cursos ni especializaciones.",
+    ejemplo: "Un (1) ingeniero de sistemas con 3 años de experiencia; servidor de pruebas.",
   },
   {
     key: "consorcio",

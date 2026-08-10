@@ -64,10 +64,12 @@ describe("requisitos-calificacion · format/parse", () => {
 describe("tipoArt72DeNombre", () => {
   it("solo existen los cinco tipos del 72.3", () => {
     expect(TIPOS_REQUISITO_ART72).toHaveLength(5);
+    // Orden: capacidad_tecnica va tras experiencia_postor y antes de consorcio
+    // (decisión de la entidad; en la ficha se agrupa en 3.5.2 con la letra C).
     expect(TIPOS_REQUISITO_ART72.map((t) => t.key)).toEqual([
       "capacidad_legal",
-      "capacidad_tecnica",
       "experiencia_postor",
+      "capacidad_tecnica",
       "consorcio",
       "capacidad_economica",
     ]);

@@ -109,12 +109,14 @@ describe("está en la ficha, en 3.5.1, oculta y como cuadro", () => {
     expect(editor).toContain('onCampoFicha("personalClaveAcreditacion", ACREDITACION_PERSONAL_CLAVE)');
   });
 
-  it("el editor lo pinta dentro de la experiencia del postor, con «Agregar»", async () => {
-    // Se vigila el fuente porque el suite no monta React.
+  it("el editor lo pinta en su sección propia (capacidad_tecnica), con «Agregar»", async () => {
+    // Se vigila el fuente porque el suite no monta React. El bloque se movió de
+    // «Experiencia del postor» a su sección propia «Requisitos de calificación
+    // adicionales» (el tipo capacidad_tecnica), entre Experiencia y Consorcio.
     const { readFileSync } = await import("node:fs");
     const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
     expect(editor).toContain("PersonalClaveEditor");
-    expect(editor).toContain('tipo.key === "experiencia_postor" && estado !== "no" && onCampoFicha');
+    expect(editor).toContain('tipo.key === "capacidad_tecnica" && estado !== "no" && onCampoFicha');
     const comp = readFileSync("app/components/personal-clave-editor.tsx", "utf-8");
     expect(comp).toContain("Agregar personal clave");
   });

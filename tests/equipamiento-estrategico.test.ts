@@ -64,6 +64,6 @@ describe("está en la ficha (3.5.1), oculto, y va al documento", () => {
     const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
     expect(editor).toContain('onCampoFicha("equipamientoEstrategico", REQUISITO_EQUIPAMIENTO)');
     expect(editor).toContain('onCampoFicha("equipamientoEstrategicoAcreditacion", ACREDITACION_EQUIPAMIENTO)');
-    expect(editor).toContain(">Equipamiento estratégico<");
+    expect(editor).toContain(">C.3 Equipamiento estratégico<");
   });
 });

@@ -64,6 +64,6 @@ describe("está en la ficha (3.5.1), oculto, y va al documento", () => {
     const editor = readFileSync("app/components/requisitos-calificacion-editor.tsx", "utf-8");
     expect(editor).toContain('onCampoFicha("infraestructuraEstrategica", REQUISITO_INFRAESTRUCTURA)');
     expect(editor).toContain('onCampoFicha("infraestructuraEstrategicaAcreditacion", ACREDITACION_INFRAESTRUCTURA)');
-    expect(editor).toContain(">Infraestructura estratégica<");
+    expect(editor).toContain(">C.4 Infraestructura estratégica<");
   });
 });
