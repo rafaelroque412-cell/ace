@@ -25,7 +25,15 @@ import { parsePersonalClave } from "./personal-clave";
 import { componerRequisitoFormacion, parseFilasFormacion } from "./formacion-academica";
 import { componerRequisitoCapacitacion, parseFilasCapacitacion } from "./capacitacion-personal-clave";
 import { segmentarParrafoMd } from "./markdown-tabla";
-import { parseRequisitos } from "./requisitos-calificacion";
+import {
+  GRUPO_TIPO_ART72,
+  LETRA_TIPO_ART72,
+  TIPOS_REQUISITO_ART72,
+  TITULO_GRUPO_ART72,
+  labelTipoArt72,
+  parseRequisitos,
+  repartirRequisitos,
+} from "./requisitos-calificacion";
 import {
   type CampoRequerimiento,
   estructuraDelRequerimiento,
@@ -454,19 +462,36 @@ function pintarCampo(c: CampoRequerimiento, solo: boolean): Array<Paragraph | Ta
   }
 
   if (c.formato === "vinetas") {
-    const r = parseRequisitos(c.valor);
+    // Estructura oficial del 3.5: los 5 tipos del Art. 72.3 agrupados en 3.5.1
+    // (obligatorios) / 3.5.2 (adicionales) y rotulados con letras A–D, igual que
+    // la ficha. Los heredados en texto libre (que no casan con un tipo) se
+    // conservan al final para no perderlos.
+    const reparto = repartirRequisitos(parseRequisitos(c.valor));
     const out: Array<Paragraph | Table> = [];
-    if (r.obligatorios.length > 0) {
-      out.push(new Paragraph({ spacing: { after: 40 }, children: [run("Obligatorios:", { bold: true })] }));
-      // Los obligatorios son cadenas: los fija la norma y no se sustentan.
-      for (const req of r.obligatorios) out.push(vineta(req));
-    }
-    if (r.facultativos.length > 0) {
-      out.push(new Paragraph({ spacing: { before: 80, after: 40 }, children: [run("Facultativos:", { bold: true })] }));
-      for (const req of r.facultativos) {
-        out.push(vineta(req.sustento ? `${req.nombre}: ${req.sustento}` : req.nombre));
+    for (const grupo of ["obligatorios", "adicionales"] as const) {
+      const tipos = TIPOS_REQUISITO_ART72.filter(
+        (t) => GRUPO_TIPO_ART72[t.key] === grupo && (reparto.porTipo.get(t.key)?.estado ?? "no") !== "no",
+      );
+      if (tipos.length === 0) continue;
+      out.push(
+        new Paragraph({ spacing: { before: 80, after: 40 }, children: [run(TITULO_GRUPO_ART72[grupo], { bold: true })] }),
+      );
+      for (const t of tipos) {
+        const info = reparto.porTipo.get(t.key)!;
+        const letra = LETRA_TIPO_ART72[t.key];
+        // «A. Tipo: qué se exige — Acredita: cómo — Sustento: por qué». Se
+        // conservan la acreditación (con su negrita del Anexo 11) y el sustento
+        // (solo facultativos), que antes iban pegados a la cadena del requisito.
+        let cuerpo = `${letra ? `${letra}. ` : ""}${labelTipoArt72(t.key)}`;
+        if (info.detalle.trim()) cuerpo += `: ${info.detalle.trim()}`;
+        if (info.acreditacion.trim()) cuerpo += ` — Acredita: ${info.acreditacion.trim()}`;
+        if (info.estado === "facultativo" && info.sustento.trim()) cuerpo += ` — Sustento: ${info.sustento.trim()}`;
+        out.push(vineta(cuerpo));
       }
     }
+    // Heredados en texto libre: no corresponden a ninguno de los 5 tipos.
+    for (const n of reparto.otrosObligatorios) out.push(vineta(n));
+    for (const f of reparto.otrosFacultativos) out.push(vineta(f.sustento ? `${f.nombre}: ${f.sustento}` : f.nombre));
     return out.length > 0 ? out : [contenido(c.valor)];
   }
 

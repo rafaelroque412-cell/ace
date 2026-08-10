@@ -4,7 +4,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { AlertTriangle, ChevronDown, ChevronRight, Gavel, Info, Loader, PencilLine, Trash2 } from "lucide-react";
 import {
   ACREDITACION_TIPICA,
+  GRUPO_TIPO_ART72,
+  LETRA_TIPO_ART72,
   TIPOS_REQUISITO_ART72,
+  TITULO_GRUPO_ART72,
   ayudaPorObjeto,
   componerRequisitos,
   parseRequisitos,
@@ -57,27 +60,8 @@ const RC_RESUMEN =
   "mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-[5px] text-[11.5px] text-muted";
 const RC_RESUMEN_CUENTA = "font-semibold text-ink";
 const RC_RESUMEN_FALTA = "inline-flex items-center gap-1 text-warning [&>svg]:flex-none";
-// Estructura oficial del 3.5 (Bases Estándar): los 5 tipos del Art. 72.3 se
-// agrupan en dos subsecciones y se rotulan con letras. Es solo PRESENTACIÓN de
-// la ficha: no cambia las claves, los datos ni la funcionalidad. `capacidad_economica`
-// no tiene letra en el formato oficial; queda en «adicionales» sin prefijo.
-const GRUPO_TIPO: Record<string, "obligatorios" | "adicionales"> = {
-  capacidad_legal: "obligatorios",
-  experiencia_postor: "obligatorios",
-  capacidad_tecnica: "adicionales",
-  consorcio: "adicionales",
-  capacidad_economica: "adicionales",
-};
-const LETRA_TIPO: Record<string, string> = {
-  capacidad_legal: "A",
-  experiencia_postor: "B",
-  capacidad_tecnica: "C",
-  consorcio: "D",
-};
-const TITULO_GRUPO: Record<"obligatorios" | "adicionales", string> = {
-  obligatorios: "3.5.1 Requisitos de calificación obligatorios",
-  adicionales: "3.5.2 Requisitos de calificación adicionales",
-};
+// La estructura oficial del 3.5 (grupos 3.5.1/3.5.2 y letras A–D) vive en
+// lib/requisitos-calificacion.ts para compartirse con el documento (Word).
 const RC_GRUPOTITULO =
   "mt-2 mb-0.5 text-[11.5px] font-[750] uppercase tracking-[0.03em] text-brand";
 const RC_TIPOS = "grid gap-1.5";
@@ -521,13 +505,13 @@ export function RequisitosCalificacionEditor({
           // Agrupación 3.5.1/3.5.2 y letra A–D del formato oficial. El encabezado
           // sale antes del PRIMER tipo aplicable de su grupo (robusto a que la
           // matriz oculte alguno). Es solo presentación: no toca datos ni claves.
-          const grupo = GRUPO_TIPO[tipo.key] ?? "adicionales";
+          const grupo = GRUPO_TIPO_ART72[tipo.key];
           const abreGrupo =
-            tiposAplicables.findIndex((t) => (GRUPO_TIPO[t.key] ?? "adicionales") === grupo) === i;
-          const letra = LETRA_TIPO[tipo.key];
+            tiposAplicables.findIndex((t) => GRUPO_TIPO_ART72[t.key] === grupo) === i;
+          const letra = LETRA_TIPO_ART72[tipo.key];
           return (
             <Fragment key={tipo.key}>
-              {abreGrupo ? <p className={RC_GRUPOTITULO}>{TITULO_GRUPO[grupo]}</p> : null}
+              {abreGrupo ? <p className={RC_GRUPOTITULO}>{TITULO_GRUPO_ART72[grupo]}</p> : null}
               <div className={RC_TIPO} data-estado={estado}>
               <div className={RC_TIPOHEAD}>
                 <div className={RC_TIPONOMBRE}>

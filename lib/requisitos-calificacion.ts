@@ -255,6 +255,30 @@ export function labelTipoArt72(key: TipoRequisitoArt72): string {
   return TIPOS_REQUISITO_ART72.find((t) => t.key === key)?.label ?? key;
 }
 
+// Estructura oficial del 3.5 (Bases Estándar): los 5 tipos se agrupan en dos
+// subsecciones (3.5.1 obligatorios / 3.5.2 adicionales) y se rotulan con letras
+// A–D. `capacidad_economica` no lleva letra en el formato oficial. Vive aquí
+// (server-safe) para que lo COMPARTAN la ficha (editor) y el documento (Word) sin
+// divergir.
+export type GrupoRequisito = "obligatorios" | "adicionales";
+export const GRUPO_TIPO_ART72: Record<TipoRequisitoArt72, GrupoRequisito> = {
+  capacidad_legal: "obligatorios",
+  experiencia_postor: "obligatorios",
+  capacidad_tecnica: "adicionales",
+  consorcio: "adicionales",
+  capacidad_economica: "adicionales",
+};
+export const LETRA_TIPO_ART72: Partial<Record<TipoRequisitoArt72, string>> = {
+  capacidad_legal: "A",
+  experiencia_postor: "B",
+  capacidad_tecnica: "C",
+  consorcio: "D",
+};
+export const TITULO_GRUPO_ART72: Record<GrupoRequisito, string> = {
+  obligatorios: "3.5.1 Requisitos de calificación obligatorios",
+  adicionales: "3.5.2 Requisitos de calificación adicionales",
+};
+
 export type EstadoRequisito = "no" | "obligatorio" | "facultativo";
 
 export type EstadoTipoRequisito = {
