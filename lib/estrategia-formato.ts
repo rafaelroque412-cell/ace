@@ -560,32 +560,47 @@ export function construirCronogramaInicial(
 // El "Registro de participantes" (Art. 65.2) NO figura como fila del cronograma:
 // es un RANGO continuo (del día siguiente a la convocatoria hasta antes de las
 // ofertas), no una etapa con su propia fecha, así que no se lista aquí.
+// Las etapas de cada procedimiento salen de la columna "Etapas" de las tablas de
+// los Arts. 93/94/95 del Reglamento (verificado verbatim contra el RAG), MÁS los
+// hitos que la norma fecha pero no lista como etapa: "Presentación de ofertas"
+// (ancla del Art. 64.1/68.1) y "Consentimiento de la buena pro" (Art. 82.1).
+//
+// COMPETITIVOS (licitación / concurso público y sus abreviados, Art. 93/94): las
+// cinco etapas son iguales — Convocatoria, Registro de participantes, "Consultas,
+// observaciones e integración" (UNA etapa), Evaluación de ofertas técnicas y
+// económicas, Otorgamiento de la buena pro. El registro es un RANGO (Art. 65.2):
+// `aplicarRegistroParticipantes` le pone las fechas del día siguiente de la
+// convocatoria a antes de las ofertas.
 const ACT_COMPETITIVO = [
   "Convocatoria",
-  "Formulación de consultas y observaciones",
-  "Absolución de consultas y observaciones",
-  "Integración de las Bases",
+  "Registro de participantes",
+  "Consultas, observaciones e integración",
   "Presentación de ofertas",
-  "Evaluación y calificación de ofertas",
+  "Evaluación de ofertas técnicas y económicas",
   "Otorgamiento de la buena pro",
   "Consentimiento de la buena pro",
 ] as const;
 
+// SUBASTA INVERSA ELECTRÓNICA (Art. 95): sus etapas NO incluyen consultas ni
+// observaciones —el requerimiento es la ficha técnica— y la evaluación es por
+// lances (Art. 96.4): Convocatoria, Registro de participantes, Evaluación de
+// ofertas (lances), Otorgamiento.
 const ACT_SUBASTA = [
   "Convocatoria",
-  "Formulación de consultas y observaciones",
-  "Absolución de consultas y observaciones",
-  "Integración de las Bases",
+  "Registro de participantes",
   "Presentación de ofertas",
-  "Apertura de ofertas y periodo de lances (puja electrónica)",
+  "Evaluación de ofertas mediante lances (puja electrónica)",
   "Otorgamiento de la buena pro",
   "Consentimiento de la buena pro",
 ] as const;
 
+// COMPARACIÓN DE PRECIOS (Art. 95): sus etapas son Convocatoria, Evaluación de
+// ofertas económicas y Otorgamiento — SIN registro de participantes ni consultas.
+// Se convoca invitando a un mínimo de tres proveedores (Art. 97.2).
 const ACT_COMPARACION = [
   "Convocatoria / solicitud de cotizaciones",
   "Presentación de cotizaciones",
-  "Evaluación de cotizaciones",
+  "Evaluación de ofertas económicas",
   "Otorgamiento de la buena pro",
   "Consentimiento de la buena pro",
 ] as const;

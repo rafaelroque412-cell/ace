@@ -284,3 +284,74 @@ describe("cronograma con fecha + hora (convención tipo SEACE)", () => {
     expect((r[1].inicio ?? "").endsWith("T00:01")).toBe(true);
   });
 })
+
+// o) Las etapas de la fase de selección deben ser EXACTAMENTE las de la columna
+// "Etapas" del Reglamento (Arts. 93/94/95), más los hitos que la norma fecha
+// (presentación de ofertas y consentimiento). Verificado verbatim contra el RAG.
+describe("etapas del cronograma según el procedimiento (Art. 46.1.o)", () => {
+  it("competitivos: registro de participantes + consultas unificadas, sin las filas sueltas del formato viejo", async () => {
+    const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
+    const lp = actividadesSeleccionDe("licitacion_publica");
+    expect(lp).toContain("Registro de participantes");
+    expect(lp).toContain("Consultas, observaciones e integración");
+    expect(lp).toContain("Evaluación de ofertas técnicas y económicas");
+    expect(lp).not.toContain("Formulación de consultas y observaciones");
+    expect(lp).not.toContain("Absolución de consultas y observaciones");
+    expect(lp).not.toContain("Integración de las Bases");
+  });
+
+  it("subasta inversa: sin etapa de consultas (Art. 95), con registro y lances", async () => {
+    const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
+    const s = actividadesSeleccionDe("subasta_inversa_electronica");
+    expect(s).toContain("Registro de participantes");
+    expect(s.some((a) => /consultas/i.test(a))).toBe(false);
+    expect(s.some((a) => /lances|puja/i.test(a))).toBe(true);
+  });
+
+  it("comparación de precios: sin registro de participantes ni consultas (Art. 95)", async () => {
+    const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
+    const c = actividadesSeleccionDe("comparacion_precios");
+    expect(c.some((a) => /registro de participantes/i.test(a))).toBe(false);
+    expect(c.some((a) => /consultas/i.test(a))).toBe(false);
+  });
+
+  it("al fechar una licitación pública: el registro es un rango entre convocatoria y ofertas, y se cumplen los 22 hábiles (Art. 64.1/65.2)", async () => {
+    const { construirCronogramaInicial } = await import("@/lib/estrategia-formato");
+    const base = construirCronogramaInicial("licitacion_publica", 30, "calendario");
+    const fechado = calcularFechasCronograma(base, "2026-08-12", new Set(), { procedimiento: "licitacion_publica" });
+    const conv = fechado.find((f) => /^Convocatoria/.test(f.actividad ?? ""));
+    const reg = fechado.find((f) => /Registro de participantes/.test(f.actividad ?? ""));
+    const ofertas = fechado.find((f) => /Presentación de ofertas/.test(f.actividad ?? ""));
+    // El registro quedó fechado como rango, entre la convocatoria y las ofertas.
+    expect(fechaDe(reg?.inicio)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fechaDe(reg?.inicio) > fechaDe(conv?.inicio)).toBe(true);
+    expect(fechaDe(reg?.fin) < fechaDe(ofertas?.inicio)).toBe(true);
+    // Art. 64.1: no menos de 22 días hábiles entre convocatoria y ofertas.
+    expect(diasHabilesEntre(fechaDe(conv?.inicio), fechaDe(ofertas?.inicio))).toBeGreaterThanOrEqual(22);
+  });
+})
+
+// El registro de participantes (Art. 65.2) es un RANGO: nunca debe salir con el
+// fin anterior al inicio. En la subasta inversa —sin etapa de consultas— el
+// encadenado natural dejaría las ofertas al día siguiente y el rango no cabría;
+// `aplicarVentanaRegistro` separa las ofertas para que la ventana exista.
+describe("registro de participantes: rango válido también en subasta inversa", () => {
+  it("subasta: el registro no se invierte y queda entre convocatoria y ofertas", async () => {
+    const { construirCronogramaInicial } = await import("@/lib/estrategia-formato");
+    const base = construirCronogramaInicial("subasta_inversa_electronica", 15, "calendario");
+    const fechado = calcularFechasCronograma(base, "2026-08-24", new Set(), {
+      procedimiento: "subasta_inversa_electronica",
+    });
+    const conv = fechado.find((f) => /^Convocatoria/.test(f.actividad ?? ""));
+    const reg = fechado.find((f) => /Registro de participantes/.test(f.actividad ?? ""));
+    const ofertas = fechado.find((f) => /Presentación de ofertas/.test(f.actividad ?? ""));
+    // El registro tiene fechas y su fin NO es anterior a su inicio.
+    expect(fechaDe(reg?.inicio)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fechaDe(reg?.fin) >= fechaDe(reg?.inicio)).toBe(true);
+    // Queda dentro de la ventana: después de la convocatoria y antes de las ofertas.
+    expect(fechaDe(reg?.inicio) > fechaDe(conv?.inicio)).toBe(true);
+    expect(fechaDe(reg?.fin) < fechaDe(ofertas?.inicio)).toBe(true);
+    // Y hay al menos un par de días hábiles de ventana (ofertas separadas de la convocatoria).
+    expect(diasHabilesEntre(fechaDe(conv?.inicio), fechaDe(ofertas?.inicio))).toBeGreaterThanOrEqual(3);
+  });
+})

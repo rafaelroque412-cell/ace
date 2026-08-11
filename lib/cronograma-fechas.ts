@@ -29,7 +29,10 @@ import {
 
 /** ¿Es la actividad de integración de (las) bases? */
 function esIntegracionBases(actividad: string | undefined): boolean {
-  return /integraci[oó]n de (las )?bases/i.test(actividad ?? "");
+  // La etapa del Reglamento une consultas, observaciones e integración en una sola
+  // fila: su FIN es la fecha de integración de bases, que ancla el plazo del
+  // Art. 68.1 (integración → ofertas). Se acepta también el rótulo antiguo suelto.
+  return /integraci[oó]n de (las )?bases|consultas,?\s*observaciones e integraci[oó]n/i.test(actividad ?? "");
 }
 
 /** Duración por defecto (días hábiles) de cada actividad, por palabras clave. */
@@ -79,7 +82,11 @@ export function duracionActividad(
 ): number {
   const a = (actividad ?? "").trim();
   if (!a) return 2;
-  if (/formulaci[oó]n de consultas/i.test(a)) {
+  // Etapa unificada "Consultas, observaciones e integración" (o el rótulo antiguo
+  // "Formulación de consultas…"): dura el plazo mínimo de consultas del Art. 66.1
+  // (7 días hábiles; 3 en las abreviadas), de modo que su FIN es la integración de
+  // bases desde la que cuenta el Art. 68.1.
+  if (/consultas,?\s*observaciones e integraci[oó]n|formulaci[oó]n de consultas/i.test(a)) {
     return (procedimiento ? MIN_HABILES_CONSULTAS[procedimiento] : undefined) ?? 7;
   }
   if (/consentimiento de la buena pro/i.test(a)) {
@@ -261,7 +268,10 @@ export function calcularFechasCronograma(
   );
   const conMinimo = aplicarMinimoOfertas(encadenadas, feriados, proc, cuantia);
   const conIntegracion = aplicarMinimoIntegracionOfertas(conMinimo, feriados, proc, cuantia);
-  const conRegistro = aplicarRegistroParticipantes(conIntegracion, feriados);
+  // La ventana del registro va ANTES de rellenar su rango: primero se separan las
+  // ofertas (subasta) y luego el registro ocupa el hueco resultante.
+  const conVentana = aplicarVentanaRegistro(conIntegracion, feriados, proc, cuantia);
+  const conRegistro = aplicarRegistroParticipantes(conVentana, feriados);
   return atarHoras(conRegistro, horaDe(anclaje) || "00:01");
 }
 
@@ -373,12 +383,55 @@ function aplicarRegistroParticipantes(
   const desde = convocatoria?.fin;
   const hasta = ofertas?.inicio;
   if (!desde || !hasta || !ISO.test(desde) || !ISO.test(hasta)) return filas;
+  const inicio = sumarDiasHabiles(desde, 1, feriados);
+  const finBruto = restarDiasHabiles(hasta, 1, feriados);
   const out = [...filas];
   out[i] = {
     ...out[i],
-    inicio: sumarDiasHabiles(desde, 1, feriados),
-    fin: restarDiasHabiles(hasta, 1, feriados),
+    inicio,
+    // Si la convocatoria y las ofertas están tan juntas que el rango se invertiría
+    // (fin < inicio), se acota el fin al inicio: un rango de un solo día en vez de
+    // un fin ANTERIOR al inicio. `aplicarVentanaRegistro` ya intenta separarlas
+    // antes; esto es la última red por si la DEC editó las ofertas a mano.
+    fin: finBruto < inicio ? inicio : finBruto,
   };
+  return out;
+}
+
+/** Ventana mínima (días hábiles) para el registro de participantes cuando el
+ *  procedimiento NO tiene etapa de consultas —así el rango del Art. 65.2 cabe—.
+ *  El Reglamento no fija este plazo para la subasta inversa (lo hacen la directiva
+ *  de Perú Compras y las bases estándar): es un estimado EDITABLE. Con 3 días
+ *  hábiles el registro ocupa dos (convocatoria+1 hasta ofertas-1). */
+const VENTANA_REGISTRO_HABILES = 3;
+
+/**
+ * Separa la presentación de ofertas de la convocatoria lo justo para que el
+ * registro de participantes (Art. 65.2) tenga ventana, en los procedimientos SIN
+ * etapa de consultas (subasta inversa): el encadenado natural las deja a un día y
+ * el rango del registro no cabría. En los competitivos no actúa porque las
+ * consultas y el mínimo del Art. 64.1 ya separan las ofertas de sobra.
+ */
+function aplicarVentanaRegistro(
+  filas: ActividadCronograma[],
+  feriados: ReadonlySet<string>,
+  proc: string | undefined,
+  cuantia?: number | null,
+): ActividadCronograma[] {
+  if (!filas.some((f) => esRegistroParticipantes(f.actividad))) return filas;
+  const iConv = filas.findIndex((f) => esConvocatoria(f.actividad));
+  const iOfertas = filas.findIndex((f) => esPresentacionOfertas(f.actividad));
+  if (iConv < 0 || iOfertas <= iConv) return filas;
+  const convFin = fechaDe(filas[iConv].fin);
+  if (!ISO.test(convFin)) return filas;
+  const minimo = sumarDiasHabiles(convFin, VENTANA_REGISTRO_HABILES, feriados);
+  const actual = fechaDe(filas[iOfertas].inicio);
+  if (ISO.test(actual) && actual >= minimo) return filas; // ya hay ventana
+  const out = [...filas];
+  let cursor = minimo;
+  for (let i = iOfertas; i < out.length; i += 1) {
+    out[i] = encadenar(out[i], proc, feriados, (c) => (cursor = c), () => cursor, cuantia);
+  }
   return out;
 }
 

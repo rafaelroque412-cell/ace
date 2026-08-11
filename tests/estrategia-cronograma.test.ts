@@ -136,7 +136,8 @@ describe("actividadesSeleccionDe (Art. 46.1.o)", () => {
     const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
     const lp = actividadesSeleccionDe("licitacion_publica");
     expect(lp).toContain("Convocatoria");
-    expect(lp).toContain("Integración de las Bases");
+    expect(lp).toContain("Registro de participantes");
+    expect(lp).toContain("Consultas, observaciones e integración");
     expect(lp).toContain("Consentimiento de la buena pro");
     expect(actividadesSeleccionDe("concurso_publico")).toEqual(lp);
   });

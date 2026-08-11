@@ -117,7 +117,12 @@ export function CronogramaEditor({
    * borrar, renombrar y añadir— que la DEC verifica contra las bases estándar.
    */
   function sembrar() {
-    onChange(construirCronogramaInicial(procedimiento, plazoDias, plazoUnidad));
+    // Lista las etapas del procedimiento Y calcula sus fechas de una vez: ancla por
+    // defecto hoy + 5 días hábiles (margen para aprobar el expediente), reanclable
+    // luego con «Calcular fechas desde el inicio».
+    const base = construirCronogramaInicial(procedimiento, plazoDias, plazoUnidad);
+    const ancla = sumarDiasHabiles(new Date().toISOString().slice(0, 10), 5, feriados);
+    onChange(calcularFechasCronograma(base, ancla, feriados, { procedimiento, cuantia }));
   }
 
   /**
@@ -130,11 +135,15 @@ export function CronogramaEditor({
     const otras = filas.filter((f) => f.fase !== "seleccion");
     const antes = otras.filter((f) => f.fase !== "ejecucion");
     const despues = otras.filter((f) => f.fase === "ejecucion");
-    onChange([
+    const nuevo = [
       ...antes,
       ...actividadesSeleccion.map((actividad) => ({ actividad, fase: "seleccion" as const })),
       ...despues,
-    ]);
+    ];
+    // Recalcula las fechas de las nuevas etapas: reancla desde el inicio de la
+    // primera actividad si ya lo hay, o desde hoy + 5 días hábiles.
+    const ancla = filas[0]?.inicio || sumarDiasHabiles(new Date().toISOString().slice(0, 10), 5, feriados);
+    onChange(calcularFechasCronograma(nuevo, ancla, feriados, { procedimiento, cuantia }));
   }
 
   return (
@@ -253,23 +262,19 @@ export function CronogramaEditor({
             <button
               className="secondaryButton compactButton"
               disabled={!filas[0]?.inicio}
-              // "Calcular" REHACE el cronograma con solo las etapas MÍNIMAS del
-              // procedimiento (descarta las añadidas a mano) y encadena fecha+hora
-              // desde el inicio de la primera: días hábiles respetando los feriados,
-              // con la convención de horas 00:01/23:59 (la hora del anclaje se respeta).
+              // "Calcular" recalcula las fechas SOBRE las actividades ACTUALES —las
+              // conserva tal cual, incluidas las añadidas o renombradas a mano— y las
+              // encadena fecha+hora desde el inicio de la primera: días hábiles
+              // respetando los feriados y los plazos del Reglamento, con la convención
+              // de horas 00:01/23:59 (la hora del anclaje se respeta). Ya NO rehace la
+              // lista: para volver a las etapas mínimas del procedimiento están el
+              // sembrado y el aviso «Re-listar la selección».
               onClick={() =>
-                onChange(
-                  calcularFechasCronograma(
-                    construirCronogramaInicial(procedimiento, plazoDias, plazoUnidad),
-                    filas[0]?.inicio,
-                    feriados,
-                    { procedimiento, cuantia },
-                  ),
-                )
+                onChange(calcularFechasCronograma(filas, filas[0]?.inicio, feriados, { procedimiento, cuantia }))
               }
               title={
                 filas[0]?.inicio
-                  ? "Rehace el cronograma con las etapas mínimas del procedimiento y encadena fecha y hora (días hábiles, respetando feriados) desde el inicio de la primera."
+                  ? "Recalcula las fechas de las actividades actuales (días hábiles, respetando feriados y los plazos del Reglamento) desde el inicio de la primera. No cambia la lista de actividades."
                   : "Pon la fecha y hora de inicio de la primera actividad para calcular el resto."
               }
               type="button"
