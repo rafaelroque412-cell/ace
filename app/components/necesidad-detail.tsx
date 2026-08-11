@@ -1446,8 +1446,12 @@ export function NecesidadDetail({
         setError(payload.error ?? "No se pudieron aplicar los campos.");
         return;
       }
-      // Reconcilia el formulario abierto con lo aplicado: sin esto el
-      // autoguardado reenviaría el formulario viejo y revertiría estos campos.
+      // Reconcilia de INMEDIATO con la necesidad que devuelve el PATCH: trae el
+      // `updated_at` fresco, así el sello del formulario avanza en el MISMO turno,
+      // antes de que un autoguardado pendiente pueda salir con el viejo y chocar
+      // con un 409 espurio («otro usuario guardó… recarga», siendo el mismo). El
+      // reload posterior solo refresca el resto de paneles, no el sello.
+      if (payload?.necesidad) reconciliarCamposExternos(payload.necesidad, Object.keys(body));
       const fresca = await reload();
       if (fresca) reconciliarCamposExternos(fresca, Object.keys(body));
       setExtractResult(null);
@@ -2003,10 +2007,16 @@ export function NecesidadDetail({
           camposObjetivo={camposTrasladables()}
           valoresActuales={valoresActualesTrasladables()}
           onClose={() => setEettModal(null)}
-          onSaved={(apisTrasladados) => {
+          onSaved={(apisTrasladados, necesidadFresca) => {
             void (async () => {
-              // Reconcilia el formulario abierto con lo trasladado: sin esto el
-              // autoguardado reenviaría el formulario viejo y lo revertiría.
+              // Reconcilia YA con la necesidad que devolvió el PATCH del traslado:
+              // avanza el sello de versión en este mismo turno, antes de que un
+              // autoguardado pendiente salga con el viejo y choque con un 409
+              // espurio («otro usuario guardó… recarga», siendo el mismo). El
+              // reload posterior solo refresca el resto de paneles, no el sello.
+              if (necesidadFresca && apisTrasladados?.length) {
+                reconciliarCamposExternos(necesidadFresca, apisTrasladados);
+              }
               const fresca = await reload();
               if (fresca && apisTrasladados?.length) {
                 reconciliarCamposExternos(fresca, apisTrasladados);

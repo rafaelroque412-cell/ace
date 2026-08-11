@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
+import type { Necesidad } from "@/lib/necesidades";
 import { numeroDesdeTexto, TrasladoPanel, type GrupoTraslado } from "./necesidad-traslado-panel";
 import { Button, IconButton } from "./ui/button";
 import { Alert } from "./ui/alert";
@@ -175,8 +176,13 @@ export function EettTdrModal({
    * al trasladar a la ficha). Quien recibe reconcilia el formulario abierto con
    * esos valores para que el autoguardado no los revierta. Los demás guardados
    * (revisar, editar el documento) no tocan la ficha y no pasan nada.
+   *
+   * `necesidadFresca`: la necesidad que devuelve el PATCH del traslado, con el
+   * `updated_at` ya avanzado. Se pasa para que el receptor sincronice el sello de
+   * versión de la ficha en el MISMO turno, antes de un reload asíncrono: sin ella,
+   * un autoguardado pendiente saldría con el sello viejo y chocaría con un 409.
    */
-  onSaved?: (apisTrasladados?: string[]) => void;
+  onSaved?: (apisTrasladados?: string[], necesidadFresca?: Necesidad) => void;
 }) {
   // Texto base del EETT/TDR (extraído del PDF) y propuesta generada por IA.
   const [contenidoBase, setContenidoBase] = useState(initialText ?? "");
@@ -499,7 +505,7 @@ export function EettTdrModal({
       setCamposPropuestos(null);
       setSeccionesOk(new Set());
       setCamposExcluidos(new Set());
-      onSaved?.(Object.keys(body));
+      onSaved?.(Object.keys(body), payload.necesidad as Necesidad | undefined);
     } catch {
       setError("No se pudo conectar para trasladar los campos.");
     } finally {

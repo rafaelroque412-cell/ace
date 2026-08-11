@@ -254,6 +254,14 @@ export function useFichaForm({
    * (valores frescos) y la lista de apis que se escribieron.
    */
   function reconciliarCamposExternos(n: Necesidad, apis: string[]) {
+    // El sello de versión avanza SIEMPRE, aun sin estar en edición o sin apis: la
+    // escritura externa (aplicar campos IA, traslado EETT/TDR) ya movió
+    // `updated_at` en el servidor. Si el formulario conserva el viejo, su próximo
+    // autoguardado sale con él y choca con un 409 espurio —«otro usuario guardó»,
+    // siendo el mismo— que obliga a recargar y hace «desaparecer» lo insertado.
+    // Debe pasar en el MISMO turno que recibe la necesidad fresca, antes de que un
+    // autoguardado pendiente pueda dispararse.
+    if (n.updated_at) baseUpdatedAtRef.current = n.updated_at;
     if (!fichaEdit || apis.length === 0) return;
     const base = valoresDeLaBase(n);
     setFichaForm((prev) => {
