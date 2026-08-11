@@ -23,7 +23,7 @@ import {
   Target,
 } from "lucide-react";
 import type { PedidoNecesidadImport } from "@/lib/pedido-compra-import";
-import { OBJECT_TYPES, objectTypeLabel } from "@/lib/legal-taxonomy";
+import { OBJETOS_NECESIDAD, objetoNecesidadLabel } from "@/lib/necesidades";
 import { filasTextarea } from "@/lib/textarea-alto";
 import { PROCESOS_SELECCION, type ObjetoFilter } from "@/lib/procesos-seleccion";
 import {
@@ -704,7 +704,7 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
       etiqueta: "Objeto",
       id: "objeto",
       onChange: setFiltroTipo,
-      opciones: OBJECT_TYPES.map((o) => ({ label: o.label, value: o.value })),
+      opciones: OBJETOS_NECESIDAD.map((o) => ({ label: o.label, value: o.value })),
       placeholder: "Todos los objetos",
       valor: filtroTipo,
     },
@@ -714,7 +714,7 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
       onChange: setFiltroProceso,
       opciones: procesosDelObjeto.map((p) => ({ label: p.label, value: p.value })),
       placeholder: filtroTipo
-        ? `Procedimientos de ${objectTypeLabel(filtroTipo).toLowerCase()}`
+        ? `Procedimientos de ${objetoNecesidadLabel(filtroTipo).toLowerCase()}`
         : "Todos los procedimientos",
       valor: filtroProceso,
     },
@@ -833,7 +833,7 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
                   <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                     <Field label="Tipo de objeto" required>
                       <Select value={tipoObjeto} onChange={(e) => setTipoObjeto(e.target.value)}>
-                        {OBJECT_TYPES.map((item) => (
+                        {OBJETOS_NECESIDAD.map((item) => (
                           <option key={item.value} value={item.value}>
                             {item.label}
                           </option>
@@ -1329,7 +1329,7 @@ const NecCard = memo(function NecCard({
 
         <div className="flex flex-wrap gap-1.5">
           <Badge tone="objeto">
-            {necesidad.tipo_objeto ? objectTypeLabel(necesidad.tipo_objeto) : "Objeto sin definir"}
+            {necesidad.tipo_objeto ? objetoNecesidadLabel(necesidad.tipo_objeto) : "Objeto sin definir"}
           </Badge>
           <Badge tone="neutral" title={necesidad.tipo_proceso_seleccion ?? undefined}>
             {necesidad.tipo_proceso_seleccion?.trim() || "Procedimiento por definir"}
@@ -1461,7 +1461,7 @@ function NecTabla({
                   </span>
                 </td>
                 <td className="px-4 py-3 align-middle text-muted">
-                  {n.tipo_objeto ? objectTypeLabel(n.tipo_objeto) : "—"}
+                  {n.tipo_objeto ? objetoNecesidadLabel(n.tipo_objeto) : "—"}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right align-middle tabular-nums">
                   {formatearMonto(n.monto_estimado)}

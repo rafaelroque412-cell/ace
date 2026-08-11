@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2, TriangleAlert } from "lucide-react";
-import { OBJECT_TYPES } from "@/lib/legal-taxonomy";
+import { OBJETOS_NECESIDAD } from "@/lib/necesidades";
 import {
   agruparPorPaquete,
   cuantiaPorSumatoria,
@@ -240,7 +240,7 @@ export function NecesidadItemsEditor({
                         value={item.tipoObjeto ?? ""}
                       >
                         <option value="">Igual que la necesidad</option>
-                        {OBJECT_TYPES.map((o) => (
+                        {OBJETOS_NECESIDAD.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
                           </option>

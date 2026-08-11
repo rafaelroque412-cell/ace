@@ -11,7 +11,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { detectarMarca } from "@/lib/necesidad-denominacion";
-import { OBJECT_TYPES, objectTypeLabel } from "@/lib/legal-taxonomy";
+import { OBJETOS_NECESIDAD, objetoNecesidadLabel } from "@/lib/necesidades";
 import { PROCESO_SELECCION_OPCIONES } from "@/lib/procesos-seleccion";
 import { TIPO_AREA_OPCIONES } from "@/lib/necesidad-workflow";
 import { REQUERIMIENTO_GUIA } from "@/lib/requerimiento-guia";
@@ -433,7 +433,7 @@ export function FichaEditable({
           <label className="flex min-w-0 flex-col">
             <span className={FICHA_LABEL}>Tipo de objeto</span>
             <select className={cn(FICHA_CTRL, FICHA_CTRL_H)} onChange={(e) => setFichaField("tipoObjeto", e.target.value)} value={fichaForm.tipoObjeto ?? ""}>
-              {OBJECT_TYPES.map((t) => (
+              {OBJETOS_NECESIDAD.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
@@ -456,11 +456,15 @@ export function FichaEditable({
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </optgroup>
-                  <optgroup label="Otros procedimientos">
-                    {opcionesProcesoAgrupadas.otros.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </optgroup>
+                  {/* Si la entidad realiza TODO el catálogo, "Otros" queda vacío:
+                      no pintamos una cabecera de grupo sin opciones debajo. */}
+                  {opcionesProcesoAgrupadas.otros.length > 0 ? (
+                    <optgroup label="Otros procedimientos">
+                      {opcionesProcesoAgrupadas.otros.map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </optgroup>
+                  ) : null}
                 </>
               ) : (
                 // Sin procesos configurados (o ninguno empareja): lista
@@ -642,7 +646,7 @@ export function FichaEditable({
                 {necesidad.tipo_proceso_seleccion}.
               </strong>{" "}
               Salen del PDF-modelo de requerimiento cargado en Configuración → Unidad de abastecimiento,
-              ajustados al objeto <strong>{objectTypeLabel(necesidad.tipo_objeto)}</strong>. Los demás siguen
+              ajustados al objeto <strong>{objetoNecesidadLabel(necesidad.tipo_objeto)}</strong>. Los demás siguen
               ahí: usa <strong>«Ver todos»</strong> para abrirlos.
             </div>
           </div>
@@ -985,7 +989,7 @@ export function FichaEditable({
           }}
           onCerrar={() => setCopilotoAbierto(false)}
           redactarSolicitud={copilotoRedactar}
-          tipoObjeto={tipoObj ? objectTypeLabel(tipoObj) : ""}
+          tipoObjeto={tipoObj ? objetoNecesidadLabel(tipoObj) : ""}
           tipoProcesoSeleccion={fichaForm.tipoProcesoSeleccion ?? ""}
         />
       ) : null}

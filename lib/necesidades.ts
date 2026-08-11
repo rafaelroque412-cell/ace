@@ -9,6 +9,30 @@ import type { NecesidadStatus, NoObjecionEstado, TipoArea } from "./necesidad-wo
 
 export type { NecesidadStatus } from "./necesidad-workflow";
 
+/**
+ * Los cuatro objetos contractuales del dominio necesidad (Ley 32069): bienes,
+ * servicios, obras y consultoría de obra. Fuente ÚNICA para el desplegable de
+ * «Tipo de objeto», su filtro en la lista y la etiqueta que se muestra.
+ *
+ * OJO — no es la misma taxonomía que `OBJECT_TYPES` de lib/legal-taxonomy.ts. Ahí
+ * la consultoría vale "consultoria"; aquí, "consultoria_obra". La columna
+ * `necesidades.tipo_objeto` y los `z.enum` de este módulo exigen "consultoria_obra",
+ * así que ofrecer el valor de legal-taxonomy hacía que guardar «Consultoría» diera
+ * 400, que el filtro de la lista no encontrara nada y que la etiqueta saliera en
+ * crudo ("consultoria_obra"). El dominio de procesos/expedientes sí usa la otra.
+ */
+export const OBJETOS_NECESIDAD = [
+  { value: "bienes", label: "Bienes" },
+  { value: "servicios", label: "Servicios" },
+  { value: "obras", label: "Obras" },
+  { value: "consultoria_obra", label: "Consultoría de obra" },
+] as const;
+
+export function objetoNecesidadLabel(value?: string | null): string {
+  if (!value) return "";
+  return OBJETOS_NECESIDAD.find((o) => o.value === value)?.label ?? value;
+}
+
 /** Observación por campo (D2): la DEC comenta un campo; el área usuaria subsana. */
 export type ObservacionNecesidad = {
   id: string;
