@@ -86,6 +86,7 @@ import {
   modificaProcedimientoDelPac,
   procedimientoGenerico,
   sistemaEntregaDeTexto,
+  sustentoAlElegirAgrupacion,
   sustentoAlElegirModalidadPago,
   sustentoAlElegirSistemaEntrega,
 } from "@/lib/estrategia-formato";
@@ -1038,7 +1039,15 @@ function conCitas(
     // artículos, cerrando con el nivel realizado. Solo se siembra si aún no
     // existe: si la DEC lo vació a propósito, no se vuelve a poner. El insumo de
     // A5 (fuentes/herramientas) se añade aparte con "Añadir al análisis".
-    if (!("var_n_tipo_interaccion" in base)) next.var_n_tipo_interaccion = sustentoNormativoN(a2Data, a5Data);
+    const sustN = sustentoNormativoN(a2Data, a5Data);
+    // Si el nivel realizado (A5) NO supera el mínimo de la segmentación (A2), B129
+    // no corresponde (numeral 127.2): `sustentoNormativoN` devuelve «NO CORRESPONDE»
+    // y aquí se FUERZA, aunque ya hubiera un sustento sembrado antes —su contenido es
+    // irrelevante, el export lo ignora igual—, para que el campo del frontend coincida
+    // con lo que se exportará. Si SÍ se subió de nivel, se siembra el sustento solo si
+    // el campo aún no existe (si la DEC lo vació a propósito, no se vuelve a poner).
+    if (sustN === "NO CORRESPONDE") next.var_n_tipo_interaccion = "NO CORRESPONDE";
+    else if (!("var_n_tipo_interaccion" in base)) next.var_n_tipo_interaccion = sustN;
     return next;
   }
   if (code !== "A5") return base;
@@ -2681,7 +2690,21 @@ function PasoCard({
                                       ? { ...prev, tipo_evaluador: v, cantidad_integrantes: cant }
                                       : { ...prev, tipo_evaluador: v };
                                   })
-                              : (v) => setDraftData((prev) => ({ ...prev, [campo.name]: v }))
+                              : // q) Igual que h)/i): al elegir el tipo de agrupación, el
+                                // sustento (var_q_agrupar) se auto-carga con la norma del
+                                // mecanismo (Art. 52), salvo que la DEC ya escribiera algo.
+                                campo.name === "agrupacion_tipo"
+                                ? (v) =>
+                                    setDraftData((prev) => {
+                                      const auto = sustentoAlElegirAgrupacion(
+                                        String(v ?? ""),
+                                        String(prev.var_q_agrupar ?? ""),
+                                      );
+                                      return auto !== null
+                                        ? { ...prev, agrupacion_tipo: v, var_q_agrupar: auto }
+                                        : { ...prev, agrupacion_tipo: v };
+                                    })
+                                : (v) => setDraftData((prev) => ({ ...prev, [campo.name]: v }))
                       }
                       processId={processId}
                       procedimiento={procedimientoProceso}

@@ -17,8 +17,10 @@ import {
   SI_NO_ESTRATEGIA,
   SUSTENTO_EVALUADOR_SUGERIDO,
   NORMA_SISTEMA_ENTREGA,
+  NORMA_AGRUPACION,
   sustentoAlElegirModalidadPago,
   sustentoAlElegirSistemaEntrega,
+  sustentoAlElegirAgrupacion,
 } from "@/lib/estrategia-formato";
 import { generarExcelF1, type ProcesoExport } from "@/lib/fase1-export";
 import { PROCESO_NO_COMPETITIVO } from "@/lib/procesos-seleccion";
@@ -271,6 +273,33 @@ describe("los mapas de casillas cubren TODAS las opciones del select", () => {
     expect(sustentoAlElegirSistemaEntrega("llave_en_mano", "Se oferta instalación y puesta en marcha.")).toBeNull();
     // Sistema sin norma (no_aplica) → no propone nada.
     expect(sustentoAlElegirSistemaEntrega("no_aplica", "")).toBeNull();
+  });
+
+  // q) El sustento de la agrupación cita el Art. 52 del Reglamento según la casilla
+  // marcada: 52.1.a el paquete; 52.1.b los ítems/lotes/tramos; 52.2 la obligación
+  // de sustentar el agrupamiento en la estrategia.
+  it("q) el sustento de cada mecanismo de agrupación cita el Art. 52", () => {
+    expect(NORMA_AGRUPACION.paquete).toContain("artículo 52.1.a");
+    expect(NORMA_AGRUPACION.items).toContain("artículo 52.1.b");
+    expect(NORMA_AGRUPACION.lotes).toContain("artículo 52.1.b");
+    expect(NORMA_AGRUPACION.tramos).toContain("artículo 52.1.b");
+    expect(NORMA_AGRUPACION.items).toContain("ítems");
+    expect(NORMA_AGRUPACION.lotes).toContain("lotes");
+    expect(NORMA_AGRUPACION.tramos).toContain("tramos");
+    // 52.2: la DEC sustenta que agrupar es más eficiente que contratar por separado.
+    for (const v of ["paquete", "items", "lotes", "tramos"]) {
+      expect(NORMA_AGRUPACION[v], v).toContain("artículo 52.2");
+    }
+  });
+
+  it("sustentoAlElegirAgrupacion precarga la norma pero respeta lo que escribió la DEC", () => {
+    expect(sustentoAlElegirAgrupacion("paquete", "")).toBe(NORMA_AGRUPACION.paquete);
+    // Traía la norma de OTRO mecanismo (sin editar) → la reemplaza por la nueva.
+    expect(sustentoAlElegirAgrupacion("items", NORMA_AGRUPACION.paquete)).toBe(NORMA_AGRUPACION.items);
+    // Texto propio de la DEC → no se pisa.
+    expect(sustentoAlElegirAgrupacion("paquete", "Se agrupan por economía de escala.")).toBeNull();
+    // Tipo sin norma → no propone nada.
+    expect(sustentoAlElegirAgrupacion("", "")).toBeNull();
   });
 });
 

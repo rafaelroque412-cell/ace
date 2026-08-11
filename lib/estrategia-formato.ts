@@ -202,6 +202,48 @@ export const CELDA_AGRUPAR: MapaCasillas = {
   tramos: "J154",
 };
 
+// Sustento normativo de cada mecanismo de agrupación según la casilla marcada.
+// Contrastado contra el RAG del Reglamento (009-2025-EF), Art. 52 "Agrupamiento de
+// prestaciones": 52.1.a Contratación por paquete; 52.1.b Procedimiento según
+// relación de ítems/lotes/tramos (cada uno de valor superior al de un contrato
+// menor, procedimiento independiente dentro del principal); 52.2 obliga a la DEC a
+// sustentar en la estrategia que agrupar es más eficiente que contratar por
+// separado; 53.3 fija la cuantía por la sumatoria. Paráfrasis con la cita —no
+// reproducción textual—: la DEC la ajusta.
+const normaRelacion = (unidad: string) =>
+  `El agrupamiento de prestaciones se realiza mediante el Procedimiento según relación de ${unidad}: en un único procedimiento de selección se contratan bienes, servicios, consultorías u obras distintos pero vinculados entre sí, agrupados en ${unidad}, donde cada uno —de valor superior al de un contrato menor— constituye un procedimiento independiente dentro del principal, de conformidad con el artículo 52.1.b del Reglamento; la cuantía se establece por la sumatoria de los ${unidad} (artículo 53.3). La DEC sustenta que este agrupamiento resulta más eficiente que efectuar contrataciones por separado (artículo 52.2 del Reglamento).`;
+
+export const NORMA_AGRUPACION: Readonly<Record<string, string>> = {
+  paquete:
+    "El agrupamiento de prestaciones se realiza mediante la Contratación por paquete: se agrupan en un mismo objeto contractual bienes o servicios distintos pero vinculados entre sí —u obras o consultorías de obras de similar naturaleza—, de conformidad con el artículo 52.1.a del Reglamento. La DEC sustenta que este agrupamiento resulta más eficiente que efectuar contrataciones por separado (artículo 52.2 del Reglamento).",
+  items: normaRelacion("ítems"),
+  lotes: normaRelacion("lotes"),
+  tramos: normaRelacion("tramos"),
+};
+
+/**
+ * Sustento a precargar al ELEGIR el tipo de agrupación en q). Mismo criterio que
+ * `sustentoAlElegirModalidadPago`: trae la norma del mecanismo (Art. 52) cuando el
+ * sustento actual está VACÍO o es OTRA norma (venía de otro mecanismo, sin editar);
+ * si la DEC escribió algo propio, devuelve null y se respeta lo escrito.
+ */
+export function sustentoAlElegirAgrupacion(tipo: string, actual: string): string | null {
+  const norma = NORMA_AGRUPACION[tipo];
+  if (!norma) return null;
+  const a = actual.trim();
+  const esOtraNorma = a !== "" && (Object.values(NORMA_AGRUPACION) as string[]).includes(a);
+  return !a || esOtraNorma ? norma : null;
+}
+
+/**
+ * Sustento normativo del mecanismo de agrupación marcado, para el fallback del
+ * export cuando el campo q) está vacío pero hay una casilla marcada. "" si no hay
+ * tipo (entonces la limpieza de la plantilla deja "NO CORRESPONDE").
+ */
+export function sustentoNormativoAgrupacion(tipo: string): string {
+  return NORMA_AGRUPACION[tipo] ?? "";
+}
+
 // d) Modalidad de contratación pública eficiente (Art. 46.1.d).
 export const CELDA_MODALIDAD_EFICIENTE: MapaCasillas = {
   compra_encargo: "F25",

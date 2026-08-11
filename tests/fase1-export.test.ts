@@ -148,6 +148,82 @@ describe("fase1-export · Formato de Estrategia", () => {
     for (let i = 0; i < 4; i += 1) expect(ws.getRow(primera + i).hidden).not.toBe(true);
   });
 
+  // n) B129 · el sustento solo aplica si se eligió un nivel de interacción MÁS
+  // avanzado que el mínimo de la segmentación (Art. 127.2). Se localiza por su
+  // rótulo B128 ("Sustento de la elección de un nivel más avanzado…").
+  function filaSustentoInteraccion(ws: ExcelJS.Worksheet): number {
+    for (let r = 1; r <= ws.rowCount; r += 1) {
+      if (/^Sustento de la elección de un nivel más avanzado/i.test(texto(ws.getCell(`B${r}`).value).trim())) {
+        return r + 1;
+      }
+    }
+    return -1;
+  }
+
+  it("n) B129: imprime el sustento cuando se eligió un nivel MÁS avanzado que el mínimo", async () => {
+    const conNivelMasAlto: HitosMap = {
+      ...hitos,
+      A2: { status: "hecho", data: { objeto: "bienes_servicios", cuantiaAlta: false } }, // mínimo: indagación básica
+      A5: { status: "hecho", data: { nivel: "consulta_mercado_avanzada" } }, // nivel más alto
+      A4: {
+        ...hitos.A4!,
+        data: { ...hitos.A4!.data, var_n_tipo_interaccion: "Consulta avanzada por la complejidad del mercado." },
+      },
+    };
+    const { buffer } = await generarExcelF1("estrategia", { proceso, hitos: conNivelMasAlto });
+    const ws = await cargar(buffer, 0);
+    const b129 = filaSustentoInteraccion(ws);
+    expect(b129).toBeGreaterThan(0);
+    expect(texto(ws.getCell(`B${b129}`).value)).toContain("Consulta avanzada por la complejidad");
+  });
+
+  it("n) B129: «NO CORRESPONDE» cuando el nivel elegido NO supera el mínimo", async () => {
+    const sinSubirNivel: HitosMap = {
+      ...hitos,
+      A2: { status: "hecho", data: { objeto: "bienes_servicios", cuantiaAlta: false } }, // mínimo: indagación básica
+      A5: { status: "hecho", data: { nivel: "indagacion_basica" } }, // = mínimo
+      A4: {
+        ...hitos.A4!,
+        data: { ...hitos.A4!.data, var_n_tipo_interaccion: "Texto que NO debe imprimirse." },
+      },
+    };
+    const { buffer } = await generarExcelF1("estrategia", { proceso, hitos: sinSubirNivel });
+    const ws = await cargar(buffer, 0);
+    const b129 = filaSustentoInteraccion(ws);
+    expect(texto(ws.getCell(`B${b129}`).value)).toBe("NO CORRESPONDE");
+  });
+
+  // q) El sustento de la agrupación (celda bajo "Sustento de la agrupación de
+  // prestaciones:") cae al fundamento normativo del mecanismo marcado si la DEC no
+  // escribió texto propio.
+  function filaSustentoAgrupacion(ws: ExcelJS.Worksheet): number {
+    for (let r = 1; r <= ws.rowCount; r += 1) {
+      if (/^Sustento de la agrupación de prestaciones/i.test(texto(ws.getCell(`B${r}`).value).trim())) return r + 1;
+    }
+    return -1;
+  }
+
+  it("q) sin texto propio pero con casilla marcada: B162 cae al Art. 52 del mecanismo", async () => {
+    const conItems: HitosMap = {
+      ...hitos,
+      A4: { ...hitos.A4!, data: { ...hitos.A4!.data, agrupacion_tipo: "items" } }, // sin var_q_agrupar
+    };
+    const { buffer } = await generarExcelF1("estrategia", { proceso, hitos: conItems });
+    const ws = await cargar(buffer, 0);
+    const b = filaSustentoAgrupacion(ws);
+    expect(b).toBeGreaterThan(0);
+    expect(texto(ws.getCell(`B${b}`).value)).toContain("artículo 52.1.b");
+  });
+
+  it("q) sin agrupación ni texto: B162 queda «NO CORRESPONDE»", async () => {
+    // Sin casilla ni texto, la limpieza de la plantilla convierte el marcador en
+    // «NO CORRESPONDE.» (con punto), igual que el resto de sustentos sin dato.
+    const { buffer } = await generarExcelF1("estrategia", { proceso, hitos });
+    const ws = await cargar(buffer, 0);
+    const b = filaSustentoAgrupacion(ws);
+    expect(texto(ws.getCell(`B${b}`).value)).toContain("NO CORRESPONDE");
+  });
+
   it("imprime en C258 la «fecha de elaboración» que editó la DEC, no siempre la de hoy", async () => {
     // El campo `fecha_elaboracion` de A4 prometía imprimirse al pie y era editable,
     // pero el exportador escribía siempre hoy(): la fecha editada no salía nunca.

@@ -92,6 +92,17 @@ describe("sustentoNormativoN (texto normativo de n)", () => {
     expect(t).toContain("artículos 42 y 153 del Reglamento");
   });
 
+  it("devuelve NO CORRESPONDE si el nivel realizado no supera el mínimo (numeral 127.2)", () => {
+    // Rutinaria → mínimo indagación básica; A5 realiza indagación básica (= mínimo):
+    // no se subió de nivel, así que el sustento de un «nivel más avanzado» de B129 no
+    // corresponde (es lo que también escribe el export).
+    const t = sustentoNormativoN(
+      { objeto: "bienes_servicios", cuantiaAlta: false, condicionesRiesgo: [] },
+      { nivel: "indagacion_basica" },
+    );
+    expect(t).toBe("NO CORRESPONDE");
+  });
+
   it("sin A2/A5 deja los huecos señalados en vez de inventar datos", () => {
     const t = sustentoNormativoN(null, null);
     expect(t).toContain("[pendiente");

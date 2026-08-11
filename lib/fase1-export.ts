@@ -8,7 +8,7 @@
 import ExcelJS from "exceljs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { clasificarSegmentacion, type ObjetoSegmentacion } from "./actuaciones-preparatorias";
+import { clasificarSegmentacion, NIVEL_ORDEN, type ObjetoSegmentacion } from "./actuaciones-preparatorias";
 import {
   citasDeNivel,
   cuantiaDeA5,
@@ -40,6 +40,7 @@ import {
   leerAdelantos,
   sustentoAdelantos,
   CELDA_AGRUPAR,
+  sustentoNormativoAgrupacion,
   CELDA_MODALIDAD_EFICIENTE,
   OTRAS_VARIABLES_CAMPOS,
   capitalizarProceso,
@@ -804,9 +805,34 @@ function llenarEstrategia(
     sustentoAdelantos(a4.adelantos_items, /obra/.test(objetoEstrategia)) || str(a4, "var_l_garantias_adelantos"),
   );
   setCell(ws, "B117", str(a4, "var_m_consumo_historico"));
-  setCell(ws, "B129", str(a4, "var_n_tipo_interaccion"));
+  // n) El sustento de B129 justifica SOLO la elección de un nivel de interacción
+  // MÁS AVANZADO que el mínimo que fijó la segmentación de A2 (numeral 127.2, tal
+  // como reza su rótulo en B128). Si NO se subió de nivel, no corresponde: se
+  // escribe «NO CORRESPONDE» en vez de arrastrar un sustento que afirmaría una
+  // decisión que no se tomó. El nivel ELEGIDO es `a5.nivel` (el radio), igual que
+  // en la verificación de n) que ve el usuario. Va aquí (antes de las inserciones
+  // de f)/g)) para que la celda viaje con su fila al sitio final.
+  const nivelElegidoN = typeof a5.nivel === "string" ? a5.nivel : "";
+  const nivelMinimoN = hitos.A2
+    ? clasificarSegmentacion({
+        objeto: a2.objeto === "obras_consultoria_obras" ? "obras_consultoria_obras" : "bienes_servicios",
+        cuantiaAlta: Boolean(a2.cuantiaAlta),
+        condicionesRiesgo: Array.isArray(a2.condicionesRiesgo) ? (a2.condicionesRiesgo as string[]) : [],
+        criteriosBasica: Array.isArray(a2.criteriosBasica) ? (a2.criteriosBasica as string[]) : [],
+        centralizada: Boolean(a2.centralizada),
+        esIoarr: Boolean(a2.esIoarr),
+      }).nivel
+    : null;
+  const ordenNivel = NIVEL_ORDEN as readonly string[];
+  const nivelMasAvanzadoN =
+    !!nivelElegidoN && !!nivelMinimoN && ordenNivel.indexOf(nivelElegidoN) > ordenNivel.indexOf(nivelMinimoN);
+  setCell(ws, "B129", nivelMasAvanzadoN ? str(a4, "var_n_tipo_interaccion") : "NO CORRESPONDE");
   setCell(ws, "B148", str(a4, "var_p_roles"));
-  setCell(ws, "B156", str(a4, "var_q_agrupar"));
+  // q) Sustento de la agrupación (B156→B162 tras las inserciones). Si la DEC no
+  // escribió texto propio pero marcó una casilla (paquete/ítems/lotes/tramos), cae
+  // al sustento normativo del mecanismo elegido (Art. 52); sin casilla, la limpieza
+  // de la plantilla deja "NO CORRESPONDE".
+  setCell(ws, "B156", str(a4, "var_q_agrupar") || sustentoNormativoAgrupacion(str(a4, "agrupacion_tipo")));
   setCell(ws, "B166", str(a4, "var_s_objetivo"));
   setCell(ws, "B179", str(a4, "var_t_otras"));
 

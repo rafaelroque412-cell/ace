@@ -21,6 +21,7 @@
 import {
   clasificarSegmentacion,
   NIVEL_INTERACCION_META,
+  NIVEL_ORDEN,
   type NivelInteraccion,
 } from "./actuaciones-preparatorias";
 import type { HitoStatus } from "./procurement-fases";
@@ -47,25 +48,34 @@ export function sustentoNormativoN(
     ? "artículos 42 y 153 del Reglamento"
     : "artículos 42 y 125 del Reglamento";
 
-  let catLinea: string;
-  let nivelMinLinea: string;
-  if (a2) {
-    const seg = clasificarSegmentacion({
-      objeto: a2.objeto === "obras_consultoria_obras" ? "obras_consultoria_obras" : "bienes_servicios",
-      cuantiaAlta: Boolean(a2.cuantiaAlta),
-      condicionesRiesgo: Array.isArray(a2.condicionesRiesgo) ? (a2.condicionesRiesgo as string[]) : [],
-      criteriosBasica: Array.isArray(a2.criteriosBasica) ? (a2.criteriosBasica as string[]) : [],
-      centralizada: Boolean(a2.centralizada),
-    });
-    catLinea = `- Categorización del objeto de la contratación (segmentación): ${seg.categoriaLabel}. Fundamento: ${artSegmentacion}.`;
-    nivelMinLinea = `- Nivel de interacción con el mercado determinado por la segmentación: ${seg.nivelLabel} (${seg.nivelRequisito}). Fundamento: artículos 48 al 50 del Reglamento.`;
-  } else {
-    catLinea = `- Categorización del objeto de la contratación (segmentación): [pendiente de registrar en el paso A2 · Segmentación]. Fundamento: ${artSegmentacion}.`;
-    nivelMinLinea =
-      "- Nivel de interacción con el mercado determinado por la segmentación: [pendiente]. Fundamento: artículos 48 al 50 del Reglamento.";
-  }
+  const seg = a2
+    ? clasificarSegmentacion({
+        objeto: a2.objeto === "obras_consultoria_obras" ? "obras_consultoria_obras" : "bienes_servicios",
+        cuantiaAlta: Boolean(a2.cuantiaAlta),
+        condicionesRiesgo: Array.isArray(a2.condicionesRiesgo) ? (a2.condicionesRiesgo as string[]) : [],
+        criteriosBasica: Array.isArray(a2.criteriosBasica) ? (a2.criteriosBasica as string[]) : [],
+        centralizada: Boolean(a2.centralizada),
+      })
+    : null;
 
   const nivelReal = typeof a5.nivel === "string" ? (a5.nivel as NivelInteraccion) : undefined;
+
+  // B129 (numeral 127.2) sustenta SOLO la elección de un nivel de interacción MÁS
+  // avanzado que el mínimo de la segmentación. Si el nivel realizado NO supera ese
+  // mínimo, no corresponde —y el export escribe «NO CORRESPONDE» ignorando este
+  // campo—, así que el punto de partida del frontend debe decir lo mismo, no un
+  // sustento largo que no se va a usar.
+  if (seg && nivelReal && NIVEL_ORDEN.indexOf(nivelReal) <= NIVEL_ORDEN.indexOf(seg.nivel)) {
+    return "NO CORRESPONDE";
+  }
+
+  const catLinea = seg
+    ? `- Categorización del objeto de la contratación (segmentación): ${seg.categoriaLabel}. Fundamento: ${artSegmentacion}.`
+    : `- Categorización del objeto de la contratación (segmentación): [pendiente de registrar en el paso A2 · Segmentación]. Fundamento: ${artSegmentacion}.`;
+  const nivelMinLinea = seg
+    ? `- Nivel de interacción con el mercado determinado por la segmentación: ${seg.nivelLabel} (${seg.nivelRequisito}). Fundamento: artículos 48 al 50 del Reglamento.`
+    : "- Nivel de interacción con el mercado determinado por la segmentación: [pendiente]. Fundamento: artículos 48 al 50 del Reglamento.";
+
   const metaReal = nivelReal ? NIVEL_INTERACCION_META[nivelReal] : undefined;
   const realizadoLinea = metaReal
     ? `Se realizó: ${metaReal.label}.`
