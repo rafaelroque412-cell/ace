@@ -609,7 +609,12 @@ const CAMPOS_ESTRATEGIA: CampoFormulario[] = [
       { name: "var_f_requisitos_calificacion", label: "f) Requisitos de calificación y/o precalificación", tipo: "requisitos", ancho: "full", recomendado: true, baseLegal: "Arts. 72.3-72.4, 46.1.f Reglamento", ayuda: "Los 5 tipos son los del Art. 72.3; las bases estándar (R.D. 0001-2026-EF/54.01) definen cuáles son OBLIGATORIOS según el procedimiento (Art. 72.4): el formato los incluye solo. Aquí registras los FACULTATIVOS que decida la DEC con su sustento; puede excluir uno si limita la concurrencia, con no objeción del área usuaria (Art. 44.8). La capacidad económica solo aplica con precalificación. Si está estandarizado, rigen los de la ficha (Art. 44.9)." },
 
       // ===== g) Factores de evaluación =====
-      { name: "factores_items", label: "g) Propuesta de factores de evaluación", tipo: "factores", ancho: "full", baseLegal: "Art. 46.1.g · 73.3 · 74.3 Reglamento", ayuda: "Un factor por fila. El menú lista los aplicables según el procedimiento de a) (la subasta inversa y la comparación de precios van por menor monto, sin factores técnicos, Art. 74.3). Al elegir un factor, su sustento se precarga con una recomendación EDITABLE; la lista definitiva la fijan las bases estándar (Art. 73.3). Van a la tabla del formato (B56:C58)." },
+      // `recomendado` para que g) se vea al ABRIR A4 (no escondido tras «Mostrar
+      // campos opcionales»): la propuesta de factores es contenido de la estrategia
+      // (Art. 46.1.g) y aplica «de corresponder» al procedimiento —queda vacío en
+      // subasta inversa / comparación de precios (menor monto, Art. 74.3)—, que es
+      // justo lo que la etiqueta «de corresponder» comunica. No bloquea el paso.
+      { name: "factores_items", label: "g) Propuesta de factores de evaluación", tipo: "factores", ancho: "full", recomendado: true, baseLegal: "Art. 46.1.g · 73.3 · 74.3 Reglamento", ayuda: "Un factor por fila. El menú lista los aplicables según el procedimiento de a) (la subasta inversa y la comparación de precios van por menor monto, sin factores técnicos, Art. 74.3). Al elegir un factor, su sustento se precarga con una recomendación EDITABLE; la lista definitiva la fijan las bases estándar (Art. 73.3). Van a la tabla del formato (B56:C58)." },
 
       // ===== h) Modalidad de pago =====
       // h) e i) van a media rejilla (sin `ancho:"full"`) para que cada SELECT
