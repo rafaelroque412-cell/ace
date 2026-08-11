@@ -54,6 +54,12 @@ const entitySchema = z.object({
   lpAbreviadaBienesAnio: z.string().trim().max(4).optional().or(z.literal("")),
   lpAbreviadaBienesMin: z.string().trim().max(30).optional().or(z.literal("")),
   lpAbreviadaBienesMax: z.string().trim().max(30).optional().or(z.literal("")),
+  // Topes por cuantía de los procedimientos (umbrales anuales editables).
+  topeAnio: z.string().trim().max(4).optional().or(z.literal("")),
+  topePiso: z.string().trim().max(30).optional().or(z.literal("")),
+  topeLicitacionConcurso: z.string().trim().max(30).optional().or(z.literal("")),
+  topeLicitacionObras: z.string().trim().max(30).optional().or(z.literal("")),
+  topeComparacionPrecios: z.string().trim().max(30).optional().or(z.literal("")),
 });
 
 const processTypeSchema = z.object({
@@ -108,6 +114,11 @@ type EntitySettingsRow = {
   lp_abreviada_bienes_anio?: number | null;
   lp_abreviada_bienes_min?: number | string | null;
   lp_abreviada_bienes_max?: number | string | null;
+  tope_anio?: number | null;
+  tope_piso?: number | string | null;
+  tope_licitacion_concurso?: number | string | null;
+  tope_licitacion_obras?: number | string | null;
+  tope_comparacion_precios?: number | string | null;
   updated_at: string | null;
 };
 
@@ -195,6 +206,11 @@ const COLUMNAS_OPCIONALES = new Set([
   "lp_abreviada_bienes_anio",
   "lp_abreviada_bienes_min",
   "lp_abreviada_bienes_max",
+  "tope_anio",
+  "tope_piso",
+  "tope_licitacion_concurso",
+  "tope_licitacion_obras",
+  "tope_comparacion_precios",
   "year",
 ]);
 
@@ -264,6 +280,9 @@ async function getSettings(year: number) {
   // propio nivel de fallback para que, si su SQL aún no se ha corrido, siga
   // leyéndose el PAC/UIT (columnsAll) en vez de caer hasta `columnsManager`.
   const columnsLp = `${columnsAll},lp_abreviada_bienes_min,lp_abreviada_bienes_max,lp_abreviada_bienes_anio,aga_degree,aga_dni,aga_full_name,aga_position,aga_resolution_date,aga_resolution_number`;
+  // Topes por cuantía: la tanda de columnas MÁS reciente. En su propio nivel de
+  // fallback para que, si su SQL aún no se ha corrido, siga leyéndose el resto.
+  const columnsTopes = `${columnsLp},tope_anio,tope_piso,tope_licitacion_concurso,tope_licitacion_obras,tope_comparacion_precios`;
   const yearFilter = `&year=eq.${year}`;
   const [entityRows, processRows] = await Promise.all([
     // SIN filtro de año, a diferencia de los tipos de proceso de más abajo.
@@ -279,6 +298,9 @@ async function getSettings(year: number) {
     // configurado. Quien la rellenara sobrescribía la fila del año anterior,
     // porque el upsert va con `on_conflict=id` sobre esa misma fila única.
     supabaseRest<EntitySettingsRow[]>(
+      `entity_settings?id=eq.default&select=${columnsTopes}&limit=1`,
+    ).catch(() =>
+    supabaseRest<EntitySettingsRow[]>(
       `entity_settings?id=eq.default&select=${columnsLp}&limit=1`,
     ).catch(() =>
       supabaseRest<EntitySettingsRow[]>(
@@ -292,6 +314,7 @@ async function getSettings(year: number) {
           ).catch(() => []),
         ),
       ),
+    ),
     ),
     // Solo tipos de proceso a nivel entidad (sin oficina).
     // Los tipos asignados a oficinas se gestionan en oficinas/[id]/procesos.
@@ -345,6 +368,11 @@ async function getSettings(year: number) {
           lpAbreviadaBienesAnio: entity.lp_abreviada_bienes_anio ? String(entity.lp_abreviada_bienes_anio) : "",
           lpAbreviadaBienesMin: montoToText(entity.lp_abreviada_bienes_min),
           lpAbreviadaBienesMax: montoToText(entity.lp_abreviada_bienes_max),
+          topeAnio: entity.tope_anio ? String(entity.tope_anio) : "",
+          topePiso: montoToText(entity.tope_piso),
+          topeLicitacionConcurso: montoToText(entity.tope_licitacion_concurso),
+          topeLicitacionObras: montoToText(entity.tope_licitacion_obras),
+          topeComparacionPrecios: montoToText(entity.tope_comparacion_precios),
           updatedAt: entity.updated_at,
         }
       : { ...emptyEntity, updatedAt: null },
@@ -439,6 +467,11 @@ export async function PUT(request: Request) {
       lp_abreviada_bienes_anio: entity.lpAbreviadaBienesAnio?.trim() ? Number(entity.lpAbreviadaBienesAnio) : null,
       lp_abreviada_bienes_min: parseMonto(entity.lpAbreviadaBienesMin),
       lp_abreviada_bienes_max: parseMonto(entity.lpAbreviadaBienesMax),
+      tope_anio: entity.topeAnio?.trim() ? Number(entity.topeAnio) : null,
+      tope_piso: parseMonto(entity.topePiso),
+      tope_licitacion_concurso: parseMonto(entity.topeLicitacionConcurso),
+      tope_licitacion_obras: parseMonto(entity.topeLicitacionObras),
+      tope_comparacion_precios: parseMonto(entity.topeComparacionPrecios),
       // Sin `year`: la fila es única y describe a la entidad, no a un ejercicio.
       // Sellarla con el año del selector no la separaba por año —seguía siendo
       // la misma fila— y solo servía para que la lectura filtrada no la

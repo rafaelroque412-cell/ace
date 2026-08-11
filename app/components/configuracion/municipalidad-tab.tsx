@@ -919,6 +919,43 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props)
                 ) : null}
               </div>
 
+              {/* Bloque: Topes de procedimiento por cuantía (año fiscal) */}
+              <div className="flex flex-col gap-3">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <Wallet size={14} /> Topes de procedimiento por cuantía — Año fiscal
+                </h3>
+                <p className="text-sm text-muted leading-relaxed m-0">
+                  Importes de la tabla anual DSEACE-OECE (Arts. 93-95 del Reglamento) que deciden el
+                  procedimiento según la cuantía. No están en la norma publicada; se registran por año.
+                  Si los dejas vacíos, la app usa los valores 2026.
+                </p>
+                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+                  {campo("topeAnio", "Ejercicio de los topes", {
+                    placeholder: "2026",
+                    inputMode: "numeric",
+                    maxDigits: 4,
+                  })}
+                  {campo("topePiso", "Piso — contrato menor (S/)", { moneda: true, placeholder: "44,000.00" })}
+                  {campo("topeLicitacionConcurso", "Frontera Licitación/Concurso (S/)", {
+                    moneda: true,
+                    placeholder: "485,000.00",
+                  })}
+                  {campo("topeLicitacionObras", "Licitación Pública de obras (S/)", {
+                    moneda: true,
+                    placeholder: "5,000,000.00",
+                  })}
+                  {campo("topeComparacionPrecios", "Techo Comparación de Precios (S/)", {
+                    moneda: true,
+                    placeholder: "100,000.00",
+                  })}
+                </div>
+                <div className="text-xs text-muted leading-relaxed">
+                  Bienes/servicios ≥ frontera → Licitación/Concurso Público; entre el piso y la frontera →
+                  su modalidad Abreviada; ≤ techo → cabe Comparación de Precios. Obras ≥ su umbral →
+                  Licitación Pública; por debajo, abreviada de obras.
+                </div>
+              </div>
+
             </div>
           </section>
 

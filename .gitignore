@@ -17,6 +17,8 @@ build
 .env.production.local
 # Backups locales de .env (p. ej. .env.local.djlhz.bak) — nunca al repo
 .env.local.*
+# PDF de referencia de topes (OECE, "prohibida su reproducción"): fuera del repo.
+actuaciones-preparatorias/
 
 # Logs
 npm-debug.log*

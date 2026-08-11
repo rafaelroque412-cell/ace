@@ -200,6 +200,12 @@ export const entitySchema = z.object({
   lpAbreviadaBienesAnio: z.optional(z.union([z.string().check(z.trim(), z.regex(/^\d{4}$/, "Ano de 4 digitos")), z.literal("")])),
   lpAbreviadaBienesMin: montoSchema,
   lpAbreviadaBienesMax: montoSchema,
+  // Topes por cuantía de los procedimientos de selección (umbrales anuales).
+  topeAnio: z.optional(z.union([z.string().check(z.trim(), z.regex(/^\d{4}$/, "Ano de 4 digitos")), z.literal("")])),
+  topePiso: montoSchema,
+  topeLicitacionConcurso: montoSchema,
+  topeLicitacionObras: montoSchema,
+  topeComparacionPrecios: montoSchema,
 });
 
 export type EntityFormData = z.infer<typeof entitySchema>;
@@ -265,5 +271,10 @@ export function toFormState(entity: EntitySettings): FormState {
     lpAbreviadaBienesAnio: entity.lpAbreviadaBienesAnio || "",
     lpAbreviadaBienesMin: formatearImporte(entity.lpAbreviadaBienesMin || ""),
     lpAbreviadaBienesMax: formatearImporte(entity.lpAbreviadaBienesMax || ""),
+    topeAnio: entity.topeAnio || "",
+    topePiso: formatearImporte(entity.topePiso || ""),
+    topeLicitacionConcurso: formatearImporte(entity.topeLicitacionConcurso || ""),
+    topeLicitacionObras: formatearImporte(entity.topeLicitacionObras || ""),
+    topeComparacionPrecios: formatearImporte(entity.topeComparacionPrecios || ""),
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { procedimientosElegibles, type TopesProcedimiento } from "@/lib/topes-procedimiento";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -323,6 +324,9 @@ export function NecesidadDetail({
   // llevan requisito de experiencia por ítem. Del mismo endpoint que la UIT.
   const [lpAbreviadaMin, setLpAbreviadaMin] = useState<number | null>(null);
   const [lpAbreviadaMax, setLpAbreviadaMax] = useState<number | null>(null);
+  // Topes de procedimiento por cuantía (Configuración anual, defecto 2026): con
+  // el objeto y el monto estimado se puede sugerir el procedimiento ya en la ficha.
+  const [topesProc, setTopesProc] = useState<TopesProcedimiento | null>(null);
   useEffect(() => {
     let cancelado = false;
     void (async () => {
@@ -333,6 +337,7 @@ export function NecesidadDetail({
           setUitValor(typeof d.uitValor === "number" ? d.uitValor : null);
           setLpAbreviadaMin(typeof d.lpAbreviadaBienesMin === "number" ? d.lpAbreviadaBienesMin : null);
           setLpAbreviadaMax(typeof d.lpAbreviadaBienesMax === "number" ? d.lpAbreviadaBienesMax : null);
+          setTopesProc(d.topes ?? null);
         }
       } catch {
         // Sin estos parámetros el cuadro lo dice y no bloquea nada.
@@ -755,6 +760,14 @@ export function NecesidadDetail({
    */
   const ejeProceso = fichaForm.tipoProcesoSeleccion ?? necesidad?.tipo_proceso_seleccion ?? "";
   const ejeObjeto = (fichaForm.tipoObjeto ?? necesidad?.tipo_objeto ?? "") as ObjetoFilter | "";
+  // Sugerencia de procedimiento por cuantía (topes DSEACE-OECE): con el objeto y
+  // el monto estimado ya se puede orientar la modalidad al área usuaria. La DEC
+  // la decide luego en la estrategia (A4); aquí es solo referencia.
+  const procElegiblesFicha = useMemo(() => {
+    const monto = Number(String(fichaForm.montoEstimado ?? "").replace(/[^\d.]/g, ""));
+    if (!ejeObjeto || !Number.isFinite(monto) || monto <= 0) return [];
+    return procedimientosElegibles(ejeObjeto, monto, false, topesProc ?? undefined);
+  }, [ejeObjeto, fichaForm.montoEstimado, topesProc]);
   /** Objetos que el procedimiento admite (Art. 44.10), acotados por el elegido. */
   const objetosEfectivos = useMemo(
     () => objetosEfectivosDe(ejeProceso, ejeObjeto || undefined),
@@ -1719,6 +1732,16 @@ export function NecesidadDetail({
       </header>
 
       {error ? <Alert tone="danger">{error}</Alert> : null}
+
+      {/* Sugerencia de procedimiento por cuantía (topes DSEACE-OECE): referencia
+          para el área usuaria; la DEC decide en la estrategia del expediente. */}
+      {procElegiblesFicha[0]?.value ? (
+        <Alert tone="info">
+          Según los topes y el monto estimado, el procedimiento correspondiente sería{" "}
+          <strong>{procElegiblesFicha[0].value}</strong>. {procElegiblesFicha[0].motivo} Es una
+          referencia: la DEC lo confirma en la estrategia (A4).
+        </Alert>
+      ) : null}
 
       {/* Navegación rápida (sticky): salta a cada bloque sin scroll infinito. */}
       <nav

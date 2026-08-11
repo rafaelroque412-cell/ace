@@ -109,6 +109,7 @@ import {
   procedimientosParaObjeto,
   regimenDe,
 } from "@/lib/regimen-seleccion";
+import { procedimientosElegibles, type TopesProcedimiento } from "@/lib/topes-procedimiento";
 import { validarPlazoMinimo } from "@/lib/plazo-minimo";
 import { cuantiaSegmentacionSinDeterminar, soles } from "@/lib/segmentacion-parametros";
 import type { CampoSustento } from "@/lib/sustento-ia";
@@ -1737,6 +1738,13 @@ function PasoCard({
     code === "A4"
       ? procedimientoSugerido(objetoContractual, estandarizadoA3 === true)
       : null;
+  // Con la cuantía estimada y los topes (por defecto 2026), ya se puede afirmar la
+  // MODALIDAD que antes «dependía de un anexo que ACE no tenía». Se ofrecen las
+  // opciones elegibles; la DEC decide. Vacío si aún no hay objeto o cuantía.
+  const elegiblesPorCuantia =
+    code === "A4"
+      ? procedimientosElegibles(objetoContractual, valorEstimado ?? null, estandarizadoA3 === true, segParametros?.topes)
+      : [];
 
   // a) ¿Modifica el procedimiento del PAC? Se deduce, así que hay que ENSEÑAR
   // el resultado: si no, quien rellena A4 no sabe qué saldrá marcado en el
@@ -2180,8 +2188,12 @@ function PasoCard({
               <span>
                 Por el objeto corresponde{" "}
                 <strong>{labelProcedimiento(sugerencia.value)}</strong>. {sugerencia.motivo}{" "}
-                Comprueba si aplica su <strong>modalidad abreviada</strong>: eso depende de la
-                cuantía y la norma remite a un anexo que ACE no tiene.
+                {!elegiblesPorCuantia[0]?.value ? (
+                  <>
+                    Comprueba si aplica su <strong>modalidad abreviada</strong>: eso depende de la
+                    cuantía y la norma remite a un anexo que ACE no tiene.
+                  </>
+                ) : null}
                 {canManage ? (
                   <>
                     {" "}
@@ -2189,6 +2201,43 @@ function PasoCard({
                       className="mt-2.5 inline-flex cursor-pointer items-center gap-[5px] rounded-[7px] border border-dashed border-line px-[9px] py-[5px] !text-[11.5px] text-muted hover:border-brand hover:bg-[color-mix(in_srgb,var(--brand)_5%,transparent)] hover:text-ink"
                       onClick={() =>
                         setDraftData((prev) => ({ ...prev, var_a_procedimiento: sugerencia.value }))
+                      }
+                      type="button"
+                    >
+                      Usarlo
+                    </button>
+                  </>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
+
+          {/* Sugerencia por CUANTÍA (topes DSEACE-OECE): la modalidad que antes no
+              se podía afirmar. `value` vacío = contrato menor, no se ofrece adoptar. */}
+          {elegiblesPorCuantia[0]?.value && draftData.var_a_procedimiento !== elegiblesPorCuantia[0].value ? (
+            <div className={GATING}>
+              <Info size={13} />
+              <span>
+                Según los topes y la cuantía estimada, corresponde{" "}
+                <strong>{labelProcedimiento(elegiblesPorCuantia[0].value)}</strong>. {elegiblesPorCuantia[0].motivo}
+                {elegiblesPorCuantia.filter((e) => e.value).length > 1 ? (
+                  <>
+                    {" "}También podría ser{" "}
+                    {elegiblesPorCuantia
+                      .slice(1)
+                      .filter((e) => e.value)
+                      .map((e) => labelProcedimiento(e.value))
+                      .join(" o ")}
+                    .
+                  </>
+                ) : null}
+                {canManage ? (
+                  <>
+                    {" "}
+                    <button
+                      className="mt-2.5 inline-flex cursor-pointer items-center gap-[5px] rounded-[7px] border border-dashed border-line px-[9px] py-[5px] !text-[11.5px] text-muted hover:border-brand hover:bg-[color-mix(in_srgb,var(--brand)_5%,transparent)] hover:text-ink"
+                      onClick={() =>
+                        setDraftData((prev) => ({ ...prev, var_a_procedimiento: elegiblesPorCuantia[0].value }))
                       }
                       type="button"
                     >
@@ -2929,6 +2978,10 @@ export function FasePanel({
   // de bienes y servicios registrado en Configuración.
   const [valorEstimado, setValorEstimado] = useState<number | null>(null);
   const [pacBienesServicios, setPacBienesServicios] = useState<number | null>(null);
+  // Topes de procedimiento configurados (Configuración → Municipalidad). Null
+  // hasta que llegan de parametros-segmentacion; procedimientosElegibles cae al
+  // defecto 2026 mientras tanto.
+  const [topesConfig, setTopesConfig] = useState<TopesProcedimiento | null>(null);
   const yearParam = useYearQueryParam();
   // Lo que el área usuaria estimó en la necesidad. No es el valor estimado —ese
   // lo fija A5 con el mercado (Art. 47.1)— pero si difieren mucho, alguien tiene
@@ -3182,8 +3235,9 @@ export function FasePanel({
       // conteo consciente en el Art. 125.2.
       valorEstimadoA1: valorA1,
       versionCmn: typeof a1.version_cmn === "string" ? a1.version_cmn : undefined,
+      topes: topesConfig ?? undefined,
     };
-  }, [esIoarr, hitos.A1, pacBienesServicios, procedureType, procesoNecesidad, valorEstimado]);
+  }, [esIoarr, hitos.A1, pacBienesServicios, procedureType, procesoNecesidad, valorEstimado, topesConfig]);
 
   // Nivel mínimo de interacción con el mercado que exige la segmentación (A2).
   const nivelMinimo = useMemo<NivelMinimo | null>(() => {
@@ -3204,7 +3258,10 @@ export function FasePanel({
       try {
         const pacRes = await fetch("/api/configuracion/parametros-segmentacion", { cache: "no-store" });
         const pac = await pacRes.json();
-        if (!cancelled) setPacBienesServicios(pac.pacMontoBienesServicios ?? null);
+        if (!cancelled) {
+          setPacBienesServicios(pac.pacMontoBienesServicios ?? null);
+          setTopesConfig(pac.topes ?? null);
+        }
       } catch {
         // Sin PAC registrado, A2 pide la cuantía a mano.
       }

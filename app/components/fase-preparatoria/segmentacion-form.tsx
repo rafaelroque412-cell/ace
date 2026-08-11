@@ -9,6 +9,7 @@ import {
   clasificarSegmentacion,
 } from "@/lib/actuaciones-preparatorias";
 import { calcularParametrosSegmentacion, cuantiaSegmentacionSinDeterminar, soles } from "@/lib/segmentacion-parametros";
+import type { TopesProcedimiento } from "@/lib/topes-procedimiento";
 import { mismaPersona, nombreParaFirma, type Persona } from "@/lib/nombres";
 import { OficinaCombobox, type OficinaOpcion } from "../oficina-combobox";
 
@@ -78,6 +79,8 @@ type CronoItem = { area: string; fecha: string };
 export type SegParametros = {
   pacBienesServicios: number | null;
   valorEstimado: number | null;
+  /** Topes de procedimiento por cuantía (Configuración anual; defecto 2026). */
+  topes?: TopesProcedimiento;
   programada: boolean;
   /** `programada` es una PRESUNCIÓN (A1 no lo confirmó): A2 lo advierte en el copy. */
   programadaPresumida?: boolean;

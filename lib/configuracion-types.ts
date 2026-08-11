@@ -52,6 +52,15 @@ export type EntitySettings = {
   lpAbreviadaBienesMin: string;
   lpAbreviadaBienesMax: string;
   lpAbreviadaBienesAnio: string;
+  // Topes por cuantía de los procedimientos de selección (tabla DSEACE-OECE,
+  // Arts. 93-95 del Reglamento). Importes anuales editables: no están en la norma
+  // publicada. Texto en el formulario; el API los normaliza. Defecto 2026 en
+  // lib/topes-procedimiento.ts (TOPES_2026).
+  topeAnio: string;
+  topePiso: string;
+  topeLicitacionConcurso: string;
+  topeLicitacionObras: string;
+  topeComparacionPrecios: string;
   updatedAt: string | null;
 };
 
@@ -213,6 +222,11 @@ export const emptyEntity: EntitySettings = {
   lpAbreviadaBienesMin: "",
   lpAbreviadaBienesMax: "",
   lpAbreviadaBienesAnio: "",
+  topeAnio: "",
+  topePiso: "",
+  topeLicitacionConcurso: "",
+  topeLicitacionObras: "",
+  topeComparacionPrecios: "",
   updatedAt: null,
 };
 
