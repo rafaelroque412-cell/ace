@@ -10082,11 +10082,18 @@ textarea:focus,
   padding: 16px 40px;
 }
 
-.modalCard.anexo1Preview,
-.modalCard.certificacionPreview {
-  height: 100%;
-  max-height: none;
-  width: min(1400px, 100%);
+/* El ModalShell (migrado a Tailwind) fija a TODOS los modales w-[min(860px,94vw)]
+   y max-h-[88vh]. Las vistas previa de HOJA —Formato de Estrategia, Anexo N° 1 y
+   Solicitud de Certificación— son tablas anchas de ~10 columnas que a 860px se
+   cortan: se ensanchan casi a pantalla completa. Antes esto colgaba de
+   `.modalCard`, clase que el ModalShell dejó de poner al migrar a Tailwind, y el
+   ancho se quedó clavado en 860. Se apunta a la clase que SÍ lleva la tarjeta, con
+   `!important` porque compite con una utilidad de Tailwind de la misma
+   especificidad y no debe depender del orden de carga de las hojas. */
+.anexo1Preview,
+.certificacionPreview {
+  width: min(1400px, 96vw) !important;
+  max-height: 92vh !important;
 }
 
 /* La carga masiva muestra una tabla de previsualización: necesita ancho. */
