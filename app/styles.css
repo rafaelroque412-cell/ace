@@ -10093,7 +10093,11 @@ textarea:focus,
 .anexo1Preview,
 .certificacionPreview {
   width: min(1400px, 96vw) !important;
-  max-height: 92vh !important;
+  /* Casi toda la altura de la ventana: la hoja es larga y el modal centrado deja
+     un margen mínimo arriba/abajo. El cuerpo desplaza dentro; la cabecera y los
+     botones se quedan fijos. */
+  height: 96vh !important;
+  max-height: 96vh !important;
 }
 
 /* La carga masiva muestra una tabla de previsualización: necesita ancho. */
