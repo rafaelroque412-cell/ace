@@ -86,8 +86,21 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
   const parsed = necesidadItemsSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
+    // Se nombra el ÍTEM y el CAMPO que falla en vez de un «Solicitud inválida»
+    // seco: con un cuadro de varias filas, saber que es «Ítem 3 · descripción»
+    // es la diferencia entre corregirlo en 5 s y mirar todo el cuadro a ciegas.
+    // El path de Zod es ["items", índice, campo].
+    const issue = parsed.error.issues[0];
+    const idx = typeof issue?.path?.[1] === "number" ? issue.path[1] + 1 : null;
+    const campo = issue?.path?.[2] ? String(issue.path[2]) : null;
+    const ubic = idx ? `Ítem ${idx}${campo ? ` · ${campo}` : ""}: ` : "";
     return NextResponse.json(
-      { details: parsed.error.flatten(), error: "Solicitud inválida" },
+      {
+        details: parsed.error.flatten(),
+        error: `Hay un ítem inválido en el cuadro (3.2). ${ubic}${
+          issue?.message ?? "revisa cantidades/costos (no negativos) y que la descripción tenga al menos 2 caracteres"
+        }`,
+      },
       { status: 400 },
     );
   }

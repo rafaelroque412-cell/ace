@@ -518,6 +518,12 @@ export function useFichaForm({
     setCamposTocados(new Set());
     setSavingFicha(true);
     onError("");
+    // No arranques el PATCH mientras un autoguardado siga EN VUELO: los dos
+    // mandarían el mismo sello `updated_at` y el segundo chocaría con un 409
+    // «propio» (el aviso «otro usuario guardó» siendo tú mismo). Se espera a que
+    // termine —avanza el sello— y se toma el turno; el `finally` lo libera.
+    while (guardandoRef.current) await new Promise((r) => setTimeout(r, 30));
+    guardandoRef.current = true;
     try {
       const payload = construirPayload();
       const response = await fetch(`/api/necesidades/${necesidadId}`, {
@@ -590,6 +596,7 @@ export function useFichaForm({
       onError("No se pudo conectar con el servidor.");
     } finally {
       setSavingFicha(false);
+      guardandoRef.current = false;
     }
   }
 
