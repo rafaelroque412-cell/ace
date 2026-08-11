@@ -10092,7 +10092,8 @@ textarea:focus,
    especificidad y no debe depender del orden de carga de las hojas. */
 .anexo1Preview,
 .certificacionPreview {
-  width: min(1400px, 96vw) !important;
+  /* 10% menos que el ancho anterior (1400px / 96vw): la hoja seguía muy ancha. */
+  width: min(1260px, 86vw) !important;
   /* Casi toda la altura de la ventana: la hoja es larga y el modal centrado deja
      un margen mínimo arriba/abajo. El cuerpo desplaza dentro; la cabecera y los
      botones se quedan fijos. */
@@ -10111,6 +10112,10 @@ textarea:focus,
 
 .certificacionPreview .modalBody {
   flex: 1;
+  /* `min-height: 0` deja que el cuerpo se encoja por debajo de su contenido y
+     desplace dentro; sin él, un flex-child no baja de su alto natural y los
+     botones no llegan al borde inferior. */
+  min-height: 0;
 }
 
 .certificacionPreview .hojaPreview {
@@ -10132,6 +10137,7 @@ textarea:focus,
 
 .anexo1Preview .modalBody {
   flex: 1;
+  min-height: 0;
 }
 
 /* A pantalla completa la hoja ya no necesita su propio tope de alto: manda el

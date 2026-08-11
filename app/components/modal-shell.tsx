@@ -62,7 +62,10 @@ export function ModalShell({
             </Dialog.Close>
           </div>
 
-          <div className="overflow-y-auto p-[18px] [&_section+section]:mt-[18px] [&_h4]:m-0 [&_h4]:mb-2 [&_h4]:text-[12px] [&_h4]:uppercase [&_h4]:tracking-[0.04em] [&_h4]:text-muted">
+          {/* `modalBody`: gancho para que las vistas previa de hoja (que fijan una
+              altura casi completa) hagan crecer el cuerpo y empujen los botones al
+              borde inferior. En el resto de modales no hace nada (sin regla). */}
+          <div className="modalBody overflow-y-auto p-[18px] [&_section+section]:mt-[18px] [&_h4]:m-0 [&_h4]:mb-2 [&_h4]:text-[12px] [&_h4]:uppercase [&_h4]:tracking-[0.04em] [&_h4]:text-muted">
             {children}
           </div>
 
