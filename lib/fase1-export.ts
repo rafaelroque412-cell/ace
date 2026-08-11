@@ -653,13 +653,28 @@ function volcarRequisitos(
 /** g) Factores de evaluación (Art. 46.1.g): tabla nombre + sustento. */
 function volcarFactores(ws: ExcelJS.Worksheet, a4: Record<string, unknown>, corrimiento: number) {
   const factores = leerFilas<FactorEvaluacion>(a4.factores_items);
-  if (factores.length === 0) return;
   const desde = FILAS_FACTORES.desde + corrimiento;
+  // Sin factores propuestos (p. ej. subasta inversa o comparación de precios, que
+  // van por menor monto sin factores técnicos, Art. 74.3): en vez de dejar los
+  // marcadores "[Insertar…]" —que en el formato firmado se leen como un olvido—,
+  // se escribe NO CORRESPONDE en la primera fila (nombre y sustento) y se OCULTAN
+  // las otras dos filas de plantilla, para que el apartado quede resuelto explícito.
+  if (factores.length === 0) {
+    setCell(ws, `${FILAS_FACTORES.colNombre}${desde}`, "NO CORRESPONDE");
+    setCell(ws, `${FILAS_FACTORES.colSustento}${desde}`, "NO CORRESPONDE");
+    for (let i = 1; i < FILAS_FACTORES.cuantas; i += 1) ws.getRow(desde + i).hidden = true;
+    return;
+  }
+  // Un factor por fila desde la 56: el 1.º en la 56, el 2.º en la 57, etc. Si hay
+  // MÁS que las 3 filas de plantilla, `ampliarBloque` inserta las que falten.
   ampliarBloque(ws, desde + FILAS_FACTORES.cuantas - 1, factores.length - FILAS_FACTORES.cuantas);
   factores.forEach((f, i) => {
     setCell(ws, `${FILAS_FACTORES.colNombre}${desde + i}`, f.nombre ?? "");
     setCell(ws, `${FILAS_FACTORES.colSustento}${desde + i}`, f.sustento ?? "");
   });
+  // Si hay MENOS factores que las 3 filas de plantilla (1 o 2), se ocultan las
+  // sobrantes para no dejarlas con el marcador "[Insertar…]".
+  for (let i = factores.length; i < FILAS_FACTORES.cuantas; i += 1) ws.getRow(desde + i).hidden = true;
 }
 
 /**

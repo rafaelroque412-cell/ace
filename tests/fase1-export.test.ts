@@ -70,6 +70,84 @@ describe("fase1-export · Formato de Estrategia", () => {
     expect(texto(ws.getCell("F74").value)).toBe("X"); // i) Llave en mano
   });
 
+  // La tabla de g) se desplaza con las inserciones de f); se localiza por su
+  // rótulo de cabecera ("Nombre del factor de evaluación:"), y la 1.ª fila de
+  // factor es la siguiente.
+  function primeraFilaFactor(ws: ExcelJS.Worksheet): number {
+    for (let r = 1; r <= ws.rowCount; r += 1) {
+      if (/^Nombre del factor de evaluaci/i.test(texto(ws.getCell(`B${r}`).value).trim())) return r + 1;
+    }
+    return -1;
+  }
+
+  it("g) sin factores: NO CORRESPONDE en la 1.ª fila y oculta las otras dos", async () => {
+    // Sin `factores_items` (p. ej. subasta inversa / comparación de precios, que
+    // van por menor monto sin factores técnicos, Art. 74.3), la tabla no debe
+    // quedar con los marcadores "[Insertar…]" —que en el formato firmado se leen
+    // como un olvido—: NO CORRESPONDE en nombre y sustento de la 1.ª fila, y las
+    // dos filas restantes de la plantilla, ocultas.
+    const { buffer } = await generarExcelF1("estrategia", { proceso, hitos });
+    const ws = await cargar(buffer, 0);
+    const primera = primeraFilaFactor(ws);
+    expect(primera).toBeGreaterThan(0);
+    expect(texto(ws.getCell(`B${primera}`).value)).toBe("NO CORRESPONDE");
+    expect(texto(ws.getCell(`C${primera}`).value)).toBe("NO CORRESPONDE");
+    expect(ws.getRow(primera + 1).hidden).toBe(true);
+    expect(ws.getRow(primera + 2).hidden).toBe(true);
+  });
+
+  function conFactoresA4(items: Array<{ nombre: string; sustento: string }>): HitosMap {
+    return { ...hitos, A4: { ...hitos.A4!, data: { ...hitos.A4!.data, factores_items: items } } };
+  }
+
+  it("g) con 1 factor: va a la 1.ª fila y oculta las otras dos de plantilla", async () => {
+    const { buffer } = await generarExcelF1("estrategia", {
+      proceso,
+      hitos: conFactoresA4([{ nombre: "Mejora en las EE.TT.", sustento: "Sustento de prueba del factor." }]),
+    });
+    const ws = await cargar(buffer, 0);
+    const primera = primeraFilaFactor(ws);
+    expect(texto(ws.getCell(`B${primera}`).value)).toBe("Mejora en las EE.TT.");
+    expect(texto(ws.getCell(`C${primera}`).value)).toContain("Sustento de prueba");
+    expect(ws.getRow(primera).hidden).not.toBe(true);
+    expect(ws.getRow(primera + 1).hidden).toBe(true); // 2.ª de plantilla, sin factor
+    expect(ws.getRow(primera + 2).hidden).toBe(true); // 3.ª de plantilla, sin factor
+  });
+
+  it("g) con 2 factores: filas 1 y 2, y oculta la 3.ª de plantilla", async () => {
+    const { buffer } = await generarExcelF1("estrategia", {
+      proceso,
+      hitos: conFactoresA4([
+        { nombre: "Factor uno", sustento: "Sustento uno." },
+        { nombre: "Factor dos", sustento: "Sustento dos." },
+      ]),
+    });
+    const ws = await cargar(buffer, 0);
+    const primera = primeraFilaFactor(ws);
+    expect(texto(ws.getCell(`B${primera}`).value)).toBe("Factor uno");
+    expect(texto(ws.getCell(`B${primera + 1}`).value)).toBe("Factor dos");
+    expect(ws.getRow(primera).hidden).not.toBe(true);
+    expect(ws.getRow(primera + 1).hidden).not.toBe(true);
+    expect(ws.getRow(primera + 2).hidden).toBe(true); // 3.ª de plantilla, sin factor
+  });
+
+  it("g) con 4 factores: agrega una fila (56-59) y ninguna queda oculta ni con marcador", async () => {
+    const { buffer } = await generarExcelF1("estrategia", {
+      proceso,
+      hitos: conFactoresA4([
+        { nombre: "Factor uno", sustento: "S1." },
+        { nombre: "Factor dos", sustento: "S2." },
+        { nombre: "Factor tres", sustento: "S3." },
+        { nombre: "Factor cuatro", sustento: "S4." },
+      ]),
+    });
+    const ws = await cargar(buffer, 0);
+    const primera = primeraFilaFactor(ws);
+    const nombres = [0, 1, 2, 3].map((i) => texto(ws.getCell(`B${primera + i}`).value));
+    expect(nombres).toEqual(["Factor uno", "Factor dos", "Factor tres", "Factor cuatro"]);
+    for (let i = 0; i < 4; i += 1) expect(ws.getRow(primera + i).hidden).not.toBe(true);
+  });
+
   it("imprime en C258 la «fecha de elaboración» que editó la DEC, no siempre la de hoy", async () => {
     // El campo `fecha_elaboracion` de A4 prometía imprimirse al pie y era editable,
     // pero el exportador escribía siempre hoy(): la fecha editada no salía nunca.
