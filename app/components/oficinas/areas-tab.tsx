@@ -24,7 +24,6 @@ import {
 } from "./areas-import-modal";
 import { useYear } from "@/lib/year-context";
 import { useToastHelpers } from "@/lib/toast";
-import { ProcesosModal } from "./procesos-modal";
 import { EmptyState } from "../configuracion/empty-state";
 import { SaveStatus, type SaveStatusType } from "../configuracion/save-status";
 import {
@@ -62,7 +61,6 @@ export function AreasTab({
   const [query, setQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [procesosOfficeId, setProcesosOfficeId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatusType>('idle');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -359,16 +357,9 @@ export function AreasTab({
                   <Workflow size={14} /> Procesos de contratación
                 </div>
                 <p className="m-0 text-sm text-muted">
-                  Gestiona los procedimientos de contratación que realiza esta oficina.
-                  Guarda los cambios de arriba antes de gestionar los procesos.
+                  Esta oficina es la encargada de las contrataciones. Sus procesos de la Ley 32069 se
+                  gestionan ahora en <strong>Configuración → Procesos de selección</strong>.
                 </p>
-                <button
-                  className={`${btnPri} mt-1.5`}
-                  type="button"
-                  onClick={() => setProcesosOfficeId(o.id)}
-                >
-                  <Workflow size={15} /> Gestionar procesos
-                </button>
               </div>
             ) : null}
 
@@ -565,14 +556,6 @@ export function AreasTab({
         />
       ) : null}
 
-      {procesosOfficeId !== null ? (
-        <ProcesosModal
-          oficina={oficinas.find((o) => o.id === procesosOfficeId)!}
-          open={procesosOfficeId !== null}
-          onClose={() => setProcesosOfficeId(null)}
-          setError={setError}
-        />
-      ) : null}
     </div>
   );
 }

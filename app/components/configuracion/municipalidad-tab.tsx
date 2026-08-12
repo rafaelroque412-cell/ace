@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { SaveStatus } from "./save-status";
 import { CronogramaDiasGrid } from "./cronograma-dias-grid";
+import { ProcesosContratacionSection } from "./procesos-contratacion-section";
+import type { Oficina } from "../oficinas/use-oficinas";
 import { inputBase } from "./ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -59,9 +61,18 @@ type Props = {
   governmentLevels: GovernmentLevel[];
   /** Qué grupo de secciones pinta esta instancia. Por defecto, la entidad. */
   variant?: Variant;
+  /** Oficinas encargadas de las contrataciones (variante "procesos"): alimentan la
+   *  sección «Procesos de contratación» y el modal de gestión por oficina. */
+  oficinasContrataciones?: Oficina[];
 };
 
-export function MunicipalidadTab({ entity, setEntity, governmentLevels, variant = "entidad" }: Props) {
+export function MunicipalidadTab({
+  entity,
+  setEntity,
+  governmentLevels,
+  variant = "entidad",
+  oficinasContrataciones = [],
+}: Props) {
   const { yearParam } = useYear();
   const { success, error: toastError } = useToastHelpers();
 
@@ -76,13 +87,14 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels, variant 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [activeSection, setActiveSection] = useState(esProcesos ? "aga" : "datos");
+  const [activeSection, setActiveSection] = useState(esProcesos ? "procesos-contratacion" : "datos");
   const [showPreview, setShowPreview] = useState(false);
 
   // La navegación por anclas es propia de cada variante: cada ítem corresponde a
   // una tarjeta con su `id`/`data-section`.
   const SECCIONES = esProcesos
     ? [
+        { id: "procesos-contratacion", label: "Procesos de contratación" },
         { id: "aga", label: "Autoridad de gestión administrativa (AGA)" },
         { id: "resoluciones", label: "Resoluciones del PIA y PAC" },
         { id: "montos", label: "Montos del PAC" },
@@ -1028,6 +1040,7 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels, variant 
       {esProcesos ? (
         /* Variante "procesos": una columna a todo el ancho, sin vista previa. */
         <div className="flex flex-col gap-4">
+          <ProcesosContratacionSection oficinas={oficinasContrataciones} />
           {cardAga}
           {cardResoluciones}
           {cardMontos}

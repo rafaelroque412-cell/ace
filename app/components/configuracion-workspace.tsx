@@ -536,6 +536,7 @@ export function ConfiguracionWorkspace({ currentUserId }: { currentUserId: strin
         <AdminSettings
           currentUserId={currentUserId}
           oficinas={oficinas.map((o) => ({ id: o.id, nombre: o.nombre }))}
+          oficinasContrataciones={oficinas.filter((o) => o.gestiona_contrataciones)}
           onReloadOficinas={oficinasState.reload}
           onSummary={reportAdmin}
           section={adminSection}

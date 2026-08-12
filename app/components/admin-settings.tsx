@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { MunicipalidadTab } from "./configuracion/municipalidad-tab";
+import type { Oficina } from "./oficinas/use-oficinas";
 import { ConfirmDialog } from "./confirm-dialog";
 import { SaveStatus, type SaveStatusType } from "./configuracion/save-status";
 import {
@@ -58,6 +59,7 @@ export function AdminSettings({
   currentUserId: currentUserIdProp,
   section,
   oficinas,
+  oficinasContrataciones,
   onReloadOficinas,
   onSummary,
 }: {
@@ -71,6 +73,12 @@ export function AdminSettings({
    * el id y el nombre.
    */
   oficinas: OficinaOption[];
+  /**
+   * Oficinas COMPLETAS encargadas de las contrataciones (bandera
+   * `gestiona_contrataciones`). Las consume la sección «Procesos de contratación»
+   * de la pestaña Procesos de selección para abrir su modal de gestión por oficina.
+   */
+  oficinasContrataciones?: Oficina[];
   /** Relee las oficinas (al abrir el alta, por si se crearon en Áreas). */
   onReloadOficinas: () => Promise<void>;
   /** Reporta al workspace el estado para los indicadores de la barra lateral. */
@@ -385,6 +393,7 @@ export function AdminSettings({
           setEntity={setEntity}
           governmentLevels={governmentLevels}
           variant={shownTab === "procesos" ? "procesos" : "entidad"}
+          oficinasContrataciones={oficinasContrataciones}
         />
       ) : null}
 
