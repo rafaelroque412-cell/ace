@@ -621,7 +621,7 @@ export function ProcesosModal({ oficina, open, onClose, setError }: Props) {
         {loaded ? (
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-line bg-[#f8fafc] px-6 py-3.5">
             <span className="min-w-[280px] flex-1 text-sm leading-normal text-[#64748b]">
-              Catálogo basado en <strong className="text-[#475569]">Ley 32069</strong> y su Reglamento (D.S. 006-2024-EF).
+              Catálogo basado en <strong className="text-[#475569]">Ley 32069</strong> y su Reglamento (D.S. 009-2025-EF).
               Los procesos marcados como &quot;Frecuente municipal&quot; aparecen primero al crear expedientes.
             </span>
             <div className="flex shrink-0 items-center gap-2.5">
