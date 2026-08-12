@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { AlertCircle, Building2, CalendarDays, CheckCircle2, FileSpreadsheet, Hash, Landmark, Scale, UserCog, Users } from "lucide-react";
+import { AlertCircle, Building2, CalendarDays, CheckCircle2, FileSpreadsheet, Gavel, Hash, Landmark, Scale, UserCog, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AdminSettings } from "./admin-settings";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -51,6 +51,7 @@ const InstitucionesArbitralesTab = dynamic(
 
 type SectionKey =
   | "municipalidad"
+  | "procesos"
   | "areas"
   | "numeracion"
   | "membrete"
@@ -82,7 +83,14 @@ const NAV: { grupo: string; items: NavItem[] }[] = [
         key: "municipalidad",
         icon: <Landmark size={18} />,
         label: "Municipalidad",
-        desc: "Datos de la entidad y autoridad",
+        desc: "Datos de la entidad y gerente",
+        owner: "admin",
+      },
+      {
+        key: "procesos",
+        icon: <Gavel size={18} />,
+        label: "Procesos de selección",
+        desc: "AGA, PAC, topes y cronograma",
         owner: "admin",
       },
     ],
@@ -163,7 +171,11 @@ const NAV: { grupo: string; items: NavItem[] }[] = [
 const SECCION_INFO: Record<SectionKey, { titulo: string; sub: string }> = {
   municipalidad: {
     titulo: "Datos de la entidad",
-    sub: "Identificación, autoridad y montos del PAC. Es lo que se imprime en la cabecera de los documentos que la entidad firma.",
+    sub: "Identificación, tipo de gobierno y gerente. Es lo que se imprime en la cabecera de los documentos que la entidad firma.",
+  },
+  procesos: {
+    titulo: "Procesos de selección",
+    sub: "Los parámetros que deciden el procedimiento: la autoridad que aprueba (AGA), las resoluciones del PIA y PAC, la línea de corte, los topes por cuantía y los días del cronograma.",
   },
   areas: {
     titulo: "Áreas y oficinas",
@@ -197,6 +209,7 @@ const SECCION_INFO: Record<SectionKey, { titulo: string; sub: string }> = {
 
 const OWNER: Record<SectionKey, Owner> = {
   municipalidad: "admin",
+  procesos: "admin",
   usuarios: "admin",
   feriados: "admin",
   areas: "ofic",
@@ -243,7 +256,7 @@ export function ConfiguracionWorkspace({ currentUserId }: { currentUserId: strin
   const oficinasState = useOficinas();
 
   const adminSection =
-    OWNER[active] === "admin" ? (active as "municipalidad" | "usuarios" | "feriados") : null;
+    OWNER[active] === "admin" ? (active as "municipalidad" | "procesos" | "usuarios" | "feriados") : null;
   const oficSection =
     OWNER[active] === "ofic" ? (active as "areas" | "numeracion" | "membrete") : null;
   const personalSection = OWNER[active] === "personal" ? "personal" : null;
@@ -360,6 +373,9 @@ export function ConfiguracionWorkspace({ currentUserId }: { currentUserId: strin
   // tiene lo mínimo para que el resto de la aplicación funcione.
   const listas: Record<SectionKey, boolean> = {
     municipalidad: summary.entityComplete,
+    // Parámetros OPCIONALES: la app trae valores por defecto (topes 2026, días del
+    // cronograma), así que no cuenta como sección pendiente en la puesta a punto.
+    procesos: true,
     areas: summary.oficinasCount > 0,
     numeracion: summary.oficinasConNumeracion > 0,
     membrete: summary.oficinasConMembrete > 0,
@@ -378,6 +394,8 @@ export function ConfiguracionWorkspace({ currentUserId }: { currentUserId: strin
     municipalidad: summary.entityComplete
       ? { texto: "Listo", tono: "ok" }
       : { texto: "Incompleto", tono: "warn" },
+    // Sin indicador: son parámetros opcionales, no hay un "completo/incompleto" que medir.
+    procesos: null,
     areas:
       summary.oficinasCount === 0
         ? { texto: "0", tono: "warn" }

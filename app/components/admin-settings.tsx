@@ -43,7 +43,7 @@ const FeriadosTab = dynamic(() => import("./configuracion/feriados-tab").then((m
   ssr: false,
 });
 
-type Tab = "municipalidad" | "usuarios" | "feriados";
+type Tab = "municipalidad" | "procesos" | "usuarios" | "feriados";
 
 /**
  * Contenido de las secciones de Municipalidad, Usuarios y Feriados.
@@ -375,11 +375,16 @@ export function AdminSettings({
     <div className="grid gap-[18px]">
       {error ? <p className="rounded-lg border border-[#f1b8b1] bg-[#fff1ef] px-3 py-2 text-sm text-danger">{error}</p> : null}
 
-      {shownTab === "municipalidad" ? (
+      {/* Municipalidad ("entidad") y Procesos de selección editan la MISMA fila de
+          entity_settings, cada uno su grupo de secciones. Se monta el mismo
+          componente con `variant`: comparten `entity`/`setEntity`, así que guardar
+          en uno no pisa los campos del otro (persiste el formulario completo). */}
+      {shownTab === "municipalidad" || shownTab === "procesos" ? (
         <MunicipalidadTab
           entity={entity}
           setEntity={setEntity}
           governmentLevels={governmentLevels}
+          variant={shownTab === "procesos" ? "procesos" : "entidad"}
         />
       ) : null}
 
@@ -411,6 +416,8 @@ export function AdminSettings({
         <div>
           {shownTab === "municipalidad" ? (
             <span className="text-base text-muted">Los datos se guardan automáticamente mientras escribes. RUC: 11 dígitos. Unidad ejecutora: 6 dígitos.</span>
+          ) : shownTab === "procesos" ? (
+            <span className="text-base text-muted">Parámetros que deciden el procedimiento de selección (AGA, PIA/PAC, topes y cronograma). Se guardan automáticamente mientras escribes.</span>
           ) : shownTab === "usuarios" ? (
             <span className="text-base text-muted">El rol define los permisos; la oficina y la jefatura definen qué expedientes ve cada usuario.</span>
           ) : (

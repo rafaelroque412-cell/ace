@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   Building2,
+  CalendarClock,
   CheckCircle2,
   Landmark,
   Loader2,
@@ -11,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { SaveStatus } from "./save-status";
+import { CronogramaDiasGrid } from "./cronograma-dias-grid";
 import { inputBase } from "./ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,15 +44,28 @@ import { useToastHelpers } from "@/lib/toast";
 import { useYear } from "@/lib/year-context";
 import { olvidarCatalogo } from "@/lib/settings-catalog-cache";
 
+// Esta pestaña se pinta en DOS variantes que editan la MISMA fila de
+// entity_settings: "entidad" (identidad, gobierno y gerente) y "procesos"
+// (AGA y los parámetros que deciden el procedimiento de selección: resoluciones
+// del PIA/PAC, línea de corte, topes por cuantía y días del cronograma). Se
+// separaron a petición de negocio, pero comparten estado: cada variante carga el
+// `entity` completo, edita su subconjunto y PERSISTE EL FORMULARIO ENTERO, de
+// modo que guardar en una no borra los campos de la otra.
+type Variant = "entidad" | "procesos";
+
 type Props = {
   entity: EntitySettings;
   setEntity: React.Dispatch<React.SetStateAction<EntitySettings>>;
   governmentLevels: GovernmentLevel[];
+  /** Qué grupo de secciones pinta esta instancia. Por defecto, la entidad. */
+  variant?: Variant;
 };
 
-export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props) {
+export function MunicipalidadTab({ entity, setEntity, governmentLevels, variant = "entidad" }: Props) {
   const { yearParam } = useYear();
   const { success, error: toastError } = useToastHelpers();
+
+  const esProcesos = variant === "procesos";
 
   const [formData, setFormData] = useState<FormState>(() => toFormState(entity));
   // Ultimo estado confirmado en el servidor: base para detectar cambios reales
@@ -61,17 +76,27 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props)
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [activeSection, setActiveSection] = useState('datos');
+  const [activeSection, setActiveSection] = useState(esProcesos ? "aga" : "datos");
   const [showPreview, setShowPreview] = useState(false);
 
-  const SECCIONES = [
-    { id: 'datos', label: 'Datos de la entidad' },
-    { id: 'gobierno', label: 'Tipo de gobierno' },
-    { id: 'gerente', label: 'Gerente municipal' },
-    { id: 'aga', label: 'Autoridad de gestión administrativa (AGA)' },
-    { id: 'pac', label: 'PAC y montos' },
-    { id: 'preview', label: 'Vista previa' },
-  ];
+  // La navegación por anclas es propia de cada variante: cada ítem corresponde a
+  // una tarjeta con su `id`/`data-section`.
+  const SECCIONES = esProcesos
+    ? [
+        { id: "aga", label: "Autoridad de gestión administrativa (AGA)" },
+        { id: "resoluciones", label: "Resoluciones del PIA y PAC" },
+        { id: "montos", label: "Montos del PAC" },
+        { id: "uit", label: "UIT del ejercicio" },
+        { id: "lpabreviada", label: "LP abreviada — bienes" },
+        { id: "topes", label: "Topes por cuantía" },
+        { id: "cronograma", label: "Días del cronograma" },
+      ]
+    : [
+        { id: "datos", label: "Datos de la entidad" },
+        { id: "gobierno", label: "Tipo de gobierno" },
+        { id: "gerente", label: "Gerente municipal" },
+        { id: "preview", label: "Vista previa" },
+      ];
 
   const levels = governmentLevels.length > 0 ? governmentLevels : governmentLevelOptions;
 
@@ -342,6 +367,8 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props)
   );
 
   // Mismo criterio que la barra lateral (isEntityComplete), desde la fuente única.
+  // Solo se muestra en la variante "entidad": el checklist cubre identidad y
+  // gerente, no los parámetros de procesos de selección.
   const checklist = useMemo(() => entityChecklist(formData), [formData]);
   const complete = checklist.every((item) => item.done);
   const progress = checklist.filter((item) => item.done).length;
@@ -463,66 +490,522 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props)
         k="Designación"
         v={formData.managerResolutionNumber ? `R.A. Nro. ${formData.managerResolutionNumber}` : ""}
       />
-      <Dato
-        k="AGA"
-        v={
-          formData.agaDegree || formData.agaFullName
-            ? `${(formData.agaDegree ?? "").trim()} ${formData.agaFullName ?? ""}`.trim()
-            : ""
-        }
-      />
-      <Dato k="Cargo del AGA" v={formData.agaPosition} />
-      <Dato
-        k="Designación del AGA"
-        v={formData.agaResolutionNumber ? `R.A. Nro. ${formData.agaResolutionNumber}` : ""}
-      />
     </dl>
+  );
+
+  // ── Tarjetas de la variante "entidad" ─────────────────────────────────────
+  const cardDatos = (
+    <section id="datos" data-section="datos" className="border border-line rounded-lg bg-panel p-4">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
+        <Building2 size={14} /> Datos de la entidad
+      </h2>
+      <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        {campo("name", "Nombre de la entidad", {
+          placeholder: "Ej. Municipalidad Distrital de...",
+          hint: "Nombre oficial que aparecerá en documentos",
+          required: true,
+          full: true,
+        })}
+        {campo("ruc", "RUC", {
+          placeholder: "11 dígitos",
+          inputMode: "numeric",
+          maxDigits: 11,
+          required: true,
+          hint: `${formData.ruc.length}/11 dígitos`,
+        })}
+        {campo("executingUnit", "Unidad ejecutora", {
+          placeholder: "6 dígitos",
+          inputMode: "numeric",
+          maxDigits: 6,
+          required: true,
+          hint: `${formData.executingUnit.length}/6 dígitos`,
+        })}
+        {campo("department", "Departamento", {
+          placeholder: "Ej. Apurímac",
+        })}
+        {campo("province", "Provincia", {
+          placeholder: "Ej. Cotabambas",
+        })}
+        {campo("city", "Ciudad", {
+          placeholder: "Ej. Challhuahuacho",
+          hint: `Encabeza los documentos: "${(formData.city ?? "").trim() || "Ciudad"}, ${today}"`,
+          full: true,
+        })}
+        {campo("address", "Dirección de la entidad", {
+          placeholder: "Dirección fiscal o sede principal",
+          required: true,
+          full: true,
+        })}
+      </div>
+    </section>
+  );
+
+  const cardGobierno = (
+    <section id="gobierno" data-section="gobierno" className="border border-line rounded-lg bg-panel p-4">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
+        <Landmark size={14} /> Tipo de gobierno
+      </h2>
+      <div
+        role="radiogroup"
+        aria-label="Tipo de gobierno"
+        aria-invalid={hasFieldError("governmentLevel") || undefined}
+        data-campo-entidad="governmentLevel"
+        className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+      >
+        {levels.map((level) => {
+          const selected = formData.governmentLevel === level.value;
+          return (
+            <button
+              key={level.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => handleChange("governmentLevel", level.value)}
+              className={`flex flex-col gap-0.5 p-3 rounded-lg border text-left cursor-pointer font-inherit transition-colors ${
+                selected
+                  ? "border-brand/35 bg-brand-soft"
+                  : "border-line bg-white hover:border-brand/20"
+              }`}
+            >
+              <strong className={`text-sm font-semibold ${selected ? "text-brand-dark" : "text-ink"}`}>
+                {level.label}
+              </strong>
+              <small className="text-xs text-muted leading-snug">
+                {level.examples}
+              </small>
+            </button>
+          );
+        })}
+      </div>
+      {hasFieldError("governmentLevel") ? (
+        <small className="text-xs font-semibold text-red-600 block mt-2" role="alert">
+          {errors.governmentLevel}
+        </small>
+      ) : (
+        <small className="text-xs text-muted/80 block mt-2">
+          Identifica el ámbito institucional en reportes, expedientes y auditoría.
+        </small>
+      )}
+    </section>
+  );
+
+  const cardGerente = (
+    <section id="gerente" data-section="gerente" className="border border-line rounded-lg bg-panel p-4">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
+        <User size={14} /> Gerente de la entidad
+      </h2>
+      <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-muted">Grado / Título profesional</span>
+          <select
+            className="w-full px-2.5 py-2 rounded-md border border-line text-sm bg-white outline-none focus:border-brand focus:shadow-[0_0_0_2px_rgba(15,118,110,0.12)]"
+            value={degreeIsPreset ? formData.managerDegree : formData.managerDegree ? "__otro__" : ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === "__otro__") handleChange("managerDegree", " ");
+              else handleChange("managerDegree", val);
+            }}
+            onBlur={() => handleBlur("managerDegree")}
+          >
+            <option value="">Seleccionar...</option>
+            {DEGREE_OPTIONS.map((deg) => (
+              <option key={deg} value={deg}>
+                {deg}
+              </option>
+            ))}
+            <option value="__otro__">Otro</option>
+          </select>
+          {!degreeIsPreset && formData.managerDegree ? (
+            <input
+              placeholder="Ej. MBA., PH.D."
+              value={formData.managerDegree.trim()}
+              onChange={(e) => handleChange("managerDegree", e.target.value)}
+              onBlur={() => handleBlur("managerDegree")}
+              className="w-full px-2.5 py-2 rounded-md border border-line text-sm bg-white outline-none placeholder:text-slate-400 focus:border-brand focus:shadow-[0_0_0_2px_rgba(15,118,110,0.12)]"
+            />
+          ) : null}
+        </label>
+        {campo("managerFullName", "Nombre completo", {
+          placeholder: "Nombres y apellidos completos",
+        })}
+        {campo("managerDni", "DNI", {
+          placeholder: "8 dígitos",
+          inputMode: "numeric",
+          maxDigits: 8,
+          hint: `${(formData.managerDni ?? "").length}/8 dígitos`,
+        })}
+        {campo("managerPosition", "Cargo", { placeholder: "Gerente General" })}
+        {campo("managerResolutionNumber", "Resolución de Alcaldía Nro.", {
+          placeholder: "Ej. 123-2026-MDCH/A",
+        })}
+        {campo("managerResolutionDate", "Fecha de la Resolución", { type: "date" })}
+      </div>
+    </section>
+  );
+
+  // ── Tarjetas de la variante "procesos de selección" ───────────────────────
+  const cardAga = (
+    <section id="aga" data-section="aga" className="border border-line rounded-lg bg-panel p-4">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-1.5">
+        <User size={14} /> Autoridad de gestión administrativa (AGA)
+      </h2>
+      <p className="text-sm text-muted leading-relaxed m-0 mb-3">
+        La más alta autoridad de la gestión administrativa: <strong>aprueba, autoriza y supervisa</strong>{" "}
+        las contrataciones y aprueba el expediente (Ley 32069, Art. 25.1.b; Reglamento, Art. 19; Art. 54.2).
+        En una municipalidad suele ser el gerente municipal; regístrala aquí aunque coincida.
+      </p>
+      <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        {campo("agaDegree", "Grado / Título profesional", { placeholder: "Ej. CPC., ING., ABOG." })}
+        {campo("agaFullName", "Nombre completo", { placeholder: "Nombres y apellidos completos" })}
+        {campo("agaDni", "DNI", {
+          placeholder: "8 dígitos",
+          inputMode: "numeric",
+          maxDigits: 8,
+          hint: `${(formData.agaDni ?? "").length}/8 dígitos`,
+        })}
+        {campo("agaPosition", "Cargo", { placeholder: "Ej. Gerente Municipal" })}
+        {campo("agaResolutionNumber", "Resolución de designación Nro.", { placeholder: "Ej. 123-2026-MDCH/A" })}
+        {campo("agaResolutionDate", "Fecha de la Resolución", { type: "date" })}
+      </div>
+    </section>
+  );
+
+  const cardResoluciones = (
+    <section id="resoluciones" data-section="resoluciones" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Wallet size={14} /> Resoluciones del PIA y PAC
+        </h2>
+        <p className="text-sm text-muted leading-relaxed m-0">
+          Se citan <strong>literalmente</strong> como antecedente en los informes que se
+          exportan y se firman. Se registran una vez por ejercicio.
+        </p>
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3 max-sm:grid-cols-1">
+          {campo("piaResolutionNumber", "Resolución que aprueba el PIA", {
+            hint: "Tipo y número completos, tal como se citarán.",
+            placeholder: "Ej. Resolución de Alcaldía N° 238-2025-MDP/ALC",
+          })}
+          {campo("piaResolutionDate", "Fecha de la Resolución del PIA", { type: "date" })}
+          {campo("pacResolutionNumber", "Resolución que aprueba el PAC", {
+            hint: "Documento de aprobación: resolución, memorando u otro.",
+            placeholder: "Ej. Resolución de Gerencia Municipal N° 007-2026-MDP/GM",
+          })}
+          {campo("pacResolutionDate", "Fecha de la Resolución del PAC", { type: "date" })}
+          <div className="col-start-2 max-sm:col-start-1">
+            {campo("pacAnio", "Ejercicio fiscal", {
+              placeholder: "2026",
+              inputMode: "numeric",
+              maxDigits: 4,
+            })}
+          </div>
+        </div>
+
+        {citasResoluciones.length > 0 ? (
+          <div className="p-3 rounded-lg border border-line/60 bg-surface">
+            <span className="text-xs font-semibold text-muted block mb-2">Se citará así en los informes</span>
+            {citasResoluciones.map((c) => (
+              <p key={c.clave} className="text-sm text-ink m-0 mb-1 last:mb-0">
+                <strong>{c.etiqueta}:</strong> {c.texto}
+              </p>
+            ))}
+          </div>
+        ) : null}
+
+        {avisosResol.map((a) => (
+          <p key={a.texto} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md border text-xs leading-snug m-0 ${
+            a.tono === "error"
+              ? "bg-danger-soft border-danger/30 text-danger"
+              : "bg-warning-soft border-warning/30 text-warning"
+          }`}>
+            <AlertTriangle size={13} className="shrink-0" /> {a.texto}
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+
+  const cardMontos = (
+    <section id="montos" data-section="montos" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-6">
+        {/* Umbral del contrato menor, destacado */}
+        {umbralResumen !== null ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-blue-800">
+              Umbral del contrato menor: <strong>{umbralResumen}</strong>
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Contrataciones cuya cuantía de la contratación no supere este monto pueden agruparse por ítems (8 UIT - Ley 32069, Art. 34.1).
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <Wallet size={14} /> Montos del PAC — línea de corte (Art. 125)
+          </h2>
+          <p className="text-sm text-muted leading-relaxed m-0">
+            Registra el monto total del PAC y la parte de bienes y servicios. El PAC de obras y
+            la línea de corte se calculan solos.
+          </p>
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+            {campo("pacMontoTotal", "Monto total del PAC (S/)", { moneda: true, placeholder: "6,099,061.68" })}
+            {campo("pacMontoBienesServicios", "PAC bienes y servicios (S/) — base del 10%", {
+              moneda: true,
+              placeholder: "1,226,465.70",
+              hint: "Incluye bienes, servicios, no competitivos y CEAM del PAC (Guía).",
+            })}
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-muted">PAC obras (S/)</span>
+              <div className="flex items-stretch w-full">
+                <span aria-hidden="true" className="flex items-center px-2 border border-line border-r-0 rounded-l-md bg-surface text-muted text-xs font-semibold select-none">S/</span>
+                <input
+                  readOnly
+                  tabIndex={-1}
+                  value={pacResumen?.obras ?? ""}
+                  placeholder="Se calcula: total − bienes y servicios"
+                  className="w-full px-2.5 py-2 border border-line text-sm bg-surface/50 outline-none rounded-r-md text-right tabular-nums"
+                />
+              </div>
+              <small className="text-xs text-muted/70">
+                Se calcula restando: monto total del PAC − PAC de bienes y servicios.
+              </small>
+            </label>
+          </div>
+
+          {pacResumen ? (
+            <div className="p-3 rounded-lg border border-line/60 bg-surface">
+              <strong className="block text-sm font-semibold text-ink mb-1.5">
+                Línea de corte por cuantía: {pacResumen.lineaCorte}
+              </strong>
+              <div className="text-xs text-muted leading-relaxed">
+                10% del PAC de bienes y servicios. Toda contratación por encima de ese monto es
+                de <em>alta cuantía</em> (Art. 125.2). Es una referencia: cada expediente
+                recalcula la línea sumando las no programadas ya convocadas, las otras que se
+                segmenten a la vez y la propia contratación si no está programada.
+              </div>
+              {pacResumen.excede ? (
+                <div className="mt-2 p-2.5 rounded-md bg-warning-soft border border-warning/30 text-xs text-warning">
+                  Revisa las cifras: el PAC de bienes y servicios supera el monto total del PAC
+                  ({pacResumen.total}), así que el PAC de obras saldría negativo. Mientras no
+                  cuadren, el PAC de obras se deja sin registrar.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+
+  const cardUit = (
+    <section id="uit" data-section="uit" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Wallet size={14} /> UIT del ejercicio — tope del contrato menor
+        </h2>
+        <p className="text-sm text-muted leading-relaxed m-0">
+          La norma expresa las cuantías en UIT. De este valor sale el tope del contrato menor,
+          que decide si un requerimiento puede convocarse por ítems, lotes o tramos.
+        </p>
+        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          {campo("uitValor", "Valor de la UIT (S/)", {
+            moneda: true,
+            placeholder: "5,350.00",
+            hint: "El vigente al momento de la contratación (Ley 32069, Art. 34.1).",
+          })}
+          {campo("uitAnio", "Ejercicio de la UIT", {
+            placeholder: "2026",
+            inputMode: "numeric",
+            maxDigits: 4,
+          })}
+        </div>
+
+        {umbralResumen ? (
+          <div className="p-3 rounded-lg border border-line/60 bg-surface">
+            <strong className="block text-sm font-semibold text-ink mb-1.5">
+              Tope del contrato menor: {umbralResumen}
+            </strong>
+            <div className="text-xs text-muted leading-relaxed">
+              8 UIT. Son contratos menores los de monto <em>igual o inferior</em> a esa cifra
+              (Ley 32069, Art. 34.1) y no requieren procedimiento de selección. Por eso un
+              requerimiento solo puede convocarse por ítems, lotes o tramos si{" "}
+              <strong>cada uno supera ese tope</strong> (Reglamento, Art. 52.1.b): en el importe
+              exacto todavía es contrato menor.
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  const cardLpAbreviada = (
+    <section id="lpabreviada" data-section="lpabreviada" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Wallet size={14} /> Licitación Pública abreviada para bienes — rango de cuantía
+        </h2>
+        <p className="text-sm text-muted leading-relaxed m-0">
+          El umbral de la modalidad abreviada no está en la norma publicada (los Arts. 93-95
+          remiten a una tabla web). Regístralo aquí: se usa para saber qué ítems de un
+          requerimiento por relación de ítems caen en esa banda y redactar su experiencia por ítem.
+        </p>
+        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          {campo("lpAbreviadaBienesMin", "Cuantía mínima (S/)", {
+            moneda: true,
+            placeholder: "500,000.00",
+          })}
+          {campo("lpAbreviadaBienesMax", "Cuantía máxima (S/)", {
+            moneda: true,
+            placeholder: "5,000,000.00",
+          })}
+          {campo("lpAbreviadaBienesAnio", "Ejercicio del rango", {
+            placeholder: "2026",
+            inputMode: "numeric",
+            maxDigits: 4,
+          })}
+        </div>
+
+        {lpAbreviadaResumen ? (
+          <div className="p-3 rounded-lg border border-line/60 bg-surface">
+            <strong className="block text-sm font-semibold text-ink mb-1.5">
+              Rango de la LP abreviada para bienes: {lpAbreviadaResumen}
+            </strong>
+            <div className="text-xs text-muted leading-relaxed">
+              Un ítem cuya cuantía cae dentro de este rango corresponde a una Licitación Pública
+              abreviada de bienes. Por encima del máximo es Licitación Pública plena.
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  const cardTopes = (
+    <section id="topes" data-section="topes" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Wallet size={14} /> Topes de procedimiento por cuantía — Año fiscal
+        </h2>
+        <p className="text-sm text-muted leading-relaxed m-0">
+          Importes de la tabla anual DSEACE-OECE (Arts. 93-95 del Reglamento) que deciden el
+          procedimiento según la cuantía. No están en la norma publicada; se registran por año.
+          Si los dejas vacíos, la app usa los valores 2026.
+        </p>
+        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          {campo("topeAnio", "Ejercicio de los topes", {
+            placeholder: "2026",
+            inputMode: "numeric",
+            maxDigits: 4,
+          })}
+          {campo("topePiso", "Piso — contrato menor (S/)", { moneda: true, placeholder: "44,000.00" })}
+          {campo("topeLicitacionConcurso", "Frontera Licitación/Concurso (S/)", {
+            moneda: true,
+            placeholder: "485,000.00",
+          })}
+          {campo("topeLicitacionObras", "Licitación Pública de obras (S/)", {
+            moneda: true,
+            placeholder: "5,000,000.00",
+          })}
+          {campo("topeComparacionPrecios", "Techo Comparación de Precios (S/)", {
+            moneda: true,
+            placeholder: "100,000.00",
+          })}
+        </div>
+        <div className="text-xs text-muted leading-relaxed">
+          Bienes/servicios ≥ frontera → Licitación/Concurso Público; entre el piso y la frontera →
+          su modalidad Abreviada; ≤ techo → cabe Comparación de Precios. Obras ≥ su umbral →
+          Licitación Pública; por debajo, abreviada de obras.
+        </div>
+      </div>
+    </section>
+  );
+
+  const cardCronograma = (
+    <section id="cronograma" data-section="cronograma" className="border border-line rounded-lg bg-panel p-4">
+      <div className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <CalendarClock size={14} /> Días estimados del cronograma — Año fiscal
+        </h2>
+        <p className="text-sm text-muted leading-relaxed m-0">
+          Días hábiles POR PROCEDIMIENTO con los que arranca el cronograma de A4, para lo que el
+          Reglamento NO fija. Los mínimos legales (22 hábiles convocatoria→ofertas del Art. 64.1,
+          consultas, apelación…) y las etapas de cada procedimiento (Arts. 93/94/95) se quedan fijos
+          en la app. Si no editas nada, se usan los valores por defecto.
+        </p>
+        <div className="max-w-[160px]">
+          {campo("cronogramaAnio", "Ejercicio", {
+            placeholder: "2026",
+            inputMode: "numeric",
+            maxDigits: 4,
+          })}
+        </div>
+        <CronogramaDiasGrid
+          value={formData.cronogramaDias ?? ""}
+          onChange={(json) => handleChange("cronogramaDias", json)}
+        />
+        <div className="text-xs text-muted leading-relaxed">
+          Solo se editan las duraciones que el Reglamento no fija (preparatorias y ejecución). Los
+          plazos legales de la selección —incluido el mínimo de 6 días hábiles de la subasta
+          inversa— son piso fijo en la app y no aparecen en la rejilla.
+        </div>
+      </div>
+    </section>
   );
 
   return (
     <div className="tw flex flex-col gap-4">
 
       {/* ── Header ─────────────────────────────── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      {esProcesos ? (
         <p className="text-sm text-muted leading-relaxed max-w-[68ch] m-0">
-          Completa los datos de tu entidad. Se guardan solos mientras escribes; el
-          contador de la derecha muestra cuántos campos clave faltan.
+          Parámetros que deciden el procedimiento de selección: la autoridad que aprueba (AGA), las
+          resoluciones del PIA y PAC, la línea de corte, los topes por cuantía y los días del
+          cronograma. Se guardan solos mientras escribes.
         </p>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${
-          complete ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
-        }`}>
-          {complete ? "Perfil completo" : `${progress} de ${checklist.length} campos`}
-        </span>
-      </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <p className="text-sm text-muted leading-relaxed max-w-[68ch] m-0">
+              Completa los datos de tu entidad. Se guardan solos mientras escribes; el
+              contador de la derecha muestra cuántos campos clave faltan.
+            </p>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${
+              complete ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
+            }`}>
+              {complete ? "Perfil completo" : `${progress} de ${checklist.length} campos`}
+            </span>
+          </div>
 
-      {/* ── Checklist ───────────────────────────── */}
-      <div className="border border-line rounded-lg bg-panel p-4">
-        <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
-          <CheckCircle2 size={14} /> Completa el perfil ({progress}/{checklist.length})
-        </div>
-        <div className="h-1.5 rounded-full bg-line overflow-hidden mb-3" aria-hidden="true">
-          <div
-            className="h-full rounded-full bg-brand transition-all"
-            style={{ width: `${(progress / checklist.length) * 100}%` }}
-          />
-        </div>
-        <ul className="grid gap-1.5 m-0 p-0 list-none">
-          {checklist.map((item) => (
-            <li key={item.label}>
-              <button
-                data-done={item.done}
-                onClick={() => irACampo(item.campo)}
-                title={item.done ? `${item.label} — completo` : `Ir a ${item.label}`}
-                type="button"
-                className={`flex items-center gap-2 text-sm cursor-pointer border-0 bg-transparent p-0 ${item.done ? "text-success" : "text-muted hover:text-ink"}`}
-              >
-                <CheckCircle2 size={14} />
-                <span>{item.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+          {/* ── Checklist ───────────────────────────── */}
+          <div className="border border-line rounded-lg bg-panel p-4">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
+              <CheckCircle2 size={14} /> Completa el perfil ({progress}/{checklist.length})
+            </div>
+            <div className="h-1.5 rounded-full bg-line overflow-hidden mb-3" aria-hidden="true">
+              <div
+                className="h-full rounded-full bg-brand transition-all"
+                style={{ width: `${(progress / checklist.length) * 100}%` }}
+              />
+            </div>
+            <ul className="grid gap-1.5 m-0 p-0 list-none">
+              {checklist.map((item) => (
+                <li key={item.label}>
+                  <button
+                    data-done={item.done}
+                    onClick={() => irACampo(item.campo)}
+                    title={item.done ? `${item.label} — completo` : `Ir a ${item.label}`}
+                    type="button"
+                    className={`flex items-center gap-2 text-sm cursor-pointer border-0 bg-transparent p-0 ${item.done ? "text-success" : "text-muted hover:text-ink"}`}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
 
       {/* ── Navegación por anclas ───────────────── */}
       <nav className="sticky top-4 z-10 flex gap-1 overflow-x-auto pb-2 border-b border-line">
@@ -542,455 +1025,57 @@ export function MunicipalidadTab({ entity, setEntity, governmentLevels }: Props)
         ))}
       </nav>
 
-      {/* ── Grid: formulario + sidebar preview ──── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-
-        {/* Columna principal — formulario */}
+      {esProcesos ? (
+        /* Variante "procesos": una columna a todo el ancho, sin vista previa. */
         <div className="flex flex-col gap-4">
-
-          {/* ── Card: Datos de la entidad ────────── */}
-          <section id="datos" data-section="datos" className="border border-line rounded-lg bg-panel p-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
-              <Building2 size={14} /> Datos de la entidad
-            </h2>
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              {campo("name", "Nombre de la entidad", {
-                placeholder: "Ej. Municipalidad Distrital de...",
-                hint: "Nombre oficial que aparecerá en documentos",
-                required: true,
-                full: true,
-              })}
-              {campo("ruc", "RUC", {
-                placeholder: "11 dígitos",
-                inputMode: "numeric",
-                maxDigits: 11,
-                required: true,
-                hint: `${formData.ruc.length}/11 dígitos`,
-              })}
-              {campo("executingUnit", "Unidad ejecutora", {
-                placeholder: "6 dígitos",
-                inputMode: "numeric",
-                maxDigits: 6,
-                required: true,
-                hint: `${formData.executingUnit.length}/6 dígitos`,
-              })}
-              {campo("department", "Departamento", {
-                placeholder: "Ej. Apurímac",
-              })}
-              {campo("province", "Provincia", {
-                placeholder: "Ej. Cotabambas",
-              })}
-              {campo("city", "Ciudad", {
-                placeholder: "Ej. Challhuahuacho",
-                hint: `Encabeza los documentos: "${(formData.city ?? "").trim() || "Ciudad"}, ${today}"`,
-                full: true,
-              })}
-              {campo("address", "Dirección de la entidad", {
-                placeholder: "Dirección fiscal o sede principal",
-                required: true,
-                full: true,
-              })}
-            </div>
-          </section>
-
-          {/* ── Card: Tipo de gobierno ───────────── */}
-          <section id="gobierno" data-section="gobierno" className="border border-line rounded-lg bg-panel p-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
-              <Landmark size={14} /> Tipo de gobierno
-            </h2>
-            <div
-              role="radiogroup"
-              aria-label="Tipo de gobierno"
-              aria-invalid={hasFieldError("governmentLevel") || undefined}
-              data-campo-entidad="governmentLevel"
-              className="grid grid-cols-1 gap-2 sm:grid-cols-3"
-            >
-              {levels.map((level) => {
-                const selected = formData.governmentLevel === level.value;
-                return (
-                  <button
-                    key={level.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => handleChange("governmentLevel", level.value)}
-                    className={`flex flex-col gap-0.5 p-3 rounded-lg border text-left cursor-pointer font-inherit transition-colors ${
-                      selected
-                        ? "border-brand/35 bg-brand-soft"
-                        : "border-line bg-white hover:border-brand/20"
-                    }`}
-                  >
-                    <strong className={`text-sm font-semibold ${selected ? "text-brand-dark" : "text-ink"}`}>
-                      {level.label}
-                    </strong>
-                    <small className="text-xs text-muted leading-snug">
-                      {level.examples}
-                    </small>
-                  </button>
-                );
-              })}
-            </div>
-            {hasFieldError("governmentLevel") ? (
-              <small className="text-xs font-semibold text-red-600 block mt-2" role="alert">
-                {errors.governmentLevel}
-              </small>
-            ) : (
-              <small className="text-xs text-muted/80 block mt-2">
-                Identifica el ámbito institucional en reportes, expedientes y auditoría.
-              </small>
-            )}
-          </section>
-
-          {/* ── Card: Gerente municipal ──────────── */}
-          <section id="gerente" data-section="gerente" className="border border-line rounded-lg bg-panel p-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
-              <User size={14} /> Gerente de la entidad
-            </h2>
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-muted">Grado / Título profesional</span>
-                <select
-                  className="w-full px-2.5 py-2 rounded-md border border-line text-sm bg-white outline-none focus:border-brand focus:shadow-[0_0_0_2px_rgba(15,118,110,0.12)]"
-                  value={degreeIsPreset ? formData.managerDegree : formData.managerDegree ? "__otro__" : ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "__otro__") handleChange("managerDegree", " ");
-                    else handleChange("managerDegree", val);
-                  }}
-                  onBlur={() => handleBlur("managerDegree")}
-                >
-                  <option value="">Seleccionar...</option>
-                  {DEGREE_OPTIONS.map((deg) => (
-                    <option key={deg} value={deg}>
-                      {deg}
-                    </option>
-                  ))}
-                  <option value="__otro__">Otro</option>
-                </select>
-                {!degreeIsPreset && formData.managerDegree ? (
-                  <input
-                    placeholder="Ej. MBA., PH.D."
-                    value={formData.managerDegree.trim()}
-                    onChange={(e) => handleChange("managerDegree", e.target.value)}
-                    onBlur={() => handleBlur("managerDegree")}
-                    className="w-full px-2.5 py-2 rounded-md border border-line text-sm bg-white outline-none placeholder:text-slate-400 focus:border-brand focus:shadow-[0_0_0_2px_rgba(15,118,110,0.12)]"
-                  />
-                ) : null}
-              </label>
-              {campo("managerFullName", "Nombre completo", {
-                placeholder: "Nombres y apellidos completos",
-              })}
-              {campo("managerDni", "DNI", {
-                placeholder: "8 dígitos",
-                inputMode: "numeric",
-                maxDigits: 8,
-                hint: `${(formData.managerDni ?? "").length}/8 dígitos`,
-              })}
-              {campo("managerPosition", "Cargo", { placeholder: "Gerente General" })}
-              {campo("managerResolutionNumber", "Resolución de Alcaldía Nro.", {
-                placeholder: "Ej. 123-2026-MDCH/A",
-              })}
-              {campo("managerResolutionDate", "Fecha de la Resolución", { type: "date" })}
-            </div>
-          </section>
-
-          {/* ── Card: Autoridad de gestión administrativa (AGA) ── */}
-          <section id="aga" data-section="aga" className="border border-line rounded-lg bg-panel p-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-1.5">
-              <User size={14} /> Autoridad de gestión administrativa (AGA)
-            </h2>
-            <p className="text-sm text-muted leading-relaxed m-0 mb-3">
-              La más alta autoridad de la gestión administrativa: <strong>aprueba, autoriza y supervisa</strong>{" "}
-              las contrataciones y aprueba el expediente (Ley 32069, Art. 25.1.b; Reglamento, Art. 19; Art. 54.2).
-              En una municipalidad suele ser el gerente municipal; regístrala aquí aunque coincida.
-            </p>
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              {campo("agaDegree", "Grado / Título profesional", { placeholder: "Ej. CPC., ING., ABOG." })}
-              {campo("agaFullName", "Nombre completo", { placeholder: "Nombres y apellidos completos" })}
-              {campo("agaDni", "DNI", {
-                placeholder: "8 dígitos",
-                inputMode: "numeric",
-                maxDigits: 8,
-                hint: `${(formData.agaDni ?? "").length}/8 dígitos`,
-              })}
-              {campo("agaPosition", "Cargo", { placeholder: "Ej. Gerente Municipal" })}
-              {campo("agaResolutionNumber", "Resolución de designación Nro.", { placeholder: "Ej. 123-2026-MDCH/A" })}
-              {campo("agaResolutionDate", "Fecha de la Resolución", { type: "date" })}
-            </div>
-          </section>
-
-          {/* ── Card: PAC y montos ───────────────── */}
-          <section id="pac" data-section="pac" className="border border-line rounded-lg bg-panel p-4">
-            <div className="flex flex-col gap-6">
-
-              {/* Bloque: Resoluciones PIA/PAC */}
-              <div className="flex flex-col gap-3">
-                <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Wallet size={14} /> Resoluciones del PIA y PAC
-                </h2>
-                <p className="text-sm text-muted leading-relaxed m-0">
-                  Se citan <strong>literalmente</strong> como antecedente en los informes que se
-                  exportan y se firman. Se registran una vez por ejercicio.
-                </p>
-                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3 max-sm:grid-cols-1">
-                  {campo("piaResolutionNumber", "Resolución que aprueba el PIA", {
-                    hint: "Tipo y número completos, tal como se citarán.",
-                    placeholder: "Ej. Resolución de Alcaldía N° 238-2025-MDP/ALC",
-                  })}
-                  {campo("piaResolutionDate", "Fecha de la Resolución del PIA", { type: "date" })}
-                  {campo("pacResolutionNumber", "Resolución que aprueba el PAC", {
-                    hint: "Documento de aprobación: resolución, memorando u otro.",
-                    placeholder: "Ej. Resolución de Gerencia Municipal N° 007-2026-MDP/GM",
-                  })}
-                  {campo("pacResolutionDate", "Fecha de la Resolución del PAC", { type: "date" })}
-                  <div className="col-start-2 max-sm:col-start-1">
-                    {campo("pacAnio", "Ejercicio fiscal", {
-                      placeholder: "2026",
-                      inputMode: "numeric",
-                      maxDigits: 4,
-                    })}
-                  </div>
-                </div>
-
-                {citasResoluciones.length > 0 ? (
-                  <div className="p-3 rounded-lg border border-line/60 bg-surface">
-                    <span className="text-xs font-semibold text-muted block mb-2">Se citará así en los informes</span>
-                    {citasResoluciones.map((c) => (
-                      <p key={c.clave} className="text-sm text-ink m-0 mb-1 last:mb-0">
-                        <strong>{c.etiqueta}:</strong> {c.texto}
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-
-                {avisosResol.map((a) => (
-                  <p key={a.texto} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md border text-xs leading-snug m-0 ${
-                    a.tono === "error"
-                      ? "bg-danger-soft border-danger/30 text-danger"
-                      : "bg-warning-soft border-warning/30 text-warning"
-                  }`}>
-                    <AlertTriangle size={13} className="shrink-0" /> {a.texto}
-                  </p>
-                ))}
-              </div>
-
-              {/* Bloque: umbral destacado */}
-              {umbralResumen !== null ? (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm font-medium text-blue-800">
-                    Umbral del contrato menor: <strong>{umbralResumen}</strong>
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    Contrataciones cuya cuantía de la contratación no supere este monto pueden agruparse por ítems (8 UIT - Ley 32069, Art. 34.1).
-                  </p>
-                </div>
-              ) : null}
-
-              {/* Bloque: Montos PAC */}
-              <div className="flex flex-col gap-3">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Wallet size={14} /> Montos del PAC — línea de corte (Art. 125)
-                </h3>
-                <p className="text-sm text-muted leading-relaxed m-0">
-                  Registra el monto total del PAC y la parte de bienes y servicios. El PAC de obras y
-                  la línea de corte se calculan solos.
-                </p>
-                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                  {campo("pacMontoTotal", "Monto total del PAC (S/)", { moneda: true, placeholder: "6,099,061.68" })}
-                  {campo("pacMontoBienesServicios", "PAC bienes y servicios (S/) — base del 10%", {
-                    moneda: true,
-                    placeholder: "1,226,465.70",
-                    hint: "Incluye bienes, servicios, no competitivos y CEAM del PAC (Guía).",
-                  })}
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs font-semibold text-muted">PAC obras (S/)</span>
-                    <div className="flex items-stretch w-full">
-                      <span aria-hidden="true" className="flex items-center px-2 border border-line border-r-0 rounded-l-md bg-surface text-muted text-xs font-semibold select-none">S/</span>
-                      <input
-                        readOnly
-                        tabIndex={-1}
-                        value={pacResumen?.obras ?? ""}
-                        placeholder="Se calcula: total − bienes y servicios"
-                        className="w-full px-2.5 py-2 border border-line text-sm bg-surface/50 outline-none rounded-r-md text-right tabular-nums"
-                      />
-                    </div>
-                    <small className="text-xs text-muted/70">
-                      Se calcula restando: monto total del PAC − PAC de bienes y servicios.
-                    </small>
-                  </label>
-                </div>
-
-                {pacResumen ? (
-                  <div className="p-3 rounded-lg border border-line/60 bg-surface">
-                    <strong className="block text-sm font-semibold text-ink mb-1.5">
-                      Línea de corte por cuantía: {pacResumen.lineaCorte}
-                    </strong>
-                    <div className="text-xs text-muted leading-relaxed">
-                      10% del PAC de bienes y servicios. Toda contratación por encima de ese monto es
-                      de <em>alta cuantía</em> (Art. 125.2). Es una referencia: cada expediente
-                      recalcula la línea sumando las no programadas ya convocadas, las otras que se
-                      segmenten a la vez y la propia contratación si no está programada.
-                    </div>
-                    {pacResumen.excede ? (
-                      <div className="mt-2 p-2.5 rounded-md bg-warning-soft border border-warning/30 text-xs text-warning">
-                        Revisa las cifras: el PAC de bienes y servicios supera el monto total del PAC
-                        ({pacResumen.total}), así que el PAC de obras saldría negativo. Mientras no
-                        cuadren, el PAC de obras se deja sin registrar.
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Bloque: UIT */}
-              <div className="flex flex-col gap-3">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Wallet size={14} /> UIT del ejercicio — tope del contrato menor
-                </h3>
-                <p className="text-sm text-muted leading-relaxed m-0">
-                  La norma expresa las cuantías en UIT. De este valor sale el tope del contrato menor,
-                  que decide si un requerimiento puede convocarse por ítems, lotes o tramos.
-                </p>
-                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                  {campo("uitValor", "Valor de la UIT (S/)", {
-                    moneda: true,
-                    placeholder: "5,350.00",
-                    hint: "El vigente al momento de la contratación (Ley 32069, Art. 34.1).",
-                  })}
-                  {campo("uitAnio", "Ejercicio de la UIT", {
-                    placeholder: "2026",
-                    inputMode: "numeric",
-                    maxDigits: 4,
-                  })}
-                </div>
-
-                {umbralResumen ? (
-                  <div className="p-3 rounded-lg border border-line/60 bg-surface">
-                    <strong className="block text-sm font-semibold text-ink mb-1.5">
-                      Tope del contrato menor: {umbralResumen}
-                    </strong>
-                    <div className="text-xs text-muted leading-relaxed">
-                      8 UIT. Son contratos menores los de monto <em>igual o inferior</em> a esa cifra
-                      (Ley 32069, Art. 34.1) y no requieren procedimiento de selección. Por eso un
-                      requerimiento solo puede convocarse por ítems, lotes o tramos si{" "}
-                      <strong>cada uno supera ese tope</strong> (Reglamento, Art. 52.1.b): en el importe
-                      exacto todavía es contrato menor.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Bloque: Licitación Pública abreviada para bienes */}
-              <div className="flex flex-col gap-3">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Wallet size={14} /> Licitación Pública abreviada para bienes — rango de cuantía
-                </h3>
-                <p className="text-sm text-muted leading-relaxed m-0">
-                  El umbral de la modalidad abreviada no está en la norma publicada (los Arts. 93-95
-                  remiten a una tabla web). Regístralo aquí: se usa para saber qué ítems de un
-                  requerimiento por relación de ítems caen en esa banda y redactar su experiencia por ítem.
-                </p>
-                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                  {campo("lpAbreviadaBienesMin", "Cuantía mínima (S/)", {
-                    moneda: true,
-                    placeholder: "500,000.00",
-                  })}
-                  {campo("lpAbreviadaBienesMax", "Cuantía máxima (S/)", {
-                    moneda: true,
-                    placeholder: "5,000,000.00",
-                  })}
-                  {campo("lpAbreviadaBienesAnio", "Ejercicio del rango", {
-                    placeholder: "2026",
-                    inputMode: "numeric",
-                    maxDigits: 4,
-                  })}
-                </div>
-
-                {lpAbreviadaResumen ? (
-                  <div className="p-3 rounded-lg border border-line/60 bg-surface">
-                    <strong className="block text-sm font-semibold text-ink mb-1.5">
-                      Rango de la LP abreviada para bienes: {lpAbreviadaResumen}
-                    </strong>
-                    <div className="text-xs text-muted leading-relaxed">
-                      Un ítem cuya cuantía cae dentro de este rango corresponde a una Licitación Pública
-                      abreviada de bienes. Por encima del máximo es Licitación Pública plena.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Bloque: Topes de procedimiento por cuantía (año fiscal) */}
-              <div className="flex flex-col gap-3">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Wallet size={14} /> Topes de procedimiento por cuantía — Año fiscal
-                </h3>
-                <p className="text-sm text-muted leading-relaxed m-0">
-                  Importes de la tabla anual DSEACE-OECE (Arts. 93-95 del Reglamento) que deciden el
-                  procedimiento según la cuantía. No están en la norma publicada; se registran por año.
-                  Si los dejas vacíos, la app usa los valores 2026.
-                </p>
-                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                  {campo("topeAnio", "Ejercicio de los topes", {
-                    placeholder: "2026",
-                    inputMode: "numeric",
-                    maxDigits: 4,
-                  })}
-                  {campo("topePiso", "Piso — contrato menor (S/)", { moneda: true, placeholder: "44,000.00" })}
-                  {campo("topeLicitacionConcurso", "Frontera Licitación/Concurso (S/)", {
-                    moneda: true,
-                    placeholder: "485,000.00",
-                  })}
-                  {campo("topeLicitacionObras", "Licitación Pública de obras (S/)", {
-                    moneda: true,
-                    placeholder: "5,000,000.00",
-                  })}
-                  {campo("topeComparacionPrecios", "Techo Comparación de Precios (S/)", {
-                    moneda: true,
-                    placeholder: "100,000.00",
-                  })}
-                </div>
-                <div className="text-xs text-muted leading-relaxed">
-                  Bienes/servicios ≥ frontera → Licitación/Concurso Público; entre el piso y la frontera →
-                  su modalidad Abreviada; ≤ techo → cabe Comparación de Precios. Obras ≥ su umbral →
-                  Licitación Pública; por debajo, abreviada de obras.
-                </div>
-              </div>
-
-            </div>
-          </section>
-
-          {/* ── Mobile: toggle vista previa ──────── */}
-          <div className="lg:hidden">
-            <button
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-dashed border-line rounded-lg bg-surface text-sm text-muted hover:text-ink hover:border-brand transition-colors"
-              onClick={() => setShowPreview(!showPreview)}
-              type="button"
-            >
-              {showPreview ? "Ocultar" : "Mostrar"} vista previa
-            </button>
-            {showPreview && (
-              <div id="preview" data-section="preview" className="mt-3 border border-line rounded-lg bg-panel p-4">
-                <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
-                  <Building2 size={14} /> Vista previa — cómo se verá en los documentos
-                </div>
-                {previewDl}
-              </div>
-            )}
-          </div>
-
+          {cardAga}
+          {cardResoluciones}
+          {cardMontos}
+          {cardUit}
+          {cardLpAbreviada}
+          {cardTopes}
+          {cardCronograma}
         </div>
+      ) : (
+        /* Variante "entidad": formulario + vista previa lateral. */
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          {/* Columna principal — formulario */}
+          <div className="flex flex-col gap-4">
+            {cardDatos}
+            {cardGobierno}
+            {cardGerente}
 
-        {/* ── Sidebar desktop: vista previa ─────── */}
-        <aside className="sticky top-20 self-start hidden lg:block" data-section="preview">
-          <div className="border border-line rounded-lg bg-panel p-4">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-              <Building2 size={12} /> Vista previa
+            {/* ── Mobile: toggle vista previa ──────── */}
+            <div className="lg:hidden">
+              <button
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-dashed border-line rounded-lg bg-surface text-sm text-muted hover:text-ink hover:border-brand transition-colors"
+                onClick={() => setShowPreview(!showPreview)}
+                type="button"
+              >
+                {showPreview ? "Ocultar" : "Mostrar"} vista previa
+              </button>
+              {showPreview && (
+                <div id="preview" data-section="preview" className="mt-3 border border-line rounded-lg bg-panel p-4">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-3">
+                    <Building2 size={14} /> Vista previa — cómo se verá en los documentos
+                  </div>
+                  {previewDl}
+                </div>
+              )}
             </div>
-            {previewDl}
           </div>
-        </aside>
 
-      </div>
+          {/* ── Sidebar desktop: vista previa ─────── */}
+          <aside className="sticky top-20 self-start hidden lg:block" data-section="preview">
+            <div className="border border-line rounded-lg bg-panel p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                <Building2 size={12} /> Vista previa
+              </div>
+              {previewDl}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* ── Barra de guardado ───────────────────── */}
       <div className="flex items-center gap-3 py-3 border-t border-line">
@@ -1035,5 +1120,3 @@ function Dato({ k, v }: { k: string; v: string | null | undefined }) {
     </div>
   );
 }
-
-
