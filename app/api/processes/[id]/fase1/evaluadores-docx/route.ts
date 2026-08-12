@@ -3,7 +3,9 @@ import { archivarFormato, FORMATOS_ARCHIVABLES, MIME_DOCX } from "@/lib/archivar
 import { requireUser } from "@/lib/auth";
 import { generarEvaluadorDoc } from "@/lib/evaluadores-docx-datos";
 import type { EvaluadorDocKind } from "@/lib/evaluadores-docx";
+import { emitirNumeroInforme } from "@/lib/informe-aprobacion-datos";
 import { slugify } from "@/lib/slugify";
+import { getYearFromRequest } from "@/lib/year-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,6 +40,17 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const { id } = await context.params;
   try {
+    // El memo (memorándum de oficial de compra / informe de comité o jurado) es
+    // quien lleva el `documento_designacion`. Al descargar la versión de GRUPO
+    // se consume el correlativo de la oficina del usuario (fallback DEC) y se
+    // congela, igual que A7/A8. Las juradas y los consentimientos no numeran, y
+    // las descargas por miembro tampoco (son para firmar/imprimir).
+    if (kind === "memo" && miembroIndex == null) {
+      await emitirNumeroInforme(auth.user, id, "A6", "documento_designacion", getYearFromRequest(request), {
+        oficinaId: auth.user.oficinaId,
+      });
+    }
+
     const r = await generarEvaluadorDoc(auth.user, id, kind, miembroIndex);
     if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
 

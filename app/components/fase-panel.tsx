@@ -1202,10 +1202,17 @@ function PasoCard({
 }) {
   const detalle = pasoF1(code) ?? pasoF2(code) ?? pasoF3(code);
   const status = estado?.status ?? "pendiente";
+  // Año fiscal en la URL de descarga: A7/A8 consumen el correlativo del contador de
+  // ESE año (el mismo que la sugerencia), no del año calendario del servidor.
+  const yearParam = useYearQueryParam();
   const [draftStatus, setDraftStatus] = useState<HitoStatus>(status);
   const [draftData, setDraftData] = useState<Record<string, unknown>>(() =>
     conCitas(code, estado?.data, hitosA2, hitosA5, hitosTodos?.A4?.data ?? undefined),
   );
+  // A6: nº de designación (memorándum del oficial de compra / informe del comité o
+  // jurado) propuesto desde Numeración. Se carga en este componente porque depende
+  // de `tipo_evaluador`, que es dinámico aquí (A7/A8 vienen del padre).
+  const [numeroDesignacionSugerido, setNumeroDesignacionSugerido] = useState("");
 
   useEffect(() => {
     setDraftStatus(estado?.status ?? "pendiente");
@@ -1238,6 +1245,10 @@ function PasoCard({
       const patch: Record<string, unknown> = {};
       if (numeroInformeSugerido && !String(prev.numero_informe ?? "").trim()) {
         patch.numero_informe = numeroInformeSugerido;
+        // Se recuerda la propuesta: al descargar, si el campo sigue siendo esta
+        // semilla (no un número tecleado a mano) se consume el correlativo vigente
+        // aunque la serie haya avanzado, para no chocar con la solicitud de A7.
+        patch.numero_informe_semilla = numeroInformeSugerido;
       }
       // ATENCIÓN: desplegable de autoridad preseleccionado en la AGA ("aga"), igual
       // que A6. Se fija cuando el valor guardado no es una opción válida (vacío o el
@@ -1260,9 +1271,61 @@ function PasoCard({
   useEffect(() => {
     if (code !== "A7" || !numeroInformeSugerido) return;
     setDraftData((prev) =>
-      String(prev.numero_solicitud ?? "").trim() ? prev : { ...prev, numero_solicitud: numeroInformeSugerido },
+      String(prev.numero_solicitud ?? "").trim()
+        ? prev
+        // `numero_solicitud_semilla` recuerda la propuesta: al descargar, si el campo
+        // sigue siendo esta semilla (no un número a mano) se consume el correlativo
+        // vigente aunque la serie haya avanzado, para no chocar con el informe de A8.
+        : { ...prev, numero_solicitud: numeroInformeSugerido, numero_solicitud_semilla: numeroInformeSugerido },
     );
   }, [code, numeroInformeSugerido]);
+
+  // A6: pide la sugerencia del nº de designación cuando hay tipo de evaluador. El
+  // tipo de documento cambia con él: oficial de compra → MEMORANDUM, comité/jurado
+  // → INFORME. Se extrae `tipoEvalA6` para no re-llamar al API por edits ajenos.
+  const tipoEvalA6 = code === "A6" ? String(draftData.tipo_evaluador ?? "").trim() : "";
+  useEffect(() => {
+    if (code !== "A6") {
+      setNumeroDesignacionSugerido("");
+      return;
+    }
+    if (tipoEvalA6 !== "oficial_compra" && tipoEvalA6 !== "comite" && tipoEvalA6 !== "jurado") {
+      setNumeroDesignacionSugerido("");
+      return;
+    }
+    const tipoDoc = tipoEvalA6 === "oficial_compra" ? "MEMORANDUM" : "INFORME";
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/numeracion/sugerido?tipo=${tipoDoc}&${yearParam}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled) setNumeroDesignacionSugerido(String(data.numero ?? "").trim());
+      } catch {
+        if (!cancelled) setNumeroDesignacionSugerido("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, tipoEvalA6, yearParam]);
+
+  // A6: siembra el nº de designación si está vacío, o si sigue siendo la propuesta
+  // anterior sin tocar (p. ej. cambió el tipo de evaluador y con él la serie). Un
+  // número escrito a mano por la DEC se respeta.
+  useEffect(() => {
+    if (code !== "A6" || !numeroDesignacionSugerido) return;
+    setDraftData((prev) => {
+      const actual = String(prev.documento_designacion ?? "").trim();
+      const semilla = String(prev.documento_designacion_semilla ?? "").trim();
+      if (actual && actual !== semilla) return prev;
+      return {
+        ...prev,
+        documento_designacion: numeroDesignacionSugerido,
+        documento_designacion_semilla: numeroDesignacionSugerido,
+      };
+    });
+  }, [code, numeroDesignacionSugerido]);
 
   // A7: el "Monto certificado o previsto" arranca de la CUANTÍA base —la "Cuantía
   // actualizada" de A5 (Art. 53.1), que es lo que se va a certificar—. Solo rellena
@@ -1543,7 +1606,12 @@ function PasoCard({
       const extra = code === "A7" && fechaSolicitud ? `${sep}fecha=${encodeURIComponent(fechaSolicitud)}` : "";
       // A6: descarga por miembro (la ruta ya lleva "?doc=", así que va con "&").
       const extraMiembro = miembro != null ? `&miembro=${miembro}` : "";
-      const res = await fetch(`/api/processes/${processId}/${target.path}${extra}${extraMiembro}`);
+      // A7/A8 consumen el correlativo del contador del AÑO FISCAL: se pasa en la URL
+      // para que coincida con el año de la sugerencia (no el calendario del servidor).
+      const base = `/api/processes/${processId}/${target.path}${extra}${extraMiembro}`;
+      const urlDescarga =
+        code === "A7" || code === "A8" ? `${base}${base.includes("?") ? "&" : "?"}${yearParam}` : base;
+      const res = await fetch(urlDescarga);
       if (!res.ok) {
         let msg = "No se pudo generar el archivo.";
         try {

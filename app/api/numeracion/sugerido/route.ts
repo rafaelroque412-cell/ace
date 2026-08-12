@@ -12,8 +12,8 @@ type CounterMin = { siguiente: number; sufijo: string | null; year: number };
 
 // GET /api/numeracion/sugerido?tipo=INFORME&year=2026
 //
-// Número que le TOCARÍA al siguiente documento de ese tipo emitido por la
-// oficina que gestiona contrataciones (la DEC): correlativo "Empieza en" +
+// Número que le TOCARÍA al siguiente documento de ese tipo emitido por la oficina
+// del usuario autenticado (con fallback a la DEC): correlativo "Empieza en" +
 // "Sigla propia" del tipo, tal como se configuran en Configuración → Numeración
 // (p. ej. "INFORME N° 001-2026-JRM-UA-OGA/MDCH", conservando los guiones).
 //
@@ -36,10 +36,10 @@ export async function GET(request: Request) {
   const year = getYearFromRequest(request);
 
   try {
-    const oficinas = await supabaseRest<OficinaMin[]>(
-      "expedientes_oficinas?select=id,nombre,ancho&gestiona_contrataciones=is.true&activo=eq.true&limit=1",
-    ).catch(() => []);
-    const oficina = oficinas[0];
+    // Resuelve la oficina cuya serie aplica: la del usuario si la tiene
+    // configurada para ese tipo en Numeración; si no, la DEC. Misma lógica que
+    // `resolverNumeracion` de informe-aprobacion-datos.ts.
+    const oficina = await resolverOficina(auth.user.oficinaId, tipo, year);
     if (!oficina) return NextResponse.json({ numero: "", oficina: null });
 
     // Se traen los contadores de ese tipo de CUALQUIER ejercicio, no solo el
@@ -72,4 +72,28 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ numero: "", oficina: null });
   }
+}
+
+// Devuelve la oficina del usuario si tiene counter del tipo/año; si no, la DEC
+// (`gestiona_contrataciones`); si tampoco, null.
+async function resolverOficina(
+  oficinaId: string | null | undefined,
+  tipo: string,
+  year: number,
+): Promise<OficinaMin | null> {
+  if (oficinaId) {
+    const [ofs, cs] = await Promise.all([
+      supabaseRest<OficinaMin[]>(
+        `expedientes_oficinas?id=eq.${oficinaId}&year=eq.${year}&select=id,nombre,ancho&limit=1`,
+      ).catch(() => []),
+      supabaseRest<{ siguiente: number }[]>(
+        `expedientes_doc_counters?oficina_id=eq.${oficinaId}&tipo=eq.${encodeURIComponent(tipo)}&year=eq.${year}&select=siguiente&limit=1`,
+      ).catch(() => []),
+    ]);
+    if (ofs[0] && cs[0]) return ofs[0];
+  }
+  const dec = await supabaseRest<OficinaMin[]>(
+    "expedientes_oficinas?gestiona_contrataciones=is.true&activo=eq.true&select=id,nombre,ancho&limit=1",
+  ).catch(() => []);
+  return dec[0] ?? null;
 }

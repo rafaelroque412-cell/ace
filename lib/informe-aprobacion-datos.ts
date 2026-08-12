@@ -554,11 +554,72 @@ function soloNumeroInforme(completo: string): string {
  * Idempotente (si ya está emitido, no hace nada) y se llama SOLO desde la descarga,
  * nunca desde la vista previa —que no debe consumir correlativos—.
  */
+/**
+ * Resuelve la oficina y el counter con los que numerar un documento: primero la
+ * oficina del usuario (si la hay y tiene counter del tipo/año), y si no, la DEC
+ * (`gestiona_contrataciones`). Devuelve `null` si ninguna sirve.
+ */
+async function resolverNumeracion(
+  oficinaId: string | null | undefined,
+  tipo: "INFORME" | "MEMORANDUM",
+  year: number,
+): Promise<{ oficina: { id: string; ancho: number | null; sufijo: string | null }; counter: { siguiente: number | null; sufijo: string | null } } | null> {
+  type Ofs = { id: string; ancho: number | null; sufijo: string | null };
+  type Ctr = { siguiente: number | null; sufijo: string | null };
+
+  const probar = async (id: string): Promise<{ oficina: Ofs; counter: Ctr } | null> => {
+    const [ofs, cs] = await Promise.all([
+      supabaseRest<Ofs[]>(`expedientes_oficinas?id=eq.${id}&year=eq.${year}&select=id,ancho,sufijo&limit=1`).catch(() => []),
+      supabaseRest<Ctr[]>(
+        `expedientes_doc_counters?oficina_id=eq.${id}&tipo=eq.${encodeURIComponent(tipo)}&year=eq.${year}&select=siguiente,sufijo&limit=1`,
+      ).catch(() => []),
+    ]);
+    if (!ofs[0] || !cs[0]) return null;
+    return { oficina: ofs[0], counter: cs[0] };
+  };
+
+  if (oficinaId) {
+    const r = await probar(oficinaId);
+    if (r) return r;
+  }
+  const dec = await supabaseRest<Ofs[]>(
+    `expedientes_oficinas?gestiona_contrataciones=eq.true&year=eq.${year}&select=id,ancho,sufijo&limit=1`,
+  ).catch(() => []);
+  if (dec[0]) {
+    const r = await probar(dec[0].id);
+    if (r) return r;
+  }
+  return null;
+}
+
+/**
+ * Consume y CONGELA el número de un documento de la DEC la primera vez que se
+ * EMITE (descarga). Sirve para:
+ *   - A8 (`numero_informe`) y A7 (`numero_solicitud`): serie INFORME.
+ *   - A6 (`documento_designacion`): serie MEMORANDUM (oficial de compra) o
+ *     INFORME (comité/jurado), según el `tipo_evaluador` guardado en el hito.
+ *
+ * La oficina cuya serie se aplica es, por este orden, la del usuario autenticado
+ * (`opts.oficinaId`) si la tiene configurada en Numeración para ese tipo, y si no
+ * la DEC. Así cada oficina numera con su propia serie («Empieza en» + «Sigla»).
+ *
+ * Hasta emitirlo el número es una sugerencia; al emitir se toma el correlativo de
+ * forma ATÓMICA (RPC `consumir_correlativo`), así dos documentos nunca comparten
+ * número, y se congela en el hito (`{campo}` + `{campo}_emitido`) para que las
+ * descargas posteriores no vuelvan a consumir. Si la DEC escribió un número PROPIO
+ * (distinto de la sugerencia), se respeta: se congela tal cual, sin tocar el
+ * contador.
+ *
+ * Idempotente (si ya está emitido, no hace nada) y se llama SOLO desde la descarga,
+ * nunca desde la vista previa —que no debe consumir correlativos—.
+ */
 export async function emitirNumeroInforme(
   usuario: { accessToken: string },
   id: string,
-  hito: "A7" | "A8" = "A8",
+  hito: "A6" | "A7" | "A8" = "A8",
   campo = "numero_informe",
+  year: number = new Date().getFullYear(),
+  opts: { oficinaId?: string | null; tipo?: "INFORME" | "MEMORANDUM" } = {},
 ): Promise<void> {
   const flag = `${campo}_emitido`;
   const filas = await supabaseUserRest<{ hitos: HitosMap | null }[]>(
@@ -569,37 +630,47 @@ export async function emitirNumeroInforme(
   const data = (hitos[hito]?.data ?? {}) as Record<string, unknown>;
   if (data[flag] === true) return; // ya emitido: idempotente
 
-  const year = new Date().getFullYear();
-  const oficinas = await supabaseRest<{ id: string; ancho: number | null; sufijo: string | null }[]>(
-    `expedientes_oficinas?gestiona_contrataciones=eq.true&year=eq.${year}&select=id,ancho,sufijo&limit=1`,
-  ).catch(() => []);
-  const oficina = oficinas[0];
-  if (!oficina) return; // sin DEC no se puede numerar; se deja la sugerencia
+  // Tipo de documento: el explícito; si no, A7/A8 → INFORME y A6 → según el
+  // tipo de evaluador guardado (oficial de compra MEMORANDUM, comité/jurado INFORME).
+  let tipo: "INFORME" | "MEMORANDUM" = opts.tipo ?? "INFORME";
+  if (!opts.tipo && hito === "A6") {
+    tipo = String(data.tipo_evaluador ?? "") === "oficial_compra" ? "MEMORANDUM" : "INFORME";
+  }
 
-  const counters = await supabaseRest<{ siguiente: number | null; sufijo: string | null }[]>(
-    `expedientes_doc_counters?oficina_id=eq.${oficina.id}&tipo=eq.INFORME&year=eq.${year}&select=siguiente,sufijo&limit=1`,
-  ).catch(() => []);
-  if (!counters[0]) return; // sin contador; se deja la sugerencia sin congelar
+  const resuelto = await resolverNumeracion(opts.oficinaId ?? null, tipo, year);
+  if (!resuelto) return; // sin oficina ni counter: se deja la sugerencia sin congelar
+  const { oficina, counter } = resuelto;
   const ancho = oficina.ancho ?? 3;
-  const sufijo = counters[0].sufijo || oficina.sufijo;
+  const sufijo = counter.sufijo || oficina.sufijo;
+  // A6 guarda el número con prefijo memorándum/informe: la normalización que
+  // limpia ambos. A7/A8 solo traen «INFORME N°» y basta con la otra.
+  const normalizar = hito === "A6" ? soloNumeroDesignacion : soloNumeroInforme;
 
-  const guardado = typeof data[campo] === "string" ? soloNumeroInforme(data[campo] as string) : "";
-  const sugerido = soloNumeroInforme(
-    formatDocumentNumber({ siguiente: counters[0].siguiente ?? 1, ancho, sufijo, tipo: "INFORME", year }),
+  const guardado = typeof data[campo] === "string" ? normalizar(data[campo] as string) : "";
+  const sugerido = normalizar(
+    formatDocumentNumber({ siguiente: counter.siguiente ?? 1, ancho, sufijo, tipo, year }),
   );
+  // La UI SEMBRÓ el campo con la propuesta y guardó ese valor en `${campo}_semilla`.
+  // Si el valor guardado sigue siendo esa propuesta sin tocar, es una sugerencia
+  // AUTOMÁTICA (no un número tecleado a mano): se consume el correlativo VIGENTE
+  // aunque la serie haya avanzado —p. ej. porque el informe de A8 se descargó
+  // primero—, para no congelar un número obsoleto que chocaría con el otro documento.
+  const semilla =
+    typeof data[`${campo}_semilla`] === "string" ? normalizar(data[`${campo}_semilla`] as string) : null;
+  const esPropuestaSinTocar = semilla !== null && guardado !== "" && guardado === semilla;
 
   let numeroFinal = guardado;
-  // Si la DEC escribió un número propio (no vacío y distinto de la sugerencia), se
-  // respeta y NO se consume el contador. Si aceptó la sugerencia (o está vacío), se
-  // consume el correlativo de verdad.
-  if (guardado === "" || guardado === sugerido) {
+  // Si la DEC escribió un número PROPIO (no vacío, distinto de la sugerencia y no la
+  // propuesta auto-sembrada), se respeta y NO se consume el contador. En otro caso
+  // (vacío, aceptó la sugerencia, o es la propuesta sin tocar) se consume de verdad.
+  if (guardado === "" || esPropuestaSinTocar || guardado === sugerido) {
     const consumido = await supabaseRest<number | null>("rpc/consumir_correlativo", {
       method: "POST",
-      body: JSON.stringify({ p_oficina: oficina.id, p_tipo: "INFORME", p_year: year }),
+      body: JSON.stringify({ p_oficina: oficina.id, p_tipo: tipo, p_year: year }),
     }).catch(() => null);
     if (typeof consumido !== "number") return; // no se pudo consumir; se deja la sugerencia
-    numeroFinal = soloNumeroInforme(
-      formatDocumentNumber({ siguiente: consumido, ancho, sufijo, tipo: "INFORME", year }),
+    numeroFinal = normalizar(
+      formatDocumentNumber({ siguiente: consumido, ancho, sufijo, tipo, year }),
     );
   }
 

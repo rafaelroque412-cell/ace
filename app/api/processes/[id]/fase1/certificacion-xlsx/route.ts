@@ -5,6 +5,7 @@ import { emitirNumeroInforme } from "@/lib/informe-aprobacion-datos";
 import { slugify } from "@/lib/slugify";
 import { armarInputCertificacion } from "@/lib/solicitud-certificacion-data";
 import { buildSolicitudCertificacion } from "@/lib/solicitud-certificacion-xlsx";
+import { getYearFromRequest } from "@/lib/year-utils";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,7 +30,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     // Emitir = consumir el correlativo de la solicitud y congelarlo (la primera
     // vez). Antes de armar, para que la solicitud lleve el número ya asignado. La
     // vista previa usa otra ruta, así que no consume.
-    await emitirNumeroInforme(auth.user, id, "A7", "numero_solicitud");
+    await emitirNumeroInforme(auth.user, id, "A7", "numero_solicitud", getYearFromRequest(request), {
+      oficinaId: auth.user.oficinaId,
+      tipo: "INFORME",
+    });
 
     const fecha = new URL(request.url).searchParams.get("fecha") ?? undefined;
     const r = await armarInputCertificacion(auth.user.accessToken, id, { fechaSolicitud: fecha });
