@@ -14,6 +14,7 @@
 // Se trabaja en días HÁBILES: se omiten sábados, domingos y los feriados que la
 // entidad registre en Configuración. Fechas en formato ISO "YYYY-MM-DD".
 
+import { type DiasCronograma, DIAS_CRONOGRAMA_DEFAULT } from "./cronograma-dias";
 import {
   type ActividadCronograma,
   CRONOGRAMA_SEGUN_BASES,
@@ -29,32 +30,31 @@ import {
 
 /** ¿Es la actividad de integración de (las) bases? */
 function esIntegracionBases(actividad: string | undefined): boolean {
-  // La etapa del Reglamento une consultas, observaciones e integración en una sola
-  // fila: su FIN es la fecha de integración de bases, que ancla el plazo del
-  // Art. 68.1 (integración → ofertas). Se acepta también el rótulo antiguo suelto.
-  return /integraci[oó]n de (las )?bases|consultas,?\s*observaciones e integraci[oó]n/i.test(actividad ?? "");
+  // "Absolución e integración" es la etapa cuyo FIN es la fecha de integración de
+  // bases, la que ancla el plazo del Art. 68.1 (integración → ofertas). Se aceptan
+  // también los rótulos antiguos (la etapa unificada y la suelta).
+  return /absoluci[oó]n e integraci[oó]n|integraci[oó]n de (las )?bases|consultas,?\s*observaciones e integraci[oó]n/i.test(
+    actividad ?? "",
+  );
 }
 
-/** Duración por defecto (días hábiles) de cada actividad, por palabras clave. */
+// Duración por defecto (días hábiles) de las actividades que NO son configurables
+// ni las fija la ley: casi todas de un día (inicio = fin). Las 4 editables por la
+// entidad (aprobación del expediente, elaboración de bases, presentación de
+// requisitos, suscripción del contrato) NO están aquí: las resuelve `duracionActividad`
+// con los días de Configuración (ver `DiasCronograma`).
 const DURACION_POR_CLAVE: ReadonlyArray<{ clave: RegExp; dias: number }> = [
-  // Preparatorias
-  { clave: /aprobaci[oó]n del expediente/i, dias: 3 },
-  { clave: /elaboraci[oó]n de las bases/i, dias: 5 },
-  // Selección
+  // Selección — un solo día (inicio = fin). La formulación de consultas (con su
+  // plazo del Art. 66.1) es otra actividad distinta y conserva su duración.
   { clave: /convocatoria|solicitud de cotizaci/i, dias: 1 },
-  // Absolución e integración van en UN solo día (inicio = fin), igual que su par
-  // en el cronograma tipo. La formulación de consultas (con su plazo del Art. 66.1)
-  // es otra actividad distinta y conserva su duración.
-  { clave: /absoluci[oó]n de consultas/i, dias: 1 },
+  { clave: /absoluci[oó]n e integraci[oó]n|absoluci[oó]n de consultas/i, dias: 1 },
   { clave: /integraci[oó]n de (las )?bases/i, dias: 1 },
   { clave: /presentaci[oó]n de (ofertas|cotizaci)/i, dias: 1 },
-  // Evaluación/calificación y otorgamiento también en un solo día (inicio = fin).
   { clave: /evaluaci[oó]n (y calificaci[oó]n)?|calificaci[oó]n de (ofertas|cotizaci)/i, dias: 1 },
   { clave: /lances|puja/i, dias: 1 },
   { clave: /otorgamiento de la buena pro/i, dias: 1 },
-  // Ejecución
-  { clave: /presentaci[oó]n de requisitos/i, dias: 8 },
-  { clave: /suscripci[oó]n del contrato/i, dias: 3 },
+  // Ejecución contractual: no lleva fecha cierta (va "SEGÚN BASES"), este valor no
+  // se usa para fechar; se conserva por compatibilidad.
   { clave: /ejecuci[oó]n contractual/i, dias: 30 },
 ];
 
@@ -79,14 +79,21 @@ export function duracionActividad(
   actividad: string | undefined,
   procedimiento?: string,
   cuantia?: number | null,
+  dias: DiasCronograma = DIAS_CRONOGRAMA_DEFAULT,
 ): number {
   const a = (actividad ?? "").trim();
   if (!a) return 2;
-  // Etapa unificada "Consultas, observaciones e integración" (o el rótulo antiguo
-  // "Formulación de consultas…"): dura el plazo mínimo de consultas del Art. 66.1
-  // (7 días hábiles; 3 en las abreviadas), de modo que su FIN es la integración de
-  // bases desde la que cuenta el Art. 68.1.
-  if (/consultas,?\s*observaciones e integraci[oó]n|formulaci[oó]n de consultas/i.test(a)) {
+  // Las 4 duraciones EDITABLES en Configuración (Reglamento no las fija): salen de
+  // `dias`. La entidad las ajusta a su práctica; el defecto reproduce lo de antes.
+  if (/aprobaci[oó]n del expediente/i.test(a)) return dias.aprobacionExpediente;
+  if (/elaboraci[oó]n de las bases/i.test(a)) return dias.elaboracionBases;
+  if (/presentaci[oó]n de requisitos/i.test(a)) return dias.presentacionRequisitos;
+  if (/suscripci[oó]n del contrato/i.test(a)) return dias.suscripcionContrato;
+  // "Consultas y observaciones" (o los rótulos antiguos "…e integración" / "Formulación
+  // de consultas…"): dura el plazo mínimo de consultas del Art. 66.1 (7 días hábiles;
+  // 3 en las abreviadas). La "Absolución e integración" que le sigue es corta (1 día)
+  // y su FIN es la integración de bases desde la que cuenta el Art. 68.1.
+  if (/^consultas y observaciones|consultas,?\s*observaciones e integraci[oó]n|formulaci[oó]n de consultas/i.test(a)) {
     return (procedimiento ? MIN_HABILES_CONSULTAS[procedimiento] : undefined) ?? 7;
   }
   if (/consentimiento de la buena pro/i.test(a)) {
@@ -253,7 +260,7 @@ export function calcularFechasCronograma(
   filas: ActividadCronograma[],
   anclaje: string | undefined,
   feriados: ReadonlySet<string> = new Set(),
-  opts?: { procedimiento?: string; cuantia?: number | null },
+  opts?: { procedimiento?: string; cuantia?: number | null; dias?: DiasCronograma },
 ): ActividadCronograma[] {
   // El anclaje puede traer hora ("...T08:30"): se calcula sobre la FECHA y la hora
   // se conserva para la primera actividad (el resto va por convención en `atarHoras`).
@@ -261,17 +268,20 @@ export function calcularFechasCronograma(
   if (!inicioBase || filas.length === 0) return filas;
   const proc = opts?.procedimiento;
   const cuantia = opts?.cuantia ?? null;
+  // Días estimados configurables (preparatorias y ejecución): de Configuración
+  // cuando se pasan, del defecto en otro caso.
+  const dias = opts?.dias ?? DIAS_CRONOGRAMA_DEFAULT;
 
   let cursor = inicioBase;
   const encadenadas = filas.map((fila) =>
-    encadenar(fila, proc, feriados, (c) => (cursor = c), () => cursor, cuantia),
+    encadenar(fila, proc, feriados, (c) => (cursor = c), () => cursor, cuantia, dias),
   );
   const conMinimo = aplicarMinimoOfertas(encadenadas, feriados, proc, cuantia);
   const conIntegracion = aplicarMinimoIntegracionOfertas(conMinimo, feriados, proc, cuantia);
-  // La ventana del registro va ANTES de rellenar su rango: primero se separan las
-  // ofertas (subasta) y luego el registro ocupa el hueco resultante.
-  const conVentana = aplicarVentanaRegistro(conIntegracion, feriados, proc, cuantia);
-  const conRegistro = aplicarRegistroParticipantes(conVentana, feriados);
+  // El registro de participantes (competitivos) ocupa el rango convocatoria→ofertas,
+  // ya separado de sobra por el mínimo del Art. 64.1. En la subasta no hay fila de
+  // registro: su ventana la garantiza el piso de MIN_HABILES_CONVOCATORIA_OFERTAS.
+  const conRegistro = aplicarRegistroParticipantes(conIntegracion, feriados);
   return atarHoras(conRegistro, horaDe(anclaje) || "00:01");
 }
 
@@ -283,6 +293,7 @@ function encadenar(
   setCursor: (c: string) => void,
   getCursor: () => string,
   cuantia?: number | null,
+  diasCfg: DiasCronograma = DIAS_CRONOGRAMA_DEFAULT,
 ): ActividadCronograma {
   // SOLO "Ejecución contractual" no lleva fecha cierta: va "SEGÚN BASES" y no
   // consume días. El resto de la ejecución (requisitos, suscripción) sí encadena.
@@ -293,7 +304,7 @@ function encadenar(
   // desde el día siguiente de la convocatoria hasta antes de la presentación de
   // ofertas. Se resuelve al final, cuando ya se conocen ambas fechas.
   if (esRegistroParticipantes(fila.actividad)) return { ...fila };
-  const dias = duracionActividad(fila.actividad, proc, cuantia);
+  const dias = duracionActividad(fila.actividad, proc, cuantia, diasCfg);
   const inicio = sumarDiasHabiles(getCursor(), 0, feriados); // normaliza no hábil
   const fin = sumarDiasHabiles(inicio, Math.max(0, dias - 1), feriados); // 1 día ⇒ mismo día
   setCursor(sumarDiasHabiles(fin, 1, feriados)); // la siguiente arranca al día hábil posterior
@@ -398,43 +409,6 @@ function aplicarRegistroParticipantes(
   return out;
 }
 
-/** Ventana mínima (días hábiles) para el registro de participantes cuando el
- *  procedimiento NO tiene etapa de consultas —así el rango del Art. 65.2 cabe—.
- *  El Reglamento no fija este plazo para la subasta inversa (lo hacen la directiva
- *  de Perú Compras y las bases estándar): es un estimado EDITABLE. Con 3 días
- *  hábiles el registro ocupa dos (convocatoria+1 hasta ofertas-1). */
-const VENTANA_REGISTRO_HABILES = 3;
-
-/**
- * Separa la presentación de ofertas de la convocatoria lo justo para que el
- * registro de participantes (Art. 65.2) tenga ventana, en los procedimientos SIN
- * etapa de consultas (subasta inversa): el encadenado natural las deja a un día y
- * el rango del registro no cabría. En los competitivos no actúa porque las
- * consultas y el mínimo del Art. 64.1 ya separan las ofertas de sobra.
- */
-function aplicarVentanaRegistro(
-  filas: ActividadCronograma[],
-  feriados: ReadonlySet<string>,
-  proc: string | undefined,
-  cuantia?: number | null,
-): ActividadCronograma[] {
-  if (!filas.some((f) => esRegistroParticipantes(f.actividad))) return filas;
-  const iConv = filas.findIndex((f) => esConvocatoria(f.actividad));
-  const iOfertas = filas.findIndex((f) => esPresentacionOfertas(f.actividad));
-  if (iConv < 0 || iOfertas <= iConv) return filas;
-  const convFin = fechaDe(filas[iConv].fin);
-  if (!ISO.test(convFin)) return filas;
-  const minimo = sumarDiasHabiles(convFin, VENTANA_REGISTRO_HABILES, feriados);
-  const actual = fechaDe(filas[iOfertas].inicio);
-  if (ISO.test(actual) && actual >= minimo) return filas; // ya hay ventana
-  const out = [...filas];
-  let cursor = minimo;
-  for (let i = iOfertas; i < out.length; i += 1) {
-    out[i] = encadenar(out[i], proc, feriados, (c) => (cursor = c), () => cursor, cuantia);
-  }
-  return out;
-}
-
 /**
  * ¿Cuándo tendría el área usuaria lo que pidió?
  *
@@ -517,7 +491,9 @@ export function validarCronograma(
     }
   }
 
-  const consultas = filas.find((f) => /formulaci[oó]n de consultas/i.test(f.actividad ?? ""));
+  const consultas = filas.find((f) =>
+    /^consultas y observaciones|formulaci[oó]n de consultas/i.test(f.actividad ?? ""),
+  );
   const minConsultas = procedimiento ? MIN_HABILES_CONSULTAS[procedimiento] : undefined;
   if (minConsultas && consultas?.inicio && consultas?.fin) {
     const dias = diasHabilesEntre(consultas.inicio, consultas.fin, feriados) + 1;

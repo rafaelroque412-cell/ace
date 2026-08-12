@@ -111,6 +111,7 @@ import {
   regimenDe,
 } from "@/lib/regimen-seleccion";
 import { procedimientosElegibles, type TopesProcedimiento } from "@/lib/topes-procedimiento";
+import type { DiasCronogramaPorProcedimiento } from "@/lib/cronograma-dias";
 import { validarPlazoMinimo } from "@/lib/plazo-minimo";
 import { cuantiaSegmentacionSinDeterminar, soles } from "@/lib/segmentacion-parametros";
 import type { CampoSustento } from "@/lib/sustento-ia";
@@ -398,6 +399,7 @@ function Campo({
   cantidadIntegrantes,
   clasificacionN,
   cuantiaA5,
+  diasCronogramaPorProcedimiento,
   tipoEvaluadorRol,
   procesoRol,
   riesgosNecesidad,
@@ -417,6 +419,8 @@ function Campo({
   clasificacionN?: { categoria: string; nivelMinimo: string; realizado: string; cumple: boolean | null } | null;
   /** Cuantía actualizada de A5: el cronograma o) la usa para el plazo del consentimiento. */
   cuantiaA5?: number | null;
+  /** Días estimados del cronograma POR PROCEDIMIENTO (Configuración); o) usa los del a). */
+  diasCronogramaPorProcedimiento?: DiasCronogramaPorProcedimiento;
   /**
    * Propuesta de requisitos de calificación del área usuaria (A3), para
    * contrastarla en A4 (f). Solo se pasa en la variable f) de la estrategia.
@@ -718,6 +722,7 @@ function Campo({
         {labelContent}
         <CronogramaEditor
           cuantia={cuantiaA5}
+          diasPorProcedimiento={diasCronogramaPorProcedimiento}
           onChange={(next) => onChange(next)}
           plazoDias={plazoDias}
           plazoUnidad={plazoUnidad}
@@ -2639,6 +2644,9 @@ function PasoCard({
                       }
                       clasificacionN={campo.name === "var_n_tipo_interaccion" ? clasificacionN : undefined}
                       cuantiaA5={campo.name === "cronograma_items" ? cuantiaCronograma : undefined}
+                      diasCronogramaPorProcedimiento={
+                        campo.name === "cronograma_items" ? segParametros?.diasCronogramaPorProcedimiento : undefined
+                      }
                       tipoEvaluadorRol={
                         campo.name === "roles_items" ? String(draftData.var_e_tipo_evaluador ?? "") : undefined
                       }
@@ -3005,6 +3013,9 @@ export function FasePanel({
   // hasta que llegan de parametros-segmentacion; procedimientosElegibles cae al
   // defecto 2026 mientras tanto.
   const [topesConfig, setTopesConfig] = useState<TopesProcedimiento | null>(null);
+  // Días estimados del cronograma POR PROCEDIMIENTO (Configuración anual). `null`
+  // hasta que llegan; el cronograma cae al defecto por procedimiento mientras tanto.
+  const [diasCronogramaConfig, setDiasCronogramaConfig] = useState<DiasCronogramaPorProcedimiento | null>(null);
   const yearParam = useYearQueryParam();
   // Lo que el área usuaria estimó en la necesidad. No es el valor estimado —ese
   // lo fija A5 con el mercado (Art. 47.1)— pero si difieren mucho, alguien tiene
@@ -3259,8 +3270,9 @@ export function FasePanel({
       valorEstimadoA1: valorA1,
       versionCmn: typeof a1.version_cmn === "string" ? a1.version_cmn : undefined,
       topes: topesConfig ?? undefined,
+      diasCronogramaPorProcedimiento: diasCronogramaConfig ?? undefined,
     };
-  }, [esIoarr, hitos.A1, pacBienesServicios, procedureType, procesoNecesidad, valorEstimado, topesConfig]);
+  }, [esIoarr, hitos.A1, pacBienesServicios, procedureType, procesoNecesidad, valorEstimado, topesConfig, diasCronogramaConfig]);
 
   // Nivel mínimo de interacción con el mercado que exige la segmentación (A2).
   const nivelMinimo = useMemo<NivelMinimo | null>(() => {
@@ -3284,6 +3296,7 @@ export function FasePanel({
         if (!cancelled) {
           setPacBienesServicios(pac.pacMontoBienesServicios ?? null);
           setTopesConfig(pac.topes ?? null);
+          setDiasCronogramaConfig(pac.diasCronogramaPorProcedimiento ?? null);
         }
       } catch {
         // Sin PAC registrado, A2 pide la cuantía a mano.

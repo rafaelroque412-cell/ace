@@ -206,6 +206,10 @@ export const entitySchema = z.object({
   topeLicitacionConcurso: montoSchema,
   topeLicitacionObras: montoSchema,
   topeComparacionPrecios: montoSchema,
+  cronogramaAnio: z.optional(z.union([z.string().check(z.trim(), z.regex(/^\d{4}$/, "Ano de 4 digitos")), z.literal("")])),
+  // Días por procedimiento como cadena JSON (la valida/sanea el backend con
+  // parseDiasPorProcedimiento): aquí solo se acota el tamaño.
+  cronogramaDias: z.optional(z.union([z.string().check(z.trim(), z.maxLength(4000)), z.literal("")])),
 });
 
 export type EntityFormData = z.infer<typeof entitySchema>;
@@ -276,5 +280,7 @@ export function toFormState(entity: EntitySettings): FormState {
     topeLicitacionConcurso: formatearImporte(entity.topeLicitacionConcurso || ""),
     topeLicitacionObras: formatearImporte(entity.topeLicitacionObras || ""),
     topeComparacionPrecios: formatearImporte(entity.topeComparacionPrecios || ""),
+    cronogramaAnio: entity.cronogramaAnio || "",
+    cronogramaDias: entity.cronogramaDias || "",
   };
 }

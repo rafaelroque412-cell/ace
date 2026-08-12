@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { calcularFechasCronograma, sumarDiasHabiles, validarCronograma } from "@/lib/cronograma-fechas";
+import { diasParaProcedimiento, type DiasCronogramaPorProcedimiento } from "@/lib/cronograma-dias";
 import { SustentoIA } from "./sustento-ia";
 import { useFeriados } from "./use-feriados";
 import {
@@ -55,6 +56,7 @@ export function CronogramaEditor({
   plazoDias,
   plazoUnidad,
   cuantia,
+  diasPorProcedimiento,
 }: {
   value: unknown;
   onChange: (next: ActividadCronograma[]) => void;
@@ -70,8 +72,14 @@ export function CronogramaEditor({
   // Cuantía actualizada de A5: fija el plazo de apelación/consentimiento (Art. 304
   // + 82.1) al calcular las fechas — 8 hábiles si ≥ 485 000, 5 si menor (+1 día).
   cuantia?: number | null;
+  // Días ESTIMADOS del cronograma POR PROCEDIMIENTO (Configuración anual). Se
+  // resuelve el set del procedimiento de a); los mínimos legales van en código, y
+  // si no llega nada, cae al defecto por procedimiento.
+  diasPorProcedimiento?: DiasCronogramaPorProcedimiento;
 }) {
   const filas = leerFilas<ActividadCronograma>(value);
+  // Días del procedimiento elegido en a) (o el defecto). Se pasa a cada cálculo.
+  const dias = diasParaProcedimiento(diasPorProcedimiento, procedimiento);
   const actividadesSeleccion = actividadesSeleccionDe(procedimiento);
   // datetime-local necesita "YYYY-MM-DDTHH:mm"; una fecha antigua sin hora se abre
   // a las 00:00 para que el input la acepte.
@@ -98,11 +106,11 @@ export function CronogramaEditor({
     // Ancla por defecto: hoy + 5 días hábiles (margen para aprobar el expediente
     // antes de arrancar el cronograma). La DEC puede reanclar con el botón.
     const ancla = sumarDiasHabiles(new Date().toISOString().slice(0, 10), 5, feriados);
-    onChange(calcularFechasCronograma(actuales, ancla, feriados, { procedimiento, cuantia }));
+    onChange(calcularFechasCronograma(actuales, ancla, feriados, { procedimiento, cuantia, dias }));
     // feriados/onChange se omiten a propósito: solo debe reaccionar a que aparezcan
     // actividades sin fechas o cambie el procedimiento/cuantía de partida.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, procedimiento, cuantia]);
+  }, [value, procedimiento, cuantia, dias]);
 
   function editar(i: number, campo: keyof ActividadCronograma, v: string) {
     onChange(filas.map((f, j) => (j === i ? { ...f, [campo]: v } : f)));
@@ -122,7 +130,7 @@ export function CronogramaEditor({
     // luego con «Calcular fechas desde el inicio».
     const base = construirCronogramaInicial(procedimiento, plazoDias, plazoUnidad);
     const ancla = sumarDiasHabiles(new Date().toISOString().slice(0, 10), 5, feriados);
-    onChange(calcularFechasCronograma(base, ancla, feriados, { procedimiento, cuantia }));
+    onChange(calcularFechasCronograma(base, ancla, feriados, { procedimiento, cuantia, dias }));
   }
 
   /**
@@ -143,7 +151,7 @@ export function CronogramaEditor({
     // Recalcula las fechas de las nuevas etapas: reancla desde el inicio de la
     // primera actividad si ya lo hay, o desde hoy + 5 días hábiles.
     const ancla = filas[0]?.inicio || sumarDiasHabiles(new Date().toISOString().slice(0, 10), 5, feriados);
-    onChange(calcularFechasCronograma(nuevo, ancla, feriados, { procedimiento, cuantia }));
+    onChange(calcularFechasCronograma(nuevo, ancla, feriados, { procedimiento, cuantia, dias }));
   }
 
   return (
@@ -270,7 +278,7 @@ export function CronogramaEditor({
               // lista: para volver a las etapas mínimas del procedimiento están el
               // sembrado y el aviso «Re-listar la selección».
               onClick={() =>
-                onChange(calcularFechasCronograma(filas, filas[0]?.inicio, feriados, { procedimiento, cuantia }))
+                onChange(calcularFechasCronograma(filas, filas[0]?.inicio, feriados, { procedimiento, cuantia, dias }))
               }
               title={
                 filas[0]?.inicio

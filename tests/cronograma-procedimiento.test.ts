@@ -40,10 +40,11 @@ describe("a) Tipo de procedimiento ↔ o) Cronograma", () => {
   it("la licitación pública abreviada lista sus actividades, no la genérica", () => {
     const abreviada = actividadesSeleccionDe("licitacion_publica_abreviada");
     expect(abreviada).toBe(ACTIVIDADES_SELECCION_POR_PROCEDIMIENTO.licitacion_publica_abreviada);
-    // Etapas del Reglamento (Art. 93/94): registro de participantes + la etapa
-    // unificada de consultas/observaciones/integración.
+    // Etapas del Reglamento (Art. 93/94): registro de participantes + consultas y
+    // observaciones y la absolución e integración por separado.
     expect(abreviada).toContain("Registro de participantes");
-    expect(abreviada).toContain("Consultas, observaciones e integración");
+    expect(abreviada).toContain("Consultas y observaciones");
+    expect(abreviada).toContain("Absolución e integración");
   });
 
   it("sin procedimiento elegido cae en la lista genérica editable", () => {

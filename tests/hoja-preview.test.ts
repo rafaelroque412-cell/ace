@@ -202,7 +202,7 @@ describe("o) y p) mantienen la estructura del formato al expandirse", () => {
     ];
     const hoja = await previewHoja("estrategia", { proceso, hitos: { A4: { data: { cronograma_items: crono }, status: "hecho" } } });
     const filasActividad = hoja.filas.filter((f) =>
-      f.some((c) => /Convocatoria|Registro de participantes|Consultas, observaciones e integración|Consentimiento de la buena pro|Suscripción del contrato/.test(c.texto)),
+      f.some((c) => /Convocatoria|Registro de participantes|Consultas y observaciones|Otorgamiento de la buena pro|Suscripción del contrato/.test(c.texto)),
     );
     expect(filasActividad.length).toBeGreaterThan(3);
     for (const fila of filasActividad) {

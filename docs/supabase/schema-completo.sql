@@ -277,6 +277,8 @@ create table if not exists public.entity_settings (
   tope_licitacion_concurso numeric(14,2),
   tope_licitacion_obras numeric(14,2),
   tope_comparacion_precios numeric(14,2),
+  cronograma_anio integer,
+  cronograma_dias jsonb,
   aga_degree text,
   aga_dni text,
   aga_full_name text,

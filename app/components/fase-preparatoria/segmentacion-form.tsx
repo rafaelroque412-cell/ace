@@ -10,6 +10,7 @@ import {
 } from "@/lib/actuaciones-preparatorias";
 import { calcularParametrosSegmentacion, cuantiaSegmentacionSinDeterminar, soles } from "@/lib/segmentacion-parametros";
 import type { TopesProcedimiento } from "@/lib/topes-procedimiento";
+import type { DiasCronogramaPorProcedimiento } from "@/lib/cronograma-dias";
 import { mismaPersona, nombreParaFirma, type Persona } from "@/lib/nombres";
 import { OficinaCombobox, type OficinaOpcion } from "../oficina-combobox";
 
@@ -81,6 +82,8 @@ export type SegParametros = {
   valorEstimado: number | null;
   /** Topes de procedimiento por cuantía (Configuración anual; defecto 2026). */
   topes?: TopesProcedimiento;
+  /** Días estimados del cronograma POR PROCEDIMIENTO (Configuración anual). */
+  diasCronogramaPorProcedimiento?: DiasCronogramaPorProcedimiento;
   programada: boolean;
   /** `programada` es una PRESUNCIÓN (A1 no lo confirmó): A2 lo advierte en el copy. */
   programadaPresumida?: boolean;

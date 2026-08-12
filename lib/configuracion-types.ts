@@ -61,6 +61,10 @@ export type EntitySettings = {
   topeLicitacionConcurso: string;
   topeLicitacionObras: string;
   topeComparacionPrecios: string;
+  cronogramaAnio: string;
+  /** Días estimados del cronograma POR PROCEDIMIENTO, como cadena JSON
+   *  ({ procedimiento: { aprobacionExpediente, ... } }). "" = usa los defectos. */
+  cronogramaDias: string;
   updatedAt: string | null;
 };
 
@@ -227,6 +231,8 @@ export const emptyEntity: EntitySettings = {
   topeLicitacionConcurso: "",
   topeLicitacionObras: "",
   topeComparacionPrecios: "",
+  cronogramaAnio: "",
+  cronogramaDias: "",
   updatedAt: null,
 };
 

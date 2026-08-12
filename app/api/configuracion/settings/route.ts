@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { emptyEntity, parseMonto } from "@/lib/configuracion-types";
+import { parseDiasPorProcedimiento } from "@/lib/cronograma-dias";
 import { APP_AREAS, APP_ROLES, type AppRole } from "@/lib/permisos-contratacion";
 import { supabaseRest, writeAuditLog } from "@/lib/supabase-server";
 import { getYearFromRequest } from "@/lib/year-utils";
@@ -60,6 +61,8 @@ const entitySchema = z.object({
   topeLicitacionConcurso: z.string().trim().max(30).optional().or(z.literal("")),
   topeLicitacionObras: z.string().trim().max(30).optional().or(z.literal("")),
   topeComparacionPrecios: z.string().trim().max(30).optional().or(z.literal("")),
+  cronogramaAnio: z.string().trim().max(4).optional().or(z.literal("")),
+  cronogramaDias: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
 const processTypeSchema = z.object({
@@ -114,6 +117,8 @@ type EntitySettingsRow = {
   lp_abreviada_bienes_anio?: number | null;
   lp_abreviada_bienes_min?: number | string | null;
   lp_abreviada_bienes_max?: number | string | null;
+  cronograma_anio?: number | null;
+  cronograma_dias?: unknown;
   tope_anio?: number | null;
   tope_piso?: number | string | null;
   tope_licitacion_concurso?: number | string | null;
@@ -211,6 +216,8 @@ const COLUMNAS_OPCIONALES = new Set([
   "tope_licitacion_concurso",
   "tope_licitacion_obras",
   "tope_comparacion_precios",
+  "cronograma_anio",
+  "cronograma_dias",
   "year",
 ]);
 
@@ -283,6 +290,9 @@ async function getSettings(year: number) {
   // Topes por cuantía: la tanda de columnas MÁS reciente. En su propio nivel de
   // fallback para que, si su SQL aún no se ha corrido, siga leyéndose el resto.
   const columnsTopes = `${columnsLp},tope_anio,tope_piso,tope_licitacion_concurso,tope_licitacion_obras,tope_comparacion_precios`;
+  // Días estimados del cronograma: la tanda MÁS reciente, en su propio nivel de
+  // fallback para que, si su SQL aún no se ha corrido, siga leyéndose el resto.
+  const columnsCronograma = `${columnsTopes},cronograma_anio,cronograma_dias`;
   const yearFilter = `&year=eq.${year}`;
   const [entityRows, processRows] = await Promise.all([
     // SIN filtro de año, a diferencia de los tipos de proceso de más abajo.
@@ -297,6 +307,9 @@ async function getSettings(year: number) {
     // no se disparaba y Municipalidad salía en blanco, como si no hubiera nada
     // configurado. Quien la rellenara sobrescribía la fila del año anterior,
     // porque el upsert va con `on_conflict=id` sobre esa misma fila única.
+    supabaseRest<EntitySettingsRow[]>(
+      `entity_settings?id=eq.default&select=${columnsCronograma}&limit=1`,
+    ).catch(() =>
     supabaseRest<EntitySettingsRow[]>(
       `entity_settings?id=eq.default&select=${columnsTopes}&limit=1`,
     ).catch(() =>
@@ -314,6 +327,7 @@ async function getSettings(year: number) {
           ).catch(() => []),
         ),
       ),
+    ),
     ),
     ),
     // Solo tipos de proceso a nivel entidad (sin oficina).
@@ -373,6 +387,12 @@ async function getSettings(year: number) {
           topeLicitacionConcurso: montoToText(entity.tope_licitacion_concurso),
           topeLicitacionObras: montoToText(entity.tope_licitacion_obras),
           topeComparacionPrecios: montoToText(entity.tope_comparacion_precios),
+          cronogramaAnio: entity.cronograma_anio ? String(entity.cronograma_anio) : "",
+          // El jsonb llega ya como objeto (PostgREST): se serializa para el form.
+          cronogramaDias:
+            entity.cronograma_dias && typeof entity.cronograma_dias === "object"
+              ? JSON.stringify(entity.cronograma_dias)
+              : "",
           updatedAt: entity.updated_at,
         }
       : { ...emptyEntity, updatedAt: null },
@@ -472,6 +492,12 @@ export async function PUT(request: Request) {
       tope_licitacion_concurso: parseMonto(entity.topeLicitacionConcurso),
       tope_licitacion_obras: parseMonto(entity.topeLicitacionObras),
       tope_comparacion_precios: parseMonto(entity.topeComparacionPrecios),
+      cronograma_anio: entity.cronogramaAnio?.trim() ? Number(entity.cronogramaAnio) : null,
+      // Se saneam a un mapa completo por procedimiento antes de persistir (JSONB);
+      // cadena vacía → null (el código completa con los defectos al leer).
+      cronograma_dias: entity.cronogramaDias?.trim()
+        ? parseDiasPorProcedimiento(entity.cronogramaDias)
+        : null,
       // Sin `year`: la fila es única y describe a la entidad, no a un ejercicio.
       // Sellarla con el año del selector no la separaba por año —seguía siendo
       // la misma fila— y solo servía para que la lectura filtrada no la

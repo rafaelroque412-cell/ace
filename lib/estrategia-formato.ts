@@ -557,41 +557,38 @@ export function construirCronogramaInicial(
 // "de acuerdo al tipo de procedimiento"). Son un PUNTO DE PARTIDA editable que
 // la DEC debe verificar contra el Reglamento de la Ley N° 32069: la secuencia y
 // los plazos definitivos los fijan las bases estándar de cada procedimiento.
-// El "Registro de participantes" (Art. 65.2) NO figura como fila del cronograma:
-// es un RANGO continuo (del día siguiente a la convocatoria hasta antes de las
-// ofertas), no una etapa con su propia fecha, así que no se lista aquí.
 // Las etapas de cada procedimiento salen de la columna "Etapas" de las tablas de
-// los Arts. 93/94/95 del Reglamento (verificado verbatim contra el RAG), MÁS los
-// hitos que la norma fecha pero no lista como etapa: "Presentación de ofertas"
-// (ancla del Art. 64.1/68.1) y "Consentimiento de la buena pro" (Art. 82.1).
+// los Arts. 93/94/95 del Reglamento (verificado verbatim contra el RAG), MÁS el
+// hito que la norma fecha pero no lista como etapa: "Presentación de ofertas"
+// (ancla del Art. 64.1/68.1). El cronograma de la fase de SELECCIÓN termina en el
+// otorgamiento de la buena pro; el consentimiento (Art. 82.1) es de la ejecución.
 //
-// COMPETITIVOS (licitación / concurso público y sus abreviados, Art. 93/94): las
-// cinco etapas son iguales — Convocatoria, Registro de participantes, "Consultas,
-// observaciones e integración" (UNA etapa), Evaluación de ofertas técnicas y
-// económicas, Otorgamiento de la buena pro. El registro es un RANGO (Art. 65.2):
-// `aplicarRegistroParticipantes` le pone las fechas del día siguiente de la
-// convocatoria a antes de las ofertas.
+// COMPETITIVOS (licitación / concurso público y sus abreviados, Art. 93/94):
+// Convocatoria, Registro de participantes, "Consultas y observaciones" (plazo del
+// Art. 66.1), "Absolución e integración" (su fin ancla el Art. 68.1), Presentación
+// de ofertas, Evaluación y calificación, Otorgamiento de la buena pro. El registro
+// es un RANGO (Art. 65.2): `aplicarRegistroParticipantes` le pone las fechas del
+// día siguiente de la convocatoria a antes de las ofertas.
 const ACT_COMPETITIVO = [
   "Convocatoria",
   "Registro de participantes",
-  "Consultas, observaciones e integración",
+  "Consultas y observaciones",
+  "Absolución e integración",
   "Presentación de ofertas",
-  "Evaluación de ofertas técnicas y económicas",
+  "Evaluación y calificación de ofertas",
   "Otorgamiento de la buena pro",
-  "Consentimiento de la buena pro",
 ] as const;
 
 // SUBASTA INVERSA ELECTRÓNICA (Art. 95): sus etapas NO incluyen consultas ni
 // observaciones —el requerimiento es la ficha técnica— y la evaluación es por
-// lances (Art. 96.4): Convocatoria, Registro de participantes, Evaluación de
-// ofertas (lances), Otorgamiento.
+// lances (Art. 96.4). El registro va IMPLÍCITO en la ventana convocatoria→ofertas
+// (mín. 6 días hábiles según la directiva de Perú Compras / bases estándar de la
+// SIE), así que no se lista como fila con fecha propia.
 const ACT_SUBASTA = [
   "Convocatoria",
-  "Registro de participantes",
   "Presentación de ofertas",
   "Evaluación de ofertas mediante lances (puja electrónica)",
   "Otorgamiento de la buena pro",
-  "Consentimiento de la buena pro",
 ] as const;
 
 // COMPARACIÓN DE PRECIOS (Art. 95): sus etapas son Convocatoria, Evaluación de
@@ -602,7 +599,6 @@ const ACT_COMPARACION = [
   "Presentación de cotizaciones",
   "Evaluación de ofertas económicas",
   "Otorgamiento de la buena pro",
-  "Consentimiento de la buena pro",
 ] as const;
 
 /**
@@ -632,6 +628,11 @@ export const ACTIVIDADES_SELECCION_POR_PROCEDIMIENTO: Readonly<Record<string, re
  * calendario de anticipación, el plazo puede reducirse conforme a las bases
  * estándar, nunca por debajo de 10 días calendario. Eso NO se automatiza: lo
  * decide la entidad y se ajusta a mano.)
+ *
+ * La SUBASTA INVERSA ELECTRÓNICA queda FUERA del Art. 64.1 (no tiene consultas),
+ * pero su registro va implícito en la ventana convocatoria→ofertas: la directiva
+ * de Perú Compras y las bases estándar de la SIE fijan un mínimo de 6 días
+ * hábiles. Se modela aquí como piso para que las ofertas nunca queden antes.
  */
 export const MIN_HABILES_CONVOCATORIA_OFERTAS: Readonly<Record<string, number | null>> = {
   licitacion_publica: 22,
@@ -639,7 +640,7 @@ export const MIN_HABILES_CONVOCATORIA_OFERTAS: Readonly<Record<string, number | 
   compra_publica_innovacion: 22,
   licitacion_publica_abreviada: null, // modalidad abreviada (excepción del 64.1)
   concurso_publico_abreviado: null, // modalidad abreviada (excepción del 64.1)
-  subasta_inversa_electronica: null,
+  subasta_inversa_electronica: 6, // mín. de la directiva SIE (no del Art. 64.1)
   comparacion_precios: null, // no contempla etapa de consultas y observaciones
 };
 

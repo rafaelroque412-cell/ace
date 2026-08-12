@@ -137,8 +137,12 @@ describe("actividadesSeleccionDe (Art. 46.1.o)", () => {
     const lp = actividadesSeleccionDe("licitacion_publica");
     expect(lp).toContain("Convocatoria");
     expect(lp).toContain("Registro de participantes");
-    expect(lp).toContain("Consultas, observaciones e integración");
-    expect(lp).toContain("Consentimiento de la buena pro");
+    expect(lp).toContain("Consultas y observaciones");
+    expect(lp).toContain("Absolución e integración");
+    expect(lp).toContain("Otorgamiento de la buena pro");
+    // El cronograma de la fase de SELECCIÓN termina en el otorgamiento: el
+    // consentimiento (Art. 82.1) es de la ejecución y ya no se lista aquí.
+    expect(lp).not.toContain("Consentimiento de la buena pro");
     expect(actividadesSeleccionDe("concurso_publico")).toEqual(lp);
   });
 

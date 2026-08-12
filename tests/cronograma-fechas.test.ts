@@ -286,24 +286,28 @@ describe("cronograma con fecha + hora (convención tipo SEACE)", () => {
 })
 
 // o) Las etapas de la fase de selección deben ser EXACTAMENTE las de la columna
-// "Etapas" del Reglamento (Arts. 93/94/95), más los hitos que la norma fecha
-// (presentación de ofertas y consentimiento). Verificado verbatim contra el RAG.
+// "Etapas" del Reglamento (Arts. 93/94/95), más el hito que la norma fecha
+// (presentación de ofertas). Termina en el otorgamiento de la buena pro. RAG-verificado.
 describe("etapas del cronograma según el procedimiento (Art. 46.1.o)", () => {
-  it("competitivos: registro de participantes + consultas unificadas, sin las filas sueltas del formato viejo", async () => {
+  it("competitivos: registro + consultas y observaciones y absolución e integración por separado, sin las filas sueltas del formato viejo", async () => {
     const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
     const lp = actividadesSeleccionDe("licitacion_publica");
     expect(lp).toContain("Registro de participantes");
-    expect(lp).toContain("Consultas, observaciones e integración");
-    expect(lp).toContain("Evaluación de ofertas técnicas y económicas");
-    expect(lp).not.toContain("Formulación de consultas y observaciones");
+    expect(lp).toContain("Consultas y observaciones");
+    expect(lp).toContain("Absolución e integración");
+    expect(lp).toContain("Evaluación y calificación de ofertas");
+    // La fase de selección termina en el otorgamiento (el consentimiento es ejecución).
+    expect(lp[lp.length - 1]).toBe("Otorgamiento de la buena pro");
+    expect(lp).not.toContain("Consultas, observaciones e integración");
     expect(lp).not.toContain("Absolución de consultas y observaciones");
     expect(lp).not.toContain("Integración de las Bases");
   });
 
-  it("subasta inversa: sin etapa de consultas (Art. 95), con registro y lances", async () => {
+  it("subasta inversa: sin consultas ni fila de registro (Art. 95 + directiva SIE), con lances", async () => {
     const { actividadesSeleccionDe } = await import("@/lib/estrategia-formato");
     const s = actividadesSeleccionDe("subasta_inversa_electronica");
-    expect(s).toContain("Registro de participantes");
+    // El registro va IMPLÍCITO en la ventana de 6 días hábiles: no se lista como fila.
+    expect(s.some((a) => /registro de participantes/i.test(a))).toBe(false);
     expect(s.some((a) => /consultas/i.test(a))).toBe(false);
     expect(s.some((a) => /lances|puja/i.test(a))).toBe(true);
   });
@@ -331,27 +335,21 @@ describe("etapas del cronograma según el procedimiento (Art. 46.1.o)", () => {
   });
 })
 
-// El registro de participantes (Art. 65.2) es un RANGO: nunca debe salir con el
-// fin anterior al inicio. En la subasta inversa —sin etapa de consultas— el
-// encadenado natural dejaría las ofertas al día siguiente y el rango no cabría;
-// `aplicarVentanaRegistro` separa las ofertas para que la ventana exista.
-describe("registro de participantes: rango válido también en subasta inversa", () => {
-  it("subasta: el registro no se invierte y queda entre convocatoria y ofertas", async () => {
+// En la subasta inversa el registro NO es una fila: va implícito en la ventana
+// convocatoria→ofertas, que la directiva de Perú Compras / bases estándar fijan en
+// un mínimo de 6 días hábiles. `MIN_HABILES_CONVOCATORIA_OFERTAS[subasta]` lo impone.
+describe("subasta inversa: mínimo de 6 días hábiles convocatoria→ofertas, sin fila de registro", () => {
+  it("subasta: las ofertas quedan al menos 6 días hábiles después de la convocatoria", async () => {
     const { construirCronogramaInicial } = await import("@/lib/estrategia-formato");
     const base = construirCronogramaInicial("subasta_inversa_electronica", 15, "calendario");
     const fechado = calcularFechasCronograma(base, "2026-08-24", new Set(), {
       procedimiento: "subasta_inversa_electronica",
     });
     const conv = fechado.find((f) => /^Convocatoria/.test(f.actividad ?? ""));
-    const reg = fechado.find((f) => /Registro de participantes/.test(f.actividad ?? ""));
     const ofertas = fechado.find((f) => /Presentación de ofertas/.test(f.actividad ?? ""));
-    // El registro tiene fechas y su fin NO es anterior a su inicio.
-    expect(fechaDe(reg?.inicio)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(fechaDe(reg?.fin) >= fechaDe(reg?.inicio)).toBe(true);
-    // Queda dentro de la ventana: después de la convocatoria y antes de las ofertas.
-    expect(fechaDe(reg?.inicio) > fechaDe(conv?.inicio)).toBe(true);
-    expect(fechaDe(reg?.fin) < fechaDe(ofertas?.inicio)).toBe(true);
-    // Y hay al menos un par de días hábiles de ventana (ofertas separadas de la convocatoria).
-    expect(diasHabilesEntre(fechaDe(conv?.inicio), fechaDe(ofertas?.inicio))).toBeGreaterThanOrEqual(3);
+    // No hay fila de registro de participantes en la subasta.
+    expect(fechado.some((f) => /registro de participantes/i.test(f.actividad ?? ""))).toBe(false);
+    // Y entre convocatoria y ofertas median al menos 6 días hábiles.
+    expect(diasHabilesEntre(fechaDe(conv?.inicio), fechaDe(ofertas?.inicio))).toBeGreaterThanOrEqual(6);
   });
 })

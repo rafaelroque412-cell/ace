@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { supabaseRest } from "@/lib/supabase-server";
 import { TOPES_2026, type TopesProcedimiento } from "@/lib/topes-procedimiento";
+import { parseDiasPorProcedimiento, type DiasCronogramaPorProcedimiento } from "@/lib/cronograma-dias";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ type Row = {
   tope_licitacion_concurso: number | string | null;
   tope_licitacion_obras: number | string | null;
   tope_comparacion_precios: number | string | null;
+  cronograma_dias: unknown;
 };
 
 /** Número o `null`; nunca `NaN` ni un 0 que se confunda con "sin registrar". */
@@ -46,6 +48,7 @@ function aNumero(valor: number | string | null | undefined): number | null {
 const SELECT_BASE = "pac_anio,pac_monto_bienes_servicios,uit_anio,uit_valor";
 const SELECT_LP = "lp_abreviada_bienes_min,lp_abreviada_bienes_max,lp_abreviada_bienes_anio";
 const SELECT_TOPES = "tope_anio,tope_piso,tope_licitacion_concurso,tope_licitacion_obras,tope_comparacion_precios";
+const SELECT_CRONOGRAMA = "cronograma_dias";
 
 function leer(select: string) {
   return supabaseRest<Row[]>(`entity_settings?id=eq.default&select=${select}&limit=1`);
@@ -62,6 +65,11 @@ function topesDeFila(row: Row | undefined): TopesProcedimiento {
   };
 }
 
+/** Días estimados por procedimiento, saneados (cada procedimiento con defectos si falta). */
+function diasDeFila(row: Row | undefined): DiasCronogramaPorProcedimiento {
+  return parseDiasPorProcedimiento(row?.cronograma_dias);
+}
+
 export async function GET() {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
@@ -72,13 +80,15 @@ export async function GET() {
   // la segmentación.
   let rows: Row[];
   try {
-    rows = await leer(`${SELECT_BASE},${SELECT_LP},${SELECT_TOPES}`);
+    rows = await leer(`${SELECT_BASE},${SELECT_LP},${SELECT_TOPES},${SELECT_CRONOGRAMA}`);
   } catch {
-    rows = await leer(`${SELECT_BASE},${SELECT_LP}`).catch(() =>
-      leer(SELECT_BASE).catch((err) => {
-        console.error("[parametros-segmentacion] no se pudieron leer:", err);
-        return [] as Row[];
-      }),
+    rows = await leer(`${SELECT_BASE},${SELECT_LP},${SELECT_TOPES}`).catch(() =>
+      leer(`${SELECT_BASE},${SELECT_LP}`).catch(() =>
+        leer(SELECT_BASE).catch((err) => {
+          console.error("[parametros-segmentacion] no se pudieron leer:", err);
+          return [] as Row[];
+        }),
+      ),
     );
   }
 
@@ -99,5 +109,9 @@ export async function GET() {
     // Topes de procedimiento por cuantía, ya resueltos (defecto 2026). Listos
     // para pasarlos a `procedimientosElegibles(objeto, cuantía, ficha, topes)`.
     topes: topesDeFila(row),
+    // Días estimados del cronograma (o) POR PROCEDIMIENTO, ya saneados (cada
+    // procedimiento con defectos si falta). Los consume A4 según el procedimiento de
+    // a); los mínimos legales siguen en código como piso duro.
+    diasCronogramaPorProcedimiento: diasDeFila(row),
   });
 }

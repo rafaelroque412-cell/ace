@@ -1067,7 +1067,7 @@ describe("o) construirCronogramaInicial: fases y actividades según el procedimi
     expect(fases).toEqual(new Set(["preparatorias", "seleccion", "ejecucion"]));
     const sel = c.filter((f) => f.fase === "seleccion").map((f) => f.actividad);
     expect(sel).toContain("Convocatoria");
-    expect(sel).toContain("Consentimiento de la buena pro");
+    expect(sel).toContain("Otorgamiento de la buena pro");
     const ejec = c.find((f) => f.fase === "ejecucion" && (f.actividad ?? "").includes("Ejecución contractual"));
     expect(ejec?.actividad).toContain("plazo: 60 días calendario");
   });
