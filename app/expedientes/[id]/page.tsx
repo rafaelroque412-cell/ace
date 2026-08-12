@@ -36,8 +36,14 @@ export default async function ExpedienteDetailPage({
       <section className="singleWorkspace">
         {/* El proveedor carga el expediente UNA vez para toda la página: antes
             el detalle, los tres paneles de fase y el avance global lo pedían
-            cada uno por su cuenta. */}
-        <ExpedienteProvider processId={id}>
+            cada uno por su cuenta.
+
+            `key={id}` lo REMONTA al navegar de un expediente a otro. Sin ella,
+            React reutiliza el proveedor y su estado (proceso, hitos, ficha del
+            expediente anterior) se veía unos instantes hasta que cargaba el nuevo
+            —un parpadeo con datos que no son de este expediente—. Con la key el
+            proveedor arranca en limpio (`cargando = true`) y muestra su carga. */}
+        <ExpedienteProvider key={id} processId={id}>
           <ProcessDetail permisos={permisos} processId={id} />
         </ExpedienteProvider>
       </section>
