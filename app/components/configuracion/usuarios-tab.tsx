@@ -929,7 +929,11 @@ export function UsuariosTab({
       />
 
       {editingUser && (
-        <Dialog.Root onOpenChange={(open) => { if (!open) setExpandedId(null); }}>
+        // `open` es OBLIGATORIO: sin él, Radix Dialog.Root arranca cerrado y el
+        // panel de edición no aparecía al pulsar un usuario. Como el Root solo se
+        // monta cuando hay `editingUser`, va siempre abierto; al cerrarlo (X, Esc u
+        // overlay) `onOpenChange(false)` limpia `expandedId` y esto se desmonta.
+        <Dialog.Root open onOpenChange={(open) => { if (!open) setExpandedId(null); }}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30" />
             <Dialog.Content className="fixed top-0 right-0 z-50 h-full w-full max-w-md overflow-y-auto bg-panel p-6 shadow-xl border-l border-line">
