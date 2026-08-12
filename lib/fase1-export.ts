@@ -1299,6 +1299,18 @@ function ajustarAltoFilaAnexo2(ws: ExcelJS.Worksheet, addr: string, c1: number, 
  */
 const CHARS_POR_UNIDAD_11PT = 0.9;
 
+/**
+ * Densidad para el autoajuste del FORMATO DE ESTRATEGIA, más conservadora (0,8).
+ *
+ * Sus columnas B..J son bastante más anchas que las del Anexo N° 1 (≈184 unidades
+ * frente a 149,6), pero Excel parte la línea antes de lo que ese ancho sugiere:
+ * medido, un sustento de q) de ~420 caracteres a 16 pt ocupa 5 líneas reales, y
+ * con 0,9 salían 4 —el texto se cortaba—. Bajar a 0,8 hace que el estimador cuente
+ * esa quinta línea. Es propio de esta plantilla: el Anexo N° 1 y el N° 2 conservan
+ * su 0,9 calibrado.
+ */
+const CHARS_POR_UNIDAD_ESTRATEGIA = 0.8;
+
 /** Alto de línea ≈ 1,32 × el cuerpo de la fuente (16 pt → ~21 pt). */
 const FACTOR_INTERLINEA = 1.32;
 
@@ -1329,19 +1341,42 @@ type Rango = [c1: number, r1: number, c2: number, r2: number];
 /**
  * Índice de las combinaciones por su celda maestra.
  *
- * Se construye UNA vez: buscarlas recorriendo la lista entera por cada celda es
- * O(celdas × combinaciones) y en esta plantilla —1.750 celdas y cientos de
- * rangos— multiplicaba por veinte el tiempo de exportación.
+ * Se reconstruye por BARRIDO de las relaciones master/cubierta VIVAS de exceljs
+ * (`cell.master`), NO de `ws.model.merges`. Ese modelo lo deja OBSOLETO
+ * `duplicateRow`: tras insertar filas (f/g/o/p), las combinaciones de todo lo que
+ * queda debajo siguen registradas en su posición ANTERIOR. Con el índice viejo,
+ * `altoNecesario` no reconocía que un sustento largo ocupa B..J y lo medía contra
+ * UNA columna estrecha → estimaba decenas de líneas y disparaba el alto al tope de
+ * Excel (409 pt). Es el mismo criterio que la vista previa, que ya usa `cell.master`.
+ *
+ * El barrido es O(filas × columnas) pero con lecturas de celda O(1); en esta
+ * plantilla es despreciable frente a generar el .xlsx.
  */
 function indiceDeMerges(ws: ExcelJS.Worksheet): Map<string, Rango> {
-  const merges: string[] = (ws as unknown as { model?: { merges?: string[] } }).model?.merges ?? [];
+  // Las combinaciones del formato llegan hasta J; se deja margen por si el
+  // cronograma trae alguna más ancha. El barrido para en cuanto la celda deja de
+  // pertenecer a la combinación, así que el tope solo acota un runaway.
+  const COL_TOPE = 26;
   const indice = new Map<string, Rango>();
-  for (const rango of merges) {
-    const [ini, fin] = rango.split(":");
-    const p1 = ini?.match(/([A-Z]+)(\d+)/);
-    const p2 = fin?.match(/([A-Z]+)(\d+)/);
-    if (!p1 || !p2) continue;
-    indice.set(ini, [NUM_COL(p1[1]), Number(p1[2]), NUM_COL(p2[1]), Number(p2[2])]);
+  for (let r = 1; r <= ws.rowCount; r += 1) {
+    for (let c = 1; c <= COL_TOPE; c += 1) {
+      const cell = ws.getCell(r, c);
+      // Solo las ANCLAS: las cubiertas apuntan a su master y se saltan.
+      if (!cell.isMerged || !cell.master || cell.master.address !== cell.address) continue;
+      let c2 = c;
+      while (c2 < COL_TOPE) {
+        const vecina = ws.getCell(r, c2 + 1);
+        if (vecina.isMerged && vecina.master?.address === cell.address) c2 += 1;
+        else break;
+      }
+      let r2 = r;
+      while (r2 < ws.rowCount) {
+        const abajo = ws.getCell(r2 + 1, c);
+        if (abajo.isMerged && abajo.master?.address === cell.address) r2 += 1;
+        else break;
+      }
+      indice.set(cell.address, [c, r, c2, r2]);
+    }
   }
   return indice;
 }
@@ -1350,8 +1385,8 @@ function indiceDeMerges(ws: ExcelJS.Worksheet): Map<string, Rango> {
 const altoDe = (lineas: number, cuerpo: number) => lineas * cuerpo * FACTOR_INTERLINEA + MARGEN_VERTICAL * 2;
 
 /** Líneas que ocupa un texto dentro de un ancho dado (unidades de Excel). */
-function lineasEn(texto: string, ancho: number, cuerpo: number): number {
-  const charsPorLinea = Math.max(8, ancho * CHARS_POR_UNIDAD_11PT * (11 / cuerpo));
+function lineasEn(texto: string, ancho: number, cuerpo: number, densidad = CHARS_POR_UNIDAD_11PT): number {
+  const charsPorLinea = Math.max(8, ancho * densidad * (11 / cuerpo));
   return texto.split("\n").reduce((n, parrafo) => n + Math.max(1, Math.ceil(parrafo.length / charsPorLinea)), 0);
 }
 
@@ -1383,7 +1418,7 @@ function altoNecesario(ws: ExcelJS.Worksheet, fila: number, merges: Map<string, 
     // que solo se mide con ancho la que ya parte líneas.
     const parte = Boolean(rango) || cell.alignment?.wrapText === true;
     const lineas = parte
-      ? lineasEn(texto, anchoDe(ws, rango ? rango[0] : Number(cell.col), rango ? rango[2] : Number(cell.col)), cuerpo)
+      ? lineasEn(texto, anchoDe(ws, rango ? rango[0] : Number(cell.col), rango ? rango[2] : Number(cell.col)), cuerpo, CHARS_POR_UNIDAD_ESTRATEGIA)
       : texto.split("\n").length;
     alto = Math.max(alto ?? 0, altoDe(lineas, cuerpo));
   });
@@ -1404,7 +1439,7 @@ function respetarMergesVerticales(ws: ExcelJS.Worksheet, merges: Map<string, Ran
     const texto = textoDeCelda(master);
     if (!texto.trim()) continue;
     const cuerpo = master.font?.size ?? 11;
-    const necesita = altoDe(lineasEn(texto, anchoDe(ws, c1, c2), cuerpo), cuerpo);
+    const necesita = altoDe(lineasEn(texto, anchoDe(ws, c1, c2), cuerpo, CHARS_POR_UNIDAD_ESTRATEGIA), cuerpo);
 
     let actual = 0;
     for (let r = r1; r <= r2; r += 1) actual += ws.getRow(r).height ?? ALTO_MINIMO_FILA;
