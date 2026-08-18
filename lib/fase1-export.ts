@@ -352,12 +352,30 @@ function ampliarBloque(
   if (extra <= 0) return;
   ws.duplicateRow(ultimaFila, extra, true);
   if (!merge) return;
-  const hasta = ultimaFila + extra;
-  // El rótulo de la fase (p. ej. "Fase de selección:") va SOLO en la primera
-  // fila del bloque, impreso en la plantilla. `duplicateRow` lo copió, propagado,
-  // a cada fila INSERTADA: se limpian para que no se repita.
-  for (let r = ultimaFila + 1; r <= hasta; r++) {
-    const cell = ws.getCell(`${merge.col}${r}`);
+  recombinarRotuloFase(ws, merge.col, merge.desde, ultimaFila + extra);
+}
+
+/**
+ * Recombina el rótulo vertical de una fase (p. ej. "Fase de selección:", columna
+ * B) sobre el rango `desde..hasta`, limpiando el texto propagado en las filas
+ * que no son la primera y desarmando cualquier combinación que lo pise antes.
+ *
+ * Separado de `ampliarBloque` porque un bloque puede necesitar este arreglo
+ * SIN haber insertado filas él mismo: `volcarCronogramaYRoles` escribe de abajo
+ * hacia arriba (roles → ejecución → selección) para que cada inserción posterior
+ * no invalide el CONTENIDO ya escrito debajo —eso `duplicateRow` sí lo desplaza
+ * bien—. Pero el rótulo de EJECUCIÓN se recombina en su propio paso, ANTES de
+ * que el paso de SELECCIÓN (que va encima) inserte filas; esa inserción posterior
+ * desplaza el contenido de ejecución hacia abajo pero deja su merge ya rehecho
+ * DESINCRONIZADO —el mismo síntoma que describe `desarmarMerge`, aquí sobre un
+ * merge que ya se había recompuesto antes de que la inserción de arriba lo
+ * rompiera—, así que hay que repetir la recombinación sobre la posición FINAL.
+ */
+function recombinarRotuloFase(ws: ExcelJS.Worksheet, col: string, desde: number, hasta: number) {
+  // El rótulo de la fase va SOLO en la primera fila del bloque: se limpia el
+  // resto para que no se repita ni arrastre un valor propagado por duplicateRow.
+  for (let r = desde + 1; r <= hasta; r++) {
+    const cell = ws.getCell(`${col}${r}`);
     if (cell.isMerged) {
       try {
         ws.unMergeCells(cell.master.address);
@@ -366,18 +384,18 @@ function ampliarBloque(
       }
     }
     // `setCell` ignora "" (no pisa rótulos), así que se borra con null directo.
-    ws.getCell(`${merge.col}${r}`).value = null;
+    ws.getCell(`${col}${r}`).value = null;
   }
-  // Recombinar el rótulo de la fase en TODO el bloque (p. ej. B135:B142 cuando la
-  // selección tiene 8 actividades). Antes hay que desarmar CUALQUIER combinación
-  // que solape la columna del rótulo dentro del bloque. NO basta con `isMerged`:
-  // `duplicateRow` deja el modelo de merges DESINCRONIZADO —quedan fantasmas como
-  // el B138:B140 de la fase de ejecución sin desplazar—, y en esos `isMerged`
-  // devuelve false pero `mergeCells` igual falla con "Cannot merge already merged
-  // cells". Por eso se barre la LISTA de merges (igual que `desarmarMerge`) y se
-  // deshace todo lo que pise la columna en las filas del bloque; lo que
-  // filaCronograma vuelva a necesitar (C..J) lo recompone después.
-  const colRotulo = NUM_COL(merge.col);
+  // Recombinar el rótulo en TODO el bloque (p. ej. B135:B142 cuando la selección
+  // tiene 8 actividades). Antes hay que desarmar CUALQUIER combinación que
+  // solape la columna del rótulo dentro del bloque. NO basta con `isMerged`:
+  // `duplicateRow` deja el modelo de merges DESINCRONIZADO —quedan fantasmas
+  // apuntando a filas que ahora son otras—, y en esos `isMerged` devuelve false
+  // pero `mergeCells` igual falla con "Cannot merge already merged cells". Por
+  // eso se barre la LISTA de merges (igual que `desarmarMerge`) y se deshace
+  // todo lo que pise la columna en las filas del bloque; lo que filaCronograma
+  // vuelva a necesitar (C..J) lo recompone después.
+  const colRotulo = NUM_COL(col);
   const lista: string[] = (ws as unknown as { model?: { merges?: string[] } }).model?.merges ?? [];
   for (const rango of [...lista]) {
     const [ini, fin] = rango.split(":");
@@ -386,7 +404,7 @@ function ampliarBloque(
     if (!p1 || !p2) continue;
     const [mc1, mr1, mc2, mr2] = [NUM_COL(p1[1]), Number(p1[2]), NUM_COL(p2[1]), Number(p2[2])];
     const tocaColumna = mc1 <= colRotulo && mc2 >= colRotulo;
-    const tocaFilas = mr1 <= hasta && mr2 >= merge.desde;
+    const tocaFilas = mr1 <= hasta && mr2 >= desde;
     if (tocaColumna && tocaFilas) {
       try {
         ws.unMergeCells(rango);
@@ -396,7 +414,7 @@ function ampliarBloque(
     }
   }
   try {
-    ws.mergeCells(`${merge.col}${merge.desde}:${merge.col}${hasta}`);
+    ws.mergeCells(`${col}${desde}:${col}${hasta}`);
   } catch {
     /* se queda sin combinar */
   }
@@ -513,6 +531,16 @@ function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknow
     }
   }
 
+  // El rótulo "Fase de ejecución contractual:" (recombinado arriba, en el paso
+  // 2, sobre su posición de ENTONCES) queda desincronizado en cuanto CUALQUIER
+  // inserción posterior lo desplaza —selección aquí mismo, y más abajo también
+  // f)/g) (que insertan MÁS ARRIBA y por eso corren al final de
+  // `llenarEstrategia`)—. Repararlo aquí solo cubriría el desplazamiento de
+  // selección y quedaría roto otra vez si f)/g) insertan algo: por eso NO se
+  // repite aquí; `alinearRotulosApartados` lo localiza por TEXTO después de que
+  // TODAS las inserciones (o, p, f, g) ya ocurrieron, igual que ya hace con
+  // p)/q)/r).
+
   // 4) Actuaciones preparatorias: sus dos actividades vienen impresas en la
   // plantilla, así que solo se ponen las fechas.
   de("preparatorias")
@@ -552,12 +580,49 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
   const ROTULO_AGRUP = "Seleccionar el tipo de agrupación de prestaciones:";
   const ROTULO_AGRUP_SUSTENTO = "Sustento de la agrupación de prestaciones:";
   const ROTULO_ESTAND = "Señalar si el requerimiento se encuentra estandarizado:";
+  // "Fase de ejecución contractual:" (o) es EL ÚNICO rótulo del cronograma que
+  // este paso repara: su span NO es fijo (depende de cuántas actividades tenga
+  // esa fase), así que se calcula hasta la fila de la NOTA fija que lo cierra,
+  // en vez de recibir un número de filas como los de abajo.
+  const ROTULO_EJECUCION = "Fase de ejecución contractual:";
+  const ROTULO_NOTA_CRONOGRAMA =
+    "NOTA: El cronograma estimado del proceso de contratación debe considerar las actividades de acuerdo al tipo de procedimiento y al objeto contractual de la contratación.";
+  // Rótulos ESTÁTICOS de la sección "II. SOLO PARA OBRAS" (Art. 154.1), cada uno
+  // combinado en 2 a 4 filas EN LA PLANTILLA (no los crea el código, así que
+  // `ampliarBloque`/`recombinarRotuloFase` nunca corren para ellos por su cuenta).
+  // Están por debajo del cronograma (o) y los roles (p): esas inserciones los
+  // desplazan y dejan su merge desincronizado igual que le pasaba al de
+  // "Fase de ejecución contractual:" (ver `recombinarRotuloFase`). El número de
+  // filas de cada uno SÍ es fijo (no depende de datos), solo su fila de inicio.
+  const ROTULOS_OBRAS_SPAN: Readonly<Record<string, number>> = {
+    "Cumplimiento anticipado de la fecha programada de culminación de la prestación:": 2,
+    "Señalar si la contratación requiere la obtención de licencias, autorizaciones, permisos, servidumbre y similares:": 4,
+    "Señalar el responsable:": 2,
+    "Señalar si se han considerado el uso de metodologías colaborativas:": 2,
+  };
   const fila: Record<string, number> = {};
   for (let r = 1; r <= ws.rowCount; r++) {
     const t = norm(r);
-    if (!(t in fila) && (t === ROTULO_ROL || t === ROTULO_ROL_SUSTENTO || t === ROTULO_AGRUP || t === ROTULO_AGRUP_SUSTENTO || t === ROTULO_ESTAND)) {
+    if (
+      !(t in fila) &&
+      (t === ROTULO_ROL ||
+        t === ROTULO_ROL_SUSTENTO ||
+        t === ROTULO_AGRUP ||
+        t === ROTULO_AGRUP_SUSTENTO ||
+        t === ROTULO_ESTAND ||
+        t === ROTULO_EJECUCION ||
+        t === ROTULO_NOTA_CRONOGRAMA ||
+        t in ROTULOS_OBRAS_SPAN)
+    ) {
       fila[t] = r;
     }
+  }
+  if (fila[ROTULO_EJECUCION] != null && fila[ROTULO_NOTA_CRONOGRAMA] != null) {
+    recombinarRotuloFase(ws, "B", fila[ROTULO_EJECUCION], fila[ROTULO_NOTA_CRONOGRAMA] - 1);
+  }
+  for (const [rotulo, span] of Object.entries(ROTULOS_OBRAS_SPAN)) {
+    const desde = fila[rotulo];
+    if (desde != null) recombinarRotuloFase(ws, "B", desde, desde + span - 1);
   }
 
   // p) Roles: los dos rótulos, las filas de rol de en medio y el valor del sustento.
@@ -1114,10 +1179,6 @@ function llenarEstrategia(
   // o) y p) AL FINAL: insertan filas y desplazan todo lo de debajo. Hacerlo
   // antes invalidaría las direcciones fijas de q), r), s), t) y las de obras.
   volcarCronogramaYRoles(ws, a4);
-  // p) roles, q) agrupación y r) estandarizado: a la izquierda y con el rótulo
-  // (hasta ":") en negrita. Se llama tras el cronograma porque esos bloques ya
-  // están en su posición final; localiza sus rótulos por texto, no por fila.
-  alinearRotulosApartados(ws);
 
   // f) y g) también insertan filas, y están MÁS ARRIBA que el cronograma: por
   // eso van al final del todo, cuando ya nadie depende de las direcciones de
@@ -1137,6 +1198,16 @@ function llenarEstrategia(
     precalif,
   );
   volcarFactores(ws, a4, corrimiento);
+
+  // p) roles, q) agrupación, r) estandarizado, el cronograma de EJECUCIÓN y los
+  // rótulos estáticos de la sección de obras: a la izquierda y con el rótulo
+  // (hasta ":") en negrita, más la recomposición de merges que le toque a cada
+  // uno. Va AQUÍ, después de TODAS las inserciones (o, p, f, g) — no solo de la
+  // del cronograma—: `duplicateRow` puede desincronizar un merge ya recompuesto
+  // con cualquier inserción posterior que lo desplace, así que reparar antes de
+  // que corran f)/g) dejaría todo roto otra vez. Localiza cada rótulo por
+  // texto, no por fila, porque esos bloques solo tienen posición final aquí.
+  alinearRotulosApartados(ws);
 
   // n) Nivel de interacción según la segmentación (paso A2).
   if (hitos.A2) {
@@ -2274,9 +2345,25 @@ export async function previewHoja(
   else if (formato === "anexo1") llenarAnexo1(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
   else llenarAnexo2(ws, input.proceso, input.hitos, input.necesidad);
 
+  // Ida y vuelta por el .xlsx real ANTES de leer combinaciones: tras una cadena
+  // de `unMergeCells`/`mergeCells` (como la que repara el rótulo de EJECUCIÓN en
+  // `recombinarRotuloFase` cuando SELECCIÓN insertó filas encima), el `cell.master`
+  // EN MEMORIA de la fila intermedia puede quedar desincronizado aunque el propio
+  // `mergeCells` se ejecutó bien — se comprobó comparando este `ws` en vivo contra
+  // uno releído del buffer ya escrito: el releído SÍ tenía el merge correcto y el
+  // vivo no. Guardar y recargar es exactamente lo que hace `generarExcelF1`, así
+  // que la previa termina viendo el mismo estado que el archivo descargado.
+  const wsFinal = await (async () => {
+    const buf = await wb.xlsx.writeBuffer();
+    const wbFinal = new ExcelJS.Workbook();
+    await wbFinal.xlsx.load(buf as unknown as ArrayBuffer);
+    return wbFinal.worksheets[0];
+  })();
+
   // Las combinaciones se resuelven con `cell.master`/`cell.isMerged` —que exceljs
-  // mantiene al día tras insertar filas—, NO con `model.merges` (que
-  // `duplicateRow` deja OBSOLETO: daba spans falsos que descuadraban la grilla,
+  // mantiene al día tras insertar filas Y tras el guardado/recarga de arriba—,
+  // NO con `model.merges` (que `duplicateRow` deja OBSOLETO: daba spans falsos
+  // que descuadraban la grilla,
   // p. ej. filas del cronograma con más de 9 columnas). La celda ancla se pinta
   // con su colspan/rowspan; las cubiertas se saltan.
   //
@@ -2291,26 +2378,26 @@ export async function previewHoja(
   // espaciadores de la plantilla (dan la estructura del formato) y se conservan;
   // las del FINAL se recortan para no arrastrar una cola vacía.
   let ultimaConTexto = -1;
-  for (let r = 1; r <= ws.rowCount; r++) {
+  for (let r = 1; r <= wsFinal.rowCount; r++) {
     // Las filas que el llenado OCULTA (p. ej. el bloque "II. SOLO PARA OBRAS…"
     // cuando el objeto no es obra) tampoco deben verse en la vista previa: la
     // previa tiene que reflejar lo que se exporta, no más.
-    if (ws.getRow(r).hidden) continue;
+    if (wsFinal.getRow(r).hidden) continue;
     const fila: CeldaPreview[] = [];
     for (let c = 2; c <= 10; c++) {
-      const cell = ws.getCell(r, c);
+      const cell = wsFinal.getCell(r, c);
       if (cubierta(cell)) continue;
       const clave = `${r}:${c}`;
-      const texto = leerTexto(ws, cell.address);
+      const texto = leerTexto(wsFinal, cell.address);
       let colspan = 1;
       for (let cc = c + 1; cc <= 10; cc++) {
-        const vecina = ws.getCell(r, cc);
+        const vecina = wsFinal.getCell(r, cc);
         if (vecina.isMerged && vecina.master?.address === cell.address) colspan += 1;
         else break;
       }
       let rowspan = 1;
-      for (let rr = r + 1; rr <= ws.rowCount; rr++) {
-        const vecina = ws.getCell(rr, c);
+      for (let rr = r + 1; rr <= wsFinal.rowCount; rr++) {
+        const vecina = wsFinal.getCell(rr, c);
         if (vecina.isMerged && vecina.master?.address === cell.address) rowspan += 1;
         else break;
       }
@@ -2340,7 +2427,7 @@ export async function previewHoja(
   // Anchos de las columnas B..J (los del Excel) para que la vista previa respete
   // las proporciones del formato y no reparta el ancho a partes iguales.
   const anchos: number[] = [];
-  for (let c = 2; c <= 10; c++) anchos.push(ws.getColumn(c).width ?? 10);
+  for (let c = 2; c <= 10; c++) anchos.push(wsFinal.getColumn(c).width ?? 10);
   const titulos: Record<typeof formato, string> = {
     anexo1: "Anexo N° 1 · Interacción con el mercado",
     anexo2: "Anexo N° 2 · Aprobación del expediente de contratación",
