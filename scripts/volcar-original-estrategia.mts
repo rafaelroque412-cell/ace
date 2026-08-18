@@ -29,7 +29,11 @@ function texto(ws: ExcelJS.Worksheet, r: number, c: number): string {
 }
 
 const { ws, merges } = await cargar(ORIGINAL);
-console.log(`FORMATO ORIGINAL: ${ws.actualRowCount} filas × ${ws.actualColumnCount} cols; ${merges.length} merges\n`);
+// `actualRowCount` subestima el total en esta hoja (se queda corto, corta el
+// volcado a mitad del bloque "II. SOLO PARA OBRAS"); `rowCount` sí cuenta las
+// filas con formato aunque su valor solo sea alcanzable vía celda maestra de
+// un merge, que es como quedó el resto del documento tras la fila 237.
+console.log(`FORMATO ORIGINAL: ${ws.rowCount} filas × ${ws.actualColumnCount} cols; ${merges.length} merges\n`);
 
 function estadoR(ws: ExcelJS.Worksheet, r: number, c: number): string {
   const cell = ws.getCell(r, c);
@@ -37,7 +41,7 @@ function estadoR(ws: ExcelJS.Worksheet, r: number, c: number): string {
   return cell.master.address === cell.address ? "[M]" : `^${cell.master.address}`;
 }
 
-for (let r = 1; r <= ws.actualRowCount; r++) {
+for (let r = 1; r <= ws.rowCount; r++) {
   let a = texto(ws, r, 1);
   let b = texto(ws, r, 2);
   if (b && (!a || a === b)) a = "";
