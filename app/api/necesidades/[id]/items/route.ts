@@ -114,15 +114,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json({ error: "Necesidad no encontrada" }, { status: 404 });
     }
 
-    // Se borra y se reinserta en vez de conciliar: el `nro` es único por
-    // necesidad, así que renumerar sobre las filas vivas chocaría con el índice a
-    // mitad de camino (el ítem 2 no puede pasar a 1 mientras el 1 exista).
-    await supabaseUserRest(
-      auth.user.accessToken,
-      `necesidad_items?necesidad_id=eq.${id}`,
-      { method: "DELETE" },
-    );
-
     // La descripción del paquete se guarda en cada ítem, así que se iguala aquí
     // antes de escribir: es lo que impide que dos filas del mismo paquete acaben
     // diciendo cosas distintas si se editó solo una.
@@ -141,20 +132,47 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       costo_unitario: item.costoUnitario ?? null,
       descripcion: item.descripcion,
       descripcion_paquete: item.descripcionPaquete ?? null,
-      necesidad_id: id,
-      nro: i + 1,
       // El paquete lo elige el usuario y NO se renumera: agrupar los ítems 1 y 4
       // en el paquete 2 es una decisión, no un orden.
+      nro: i + 1,
       nro_paquete: item.nroPaquete ?? null,
       tipo_objeto: item.tipoObjeto ?? null,
       unidad_medida: item.unidadMedida ?? null,
     }));
 
-    if (filas.length > 0) {
-      await supabaseUserRest(auth.user.accessToken, "necesidad_items", {
-        body: JSON.stringify(filas),
-        method: "POST",
-      });
+    // Borrar y reinsertar (no conciliar) porque el `nro` es único por necesidad:
+    // renumerar sobre las filas vivas chocaría con el índice a mitad de camino
+    // (el ítem 2 no puede pasar a 1 mientras el 1 exista). La función SQL hace
+    // ambos pasos en una sola transacción — si el INSERT falla, el DELETE se
+    // revierte con él, así el cuadro nunca queda vacío por un fallo a mitad de
+    // camino. Si el SQL aún no se aplicó (función ausente), se cae al
+    // DELETE+INSERT de siempre: mismo riesgo que antes, no uno nuevo.
+    let rows: NecesidadItemRow[];
+    try {
+      rows = await supabaseUserRest<NecesidadItemRow[]>(
+        auth.user.accessToken,
+        "rpc/necesidad_items_replace",
+        { body: JSON.stringify({ p_necesidad_id: id, p_items: filas }), method: "POST" },
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      const funcionAusente = /necesidad_items_replace|PGRST202|Could not find the function/i.test(msg);
+      if (!funcionAusente) throw error;
+      await supabaseUserRest(
+        auth.user.accessToken,
+        `necesidad_items?necesidad_id=eq.${id}`,
+        { method: "DELETE" },
+      );
+      if (filas.length > 0) {
+        await supabaseUserRest(auth.user.accessToken, "necesidad_items", {
+          body: JSON.stringify(filas.map((f) => ({ ...f, necesidad_id: id }))),
+          method: "POST",
+        });
+      }
+      rows = await supabaseUserRest<NecesidadItemRow[]>(
+        auth.user.accessToken,
+        `necesidad_items?necesidad_id=eq.${id}&select=${SELECT}&order=nro.asc`,
+      );
     }
 
     await writeAuditLog({
@@ -166,10 +184,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       module: "necesidades",
     });
 
-    const rows = await supabaseUserRest<NecesidadItemRow[]>(
-      auth.user.accessToken,
-      `necesidad_items?necesidad_id=eq.${id}&select=${SELECT}&order=nro.asc`,
-    );
     return NextResponse.json({ items: rows.map(aItem) });
   } catch (error) {
     console.error("[necesidades/items] no se pudieron guardar:", error);

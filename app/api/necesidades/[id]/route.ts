@@ -236,6 +236,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
     }
 
+    // A diferencia de crear/borrar, el PATCH es la escritura más frecuente de la
+    // ficha (cada autoguardado y "Guardar ficha"): sin este registro, el tramo
+    // entre dos transiciones no deja quién-cambió-qué en `audit_logs`, aunque sí
+    // quede en `necesidad_versiones` al transicionar. Se listan los CAMPOS
+    // tocados, no los valores — la ficha llega a ~90 columnas y el valor ya vive
+    // en la fila; lo que aporta el audit log es el qué y el quién.
+    await writeAuditLog({
+      action: "necesidad.update",
+      actorReference: auth.user.email ?? auth.user.id,
+      details: { campos: Object.keys(patch) },
+      entityId: id,
+      entityType: "necesidad",
+      module: "necesidades",
+    });
+
     return NextResponse.json({ necesidad });
   } catch (error) {
     return NextResponse.json(
