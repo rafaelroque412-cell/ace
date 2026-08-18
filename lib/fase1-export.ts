@@ -376,13 +376,12 @@ function recombinarRotuloFase(ws: ExcelJS.Worksheet, col: string, desde: number,
   // resto para que no se repita ni arrastre un valor propagado por duplicateRow.
   for (let r = desde + 1; r <= hasta; r++) {
     const cell = ws.getCell(`${col}${r}`);
-    if (cell.isMerged) {
-      try {
-        ws.unMergeCells(cell.master.address);
-      } catch {
-        /* no estaba combinada */
-      }
-    }
+    // `cell.unmerge()` directo, no `ws.unMergeCells(cell.master.address)`: ese
+    // busca el merge en el diccionario interno de ExcelJS indexado por la
+    // celda maestra, y `duplicateRow` puede borrar esa entrada SIN liberar a
+    // la celda esclava —queda con `isMerged=true` sin que la API pública la
+    // encuentre—. `unmerge()` resetea la celda misma, sin pasar por ahí.
+    if (cell.isMerged) cell.unmerge();
     // `setCell` ignora "" (no pisa rótulos), así que se borra con null directo.
     ws.getCell(`${col}${r}`).value = null;
   }
@@ -419,6 +418,165 @@ function recombinarRotuloFase(ws: ExcelJS.Worksheet, col: string, desde: number,
     /* se queda sin combinar */
   }
 }
+
+/** Un rango a recomponer, en filas RELATIVAS a un ancla. */
+type RectanguloRelativo = { dr1: number; c1: number; dr2: number; c2: number };
+
+/**
+ * Recompone una lista de combinaciones ESTÁTICAS de la plantilla (q, r, s, t,
+ * obras, III), cada una expresada en filas relativas a `filaAncla`. Mismo
+ * síntoma que `recombinarRotuloFase` pero para bloques con más de una
+ * combinación por sección, algunas horizontales y otras verticales: se limpia
+ * cada celda que no sea la ancla del rango (el texto propagado/repetido por
+ * `duplicateRow`), se desarma lo que pise cada fila y se recombina el
+ * rectángulo completo.
+ *
+ * `filaAncla` sale de ARITMÉTICA (fila de la plantilla + desplazamiento
+ * acumulado), no de buscar el rótulo por texto: con inserciones grandes
+ * (varias filas de rol, por ejemplo) el propio texto puede aparecer en la
+ * fila equivocada —se comprobó con datos reales—, así que localizar por texto
+ * dejó de ser fiable para estos bloques.
+ *
+ * Las coordenadas relativas salen de leer los merges reales de la plantilla
+ * en blanco (`lib/plantillas-f1/estrategia-contratacion.xlsx`), no de
+ * contarlas a ojo: un error de fila aquí mezclaría el contenido de dos
+ * preguntas distintas.
+ */
+function recombinarBloqueDesdeAncla(ws: ExcelJS.Worksheet, filaAncla: number, rects: readonly RectanguloRelativo[]) {
+  for (const { dr1, c1, dr2, c2 } of rects) {
+    const r1 = filaAncla + dr1;
+    const r2 = filaAncla + dr2;
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        if (r === r1 && c === c1) continue;
+        const cell = ws.getCell(r, c);
+        // `ws.unMergeCells(cell.master.address)` NO alcanza aquí: busca el
+        // merge en el diccionario interno de ExcelJS indexado por la celda
+        // maestra (`_merges`), y `duplicateRow` puede borrar esa entrada SIN
+        // liberar a las celdas esclavas — quedan con `isMerged=true` sin que
+        // la API pública las encuentre (comprobado: la maestra decía
+        // `isMerged=false` y las esclavas `isMerged=true`, apuntándole,
+        // y aun así `mergeCells` fallaba con "ya combinada"). `cell.unmerge()`
+        // resetea la celda misma, sin pasar por ese diccionario.
+        if (cell.isMerged) cell.unmerge();
+        cell.value = null;
+      }
+      desarmarMerge(ws, r, c1, c2);
+    }
+    try {
+      const col = (n: number) => String.fromCharCode(64 + n); // solo hasta J (10): una letra alcanza
+      ws.mergeCells(`${col(c1)}${r1}:${col(c2)}${r2}`);
+    } catch {
+      /* se queda sin combinar */
+    }
+  }
+}
+
+// Coordenadas de q), r), s), t) y III), relativas a la fila de su título
+// (dr1=0, esa misma fila). Ver el comentario de `recombinarBloqueDesdeAncla`.
+const RECTS_Q: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "q) Evaluación…"
+  { dr1: 1, c1: 2, dr2: 4, c2: 2 }, // B:B, label vertical
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 }, // "Marcar con una (X)…"
+  { dr1: 2, c1: 3, dr2: 4, c2: 5 }, // "Contratación por paquete:"
+  { dr1: 2, c1: 6, dr2: 4, c2: 6 }, // checkbox de paquete
+  { dr1: 2, c1: 7, dr2: 2, c2: 9 }, // "…relación de ítems:"
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 }, // "…relación de lotes:"
+  { dr1: 4, c1: 7, dr2: 4, c2: 9 }, // "…relación de tramos:"
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: rótulo
+  { dr1: 6, c1: 2, dr2: 6, c2: 10 }, // sustento: valor
+];
+const RECTS_R: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "r) Verificación…"
+  { dr1: 1, c1: 2, dr2: 5, c2: 4 }, // label vertical
+  { dr1: 1, c1: 5, dr2: 1, c2: 8 }, // "Marcar con una (X)…"
+  { dr1: 1, c1: 9, dr2: 5, c2: 10 }, // columna derecha en blanco
+  { dr1: 3, c1: 5, dr2: 3, c2: 8 }, // respuesta SÍ/NO
+  { dr1: 4, c1: 5, dr2: 4, c2: 7 }, // "De haber indicado SI…"
+  { dr1: 5, c1: 5, dr2: 5, c2: 7 }, // "Ficha técnica:" / "…homologación:"
+];
+// s) es tres filas simples (título, sustento, NOTA), todas B:J.
+const RECTS_S: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "s) Identificación…"
+  { dr1: 1, c1: 2, dr2: 1, c2: 10 }, // sustento
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // NOTA
+];
+const RECTS_T: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "t) Otras variables…"
+  { dr1: 1, c1: 2, dr2: 9, c2: 2 }, // label vertical, 1er bloque
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 },
+  { dr1: 2, c1: 3, dr2: 2, c2: 10 },
+  { dr1: 3, c1: 3, dr2: 3, c2: 5 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 },
+  { dr1: 4, c1: 3, dr2: 4, c2: 5 },
+  { dr1: 4, c1: 7, dr2: 4, c2: 9 },
+  { dr1: 5, c1: 3, dr2: 5, c2: 5 },
+  { dr1: 5, c1: 7, dr2: 5, c2: 9 },
+  { dr1: 6, c1: 3, dr2: 6, c2: 5 },
+  { dr1: 6, c1: 7, dr2: 6, c2: 9 },
+  { dr1: 7, c1: 3, dr2: 7, c2: 10 },
+  { dr1: 8, c1: 3, dr2: 8, c2: 5 },
+  { dr1: 8, c1: 7, dr2: 8, c2: 9 },
+  { dr1: 9, c1: 3, dr2: 9, c2: 5 },
+  { dr1: 10, c1: 2, dr2: 10, c2: 10 }, // "[Insertar la(s) variable(s)…]"
+  { dr1: 11, c1: 2, dr2: 11, c2: 10 }, // "Aspecto para la presentación de ofertas:"
+  { dr1: 13, c1: 2, dr2: 17, c2: 2 }, // label vertical, 2º bloque
+  { dr1: 13, c1: 3, dr2: 13, c2: 10 },
+  { dr1: 14, c1: 3, dr2: 14, c2: 5 },
+  { dr1: 14, c1: 7, dr2: 14, c2: 9 },
+  { dr1: 15, c1: 3, dr2: 15, c2: 5 },
+  { dr1: 15, c1: 7, dr2: 15, c2: 9 },
+  { dr1: 16, c1: 3, dr2: 16, c2: 5 },
+  { dr1: 16, c1: 7, dr2: 16, c2: 9 },
+  { dr1: 17, c1: 3, dr2: 17, c2: 5 },
+  { dr1: 17, c1: 7, dr2: 17, c2: 9 },
+  { dr1: 18, c1: 2, dr2: 18, c2: 10 }, // "NO CORRESPONDE."
+  { dr1: 19, c1: 2, dr2: 19, c2: 10 }, // "[...]"
+];
+const RECTS_III: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "III. OTRAS CONSIDERACIONES…"
+  { dr1: 1, c1: 2, dr2: 2, c2: 4 }, // "Señalar si la cuantía…"
+  { dr1: 1, c1: 5, dr2: 1, c2: 8 }, // "Marcar con una (X)…"
+  { dr1: 1, c1: 9, dr2: 2, c2: 10 }, // columna derecha en blanco
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // "Si seleccionó SÍ…"
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento
+  { dr1: 7, c1: 2, dr2: 8, c2: 2 }, // "Fecha de elaboración:"
+  { dr1: 7, c1: 3, dr2: 8, c2: 3 }, // valor de la fecha
+];
+
+// Los 4 bloques de "II. SOLO PARA OBRAS" (Art. 154.1) que quedan por debajo
+// del cronograma/roles. No son un simple rótulo vertical de una columna —cada
+// uno tiene su propia mezcla de sub-merges, distinta de las de q)/r)/t)—, así
+// que cada uno lleva su propia tabla en vez de compartir una genérica.
+const RECTS_OBRAS_INCENTIVOS: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 1, c2: 3 }, // "Cumplimiento anticipado…" (label, B:C)
+  { dr1: 0, c1: 4, dr2: 0, c2: 7 },
+  { dr1: 0, c1: 8, dr2: 3, c2: 10 },
+  { dr1: 2, c1: 2, dr2: 2, c2: 3 },
+  { dr1: 3, c1: 2, dr2: 3, c2: 3 },
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: rótulo
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor
+];
+const RECTS_OBRAS_LICENCIAS: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 3, c2: 6 }, // "…licencias, autorizaciones…" (label, B:F, 4 filas)
+  { dr1: 0, c1: 7, dr2: 0, c2: 10 },
+  { dr1: 2, c1: 7, dr2: 2, c2: 10 },
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: rótulo
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor
+];
+const RECTS_OBRAS_RESPONSABLE: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 1, c2: 4 }, // "Señalar el responsable:" (label, B:D)
+  { dr1: 0, c1: 5, dr2: 0, c2: 10 },
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // sustento: rótulo
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: valor
+];
+const RECTS_OBRAS_METODOLOGIAS: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 1, c2: 6 }, // "…metodologías colaborativas…" (label, B:F, 2 filas)
+  { dr1: 0, c1: 7, dr2: 0, c2: 10 },
+  { dr1: 2, c1: 7, dr2: 2, c2: 9 },
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: rótulo
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: valor
+];
 
 /**
  * Fecha del cronograma en dd/mm/aaaa.
@@ -475,10 +633,17 @@ function filaCronograma(
  * incluido, así que escribiendo primero lo de abajo cada inserción posterior lo
  * arrastra intacto y ninguna dirección se invalida a mitad del proceso.
  */
-function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknown>) {
+function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknown>): number {
   const items = leerFilas<ActividadCronograma>(a4.cronograma_items);
   const roles = leerFilas<RolEstrategia>(a4.roles_items);
   const de = (f: string) => items.filter((i) => i.fase === f);
+  // Cuántas filas EXTRA metió cada bloque (0 si no insertó ninguna): la suma es
+  // el desplazamiento acumulado que sufre TODO lo que queda por debajo de p)
+  // roles —q), r), s), t), la sección de obras y "III."—. Lo devuelve la
+  // función para que quien repare esos bloques use ARITMÉTICA (plantilla +
+  // desplazamiento) en vez de buscarlos por texto: con inserciones grandes el
+  // propio texto puede aparecer desincronizado (ver `alinearRotulosApartados`).
+  const extraRoles = roles.length > 0 ? Math.max(0, roles.length - FILAS_ROLES_PLANTILLA) : 0;
 
   // 1) Roles (el bloque más bajo).
   if (roles.length > 0) {
@@ -501,6 +666,7 @@ function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknow
   // 2) Ejecución contractual.
   const ejecucion = de("ejecucion");
   const filasEje = FILAS_CRONOGRAMA.ejecucion;
+  const extraEjecucion = ejecucion.length > 0 ? Math.max(0, ejecucion.length - filasEje.length) : 0;
   if (ejecucion.length > 0) {
     ampliarBloque(ws, filasEje[filasEje.length - 1], ejecucion.length - filasEje.length, {
       col: "B",
@@ -520,6 +686,7 @@ function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknow
   // 3) Selección.
   const seleccion = de("seleccion");
   const filasSel = FILAS_CRONOGRAMA.seleccion;
+  const extraSeleccion = seleccion.length > 0 ? Math.max(0, seleccion.length - filasSel.length) : 0;
   if (seleccion.length > 0) {
     ampliarBloque(ws, filasSel[filasSel.length - 1], seleccion.length - filasSel.length, {
       col: "B",
@@ -550,19 +717,47 @@ function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknow
       setCell(ws, `${COL_CRONOGRAMA.inicio}${fila}`, fechaCronograma(a.inicio));
       setCell(ws, `${COL_CRONOGRAMA.fin}${fila}`, fechaCronograma(a.fin));
     });
+
+  return extraRoles + extraEjecucion + extraSeleccion;
 }
 
+// Fila de cada título/bloque EN LA PLANTILLA EN BLANCO (sin ninguna
+// inserción todavía) — ver el comentario de `recombinarBloqueDesdeAncla`.
+const FILA_PLANTILLA_Q = 150;
+const FILA_PLANTILLA_R = 158;
+const FILA_PLANTILLA_S = 165;
+const FILA_PLANTILLA_T = 169;
+const FILA_PLANTILLA_III = 251;
+// Fila de cada bloque de "II. SOLO PARA OBRAS" EN LA PLANTILLA, con su tabla
+// de combinaciones (`RECTS_OBRAS_*`, arriba). No los crea el código: vienen
+// combinados así en la plantilla, y quedan igual de expuestos a la
+// desincronización que los de arriba.
+const BLOQUES_OBRAS: ReadonlyArray<{ fila: number; rects: readonly RectanguloRelativo[] }> = [
+  { fila: 206, rects: RECTS_OBRAS_INCENTIVOS },
+  { fila: 225, rects: RECTS_OBRAS_LICENCIAS },
+  { fila: 233, rects: RECTS_OBRAS_RESPONSABLE },
+  { fila: 245, rects: RECTS_OBRAS_METODOLOGIAS },
+];
+
 /**
- * Apartados del cronograma hacia abajo —p) roles, q) agrupación, r) estandarizado—:
- * alinea sus rótulos a la IZQUIERDA y pone en NEGRITA la parte hasta el primer ":".
+ * Repara p) roles, el cronograma de EJECUCIÓN + su NOTA, q), r), s), t), los
+ * rótulos de "II. SOLO PARA OBRAS" y "III.": son los bloques que quedan por
+ * debajo de alguna inserción de fila (o, p, f o g) y por eso `duplicateRow`
+ * puede dejar su combinación desincronizada — la celda dice `isMerged=false`
+ * (o queda repetida por columna) aunque el archivo final, guardado y
+ * releído, sí la tenga bien. También alinea a la IZQUIERDA y pone en NEGRITA
+ * (hasta el primer ":") los rótulos de tabla y de sustento de p)/q)/r), que
+ * vienen centrados y sin negrita en la plantilla.
  *
- * Se localiza cada rótulo por su TEXTO y NO por número de fila: el cronograma (o)
- * inserta filas justo encima y desplaza todos estos bloques, así que su posición
- * cambia según cuántas actividades tenga. Los rótulos de sección ("q) …:", "r) …:")
- * ya vienen a la izquierda y en negrita en la plantilla; aquí se arreglan los
- * rótulos de tabla y de sustento, que venían centrados y sin negrita.
+ * `desplazamiento` es la suma de filas EXTRA que metieron o), p), f) y g)
+ * juntas (ver `llenarEstrategia`): p) roles y el cronograma se localizan por
+ * TEXTO (funciona incluso con inserciones grandes, comprobado con datos
+ * reales), pero q)/r)/s)/t)/obras/"III." se localizan por ARITMÉTICA — fila
+ * de la plantilla en blanco + `desplazamiento` —, no por texto: con una
+ * inserción grande (muchos roles, por ejemplo) el propio texto puede aparecer
+ * en la fila equivocada, y buscarlo dejó de ser fiable.
  */
-function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
+function alinearRotulosApartados(ws: ExcelJS.Worksheet, desplazamiento: number): void {
   const norm = (r: number) => textoDeCelda(ws.getCell(`B${r}`)).replace(/\s+/g, " ").trim();
   const alaIzquierda = (r: number) => {
     const cell = ws.getCell(`B${r}`);
@@ -577,9 +772,6 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
   // Rótulos a localizar por texto (primera aparición = celda maestra de su merge).
   const ROTULO_ROL = "Rol y responsabilidad:";
   const ROTULO_ROL_SUSTENTO = "Sustento para la asignación de roles y responsabilidades:";
-  const ROTULO_AGRUP = "Seleccionar el tipo de agrupación de prestaciones:";
-  const ROTULO_AGRUP_SUSTENTO = "Sustento de la agrupación de prestaciones:";
-  const ROTULO_ESTAND = "Señalar si el requerimiento se encuentra estandarizado:";
   // "Fase de ejecución contractual:" (o) es EL ÚNICO rótulo del cronograma que
   // este paso repara: su span NO es fijo (depende de cuántas actividades tenga
   // esa fase), así que se calcula hasta la fila de la NOTA fija que lo cierra,
@@ -587,33 +779,10 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
   const ROTULO_EJECUCION = "Fase de ejecución contractual:";
   const ROTULO_NOTA_CRONOGRAMA =
     "NOTA: El cronograma estimado del proceso de contratación debe considerar las actividades de acuerdo al tipo de procedimiento y al objeto contractual de la contratación.";
-  // Rótulos ESTÁTICOS de la sección "II. SOLO PARA OBRAS" (Art. 154.1), cada uno
-  // combinado en 2 a 4 filas EN LA PLANTILLA (no los crea el código, así que
-  // `ampliarBloque`/`recombinarRotuloFase` nunca corren para ellos por su cuenta).
-  // Están por debajo del cronograma (o) y los roles (p): esas inserciones los
-  // desplazan y dejan su merge desincronizado igual que le pasaba al de
-  // "Fase de ejecución contractual:" (ver `recombinarRotuloFase`). El número de
-  // filas de cada uno SÍ es fijo (no depende de datos), solo su fila de inicio.
-  const ROTULOS_OBRAS_SPAN: Readonly<Record<string, number>> = {
-    "Cumplimiento anticipado de la fecha programada de culminación de la prestación:": 2,
-    "Señalar si la contratación requiere la obtención de licencias, autorizaciones, permisos, servidumbre y similares:": 4,
-    "Señalar el responsable:": 2,
-    "Señalar si se han considerado el uso de metodologías colaborativas:": 2,
-  };
   const fila: Record<string, number> = {};
   for (let r = 1; r <= ws.rowCount; r++) {
     const t = norm(r);
-    if (
-      !(t in fila) &&
-      (t === ROTULO_ROL ||
-        t === ROTULO_ROL_SUSTENTO ||
-        t === ROTULO_AGRUP ||
-        t === ROTULO_AGRUP_SUSTENTO ||
-        t === ROTULO_ESTAND ||
-        t === ROTULO_EJECUCION ||
-        t === ROTULO_NOTA_CRONOGRAMA ||
-        t in ROTULOS_OBRAS_SPAN)
-    ) {
+    if (!(t in fila) && (t === ROTULO_ROL || t === ROTULO_ROL_SUSTENTO || t === ROTULO_EJECUCION || t === ROTULO_NOTA_CRONOGRAMA)) {
       fila[t] = r;
     }
   }
@@ -645,10 +814,6 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
     desarmarMerge(ws, filaNota, 2, 10); // B..J
     armarMerge(ws, filaNota, 2, 10);
   }
-  for (const [rotulo, span] of Object.entries(ROTULOS_OBRAS_SPAN)) {
-    const desde = fila[rotulo];
-    if (desde != null) recombinarRotuloFase(ws, "B", desde, desde + span - 1);
-  }
 
   // p) Roles: los dos rótulos, las filas de rol de en medio y el valor del sustento.
   const rH = fila[ROTULO_ROL];
@@ -662,15 +827,26 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
     for (let r = rH + 1; r < rS; r++) alaIzquierda(r); // filas de rol
   }
 
-  // q) Agrupación: rótulo de la tabla, rótulo del sustento y su valor.
-  if (fila[ROTULO_AGRUP] != null) alaIzquierda(fila[ROTULO_AGRUP]);
-  if (fila[ROTULO_AGRUP_SUSTENTO] != null) {
-    alaIzquierda(fila[ROTULO_AGRUP_SUSTENTO]);
-    alaIzquierda(fila[ROTULO_AGRUP_SUSTENTO] + 1); // valor del sustento
-  }
+  // q), r), s), t), obras y "III.": aritmética, no texto (ver el comentario
+  // de la función). `alaIzquierda` en los rótulos que la plantilla trae
+  // centrados; los que ya vienen a la izquierda (títulos "q) …:", "r) …:") no
+  // necesitan el retoque, solo la recomposición del merge.
+  const anclaQ = FILA_PLANTILLA_Q + desplazamiento;
+  recombinarBloqueDesdeAncla(ws, anclaQ, RECTS_Q);
+  alaIzquierda(anclaQ + 1); // "Seleccionar el tipo de agrupación de prestaciones:"
+  alaIzquierda(anclaQ + 5); // sustento: rótulo
+  alaIzquierda(anclaQ + 6); // sustento: valor
 
-  // r) Estandarizado: rótulo de la tabla (la respuesta SÍ/NO se marca con X aparte).
-  if (fila[ROTULO_ESTAND] != null) alaIzquierda(fila[ROTULO_ESTAND]);
+  const anclaR = FILA_PLANTILLA_R + desplazamiento;
+  recombinarBloqueDesdeAncla(ws, anclaR, RECTS_R);
+  alaIzquierda(anclaR + 1); // "Señalar si el requerimiento se encuentra estandarizado:"
+
+  recombinarBloqueDesdeAncla(ws, FILA_PLANTILLA_S + desplazamiento, RECTS_S);
+  recombinarBloqueDesdeAncla(ws, FILA_PLANTILLA_T + desplazamiento, RECTS_T);
+  recombinarBloqueDesdeAncla(ws, FILA_PLANTILLA_III + desplazamiento, RECTS_III);
+  for (const { fila: filaObra, rects } of BLOQUES_OBRAS) {
+    recombinarBloqueDesdeAncla(ws, filaObra + desplazamiento, rects);
+  }
 }
 
 
@@ -741,8 +917,14 @@ function volcarRequisitos(
   return corrimiento + Math.max(0, facult.length - f.cuantas);
 }
 
-/** g) Factores de evaluación (Art. 46.1.g): tabla nombre + sustento. */
-function volcarFactores(ws: ExcelJS.Worksheet, a4: Record<string, unknown>, corrimiento: number) {
+/**
+ * g) Factores de evaluación (Art. 46.1.g): tabla nombre + sustento.
+ *
+ * Devuelve cuántas filas EXTRA metió (0 si no insertó ninguna), para sumarla
+ * al desplazamiento total que arrastran q), r), s), t), la sección de obras y
+ * "III." — ver `volcarCronogramaYRoles` y `recombinarBloquesFinales`.
+ */
+function volcarFactores(ws: ExcelJS.Worksheet, a4: Record<string, unknown>, corrimiento: number): number {
   const factores = leerFilas<FactorEvaluacion>(a4.factores_items);
   const desde = FILAS_FACTORES.desde + corrimiento;
   // Sin factores propuestos (p. ej. subasta inversa o comparación de precios, que
@@ -754,7 +936,7 @@ function volcarFactores(ws: ExcelJS.Worksheet, a4: Record<string, unknown>, corr
     setCell(ws, `${FILAS_FACTORES.colNombre}${desde}`, "NO CORRESPONDE");
     setCell(ws, `${FILAS_FACTORES.colSustento}${desde}`, "NO CORRESPONDE");
     for (let i = 1; i < FILAS_FACTORES.cuantas; i += 1) ws.getRow(desde + i).hidden = true;
-    return;
+    return 0;
   }
   // Un factor por fila desde la 56: el 1.º en la 56, el 2.º en la 57, etc. Si hay
   // MÁS que las 3 filas de plantilla, `ampliarBloque` inserta las que falten.
@@ -766,6 +948,7 @@ function volcarFactores(ws: ExcelJS.Worksheet, a4: Record<string, unknown>, corr
   // Si hay MENOS factores que las 3 filas de plantilla (1 o 2), se ocultan las
   // sobrantes para no dejarlas con el marcador "[Insertar…]".
   for (let i = factores.length; i < FILAS_FACTORES.cuantas; i += 1) ws.getRow(desde + i).hidden = true;
+  return Math.max(0, factores.length - FILAS_FACTORES.cuantas);
 }
 
 /**
@@ -1203,12 +1386,16 @@ function llenarEstrategia(
 
   // o) y p) AL FINAL: insertan filas y desplazan todo lo de debajo. Hacerlo
   // antes invalidaría las direcciones fijas de q), r), s), t) y las de obras.
-  volcarCronogramaYRoles(ws, a4);
+  // El número que devuelve es cuánto desplazó TODO lo que queda por debajo de
+  // p) roles (q, r, s, t, obras, "III."): se necesita más abajo para reparar
+  // esos bloques con aritmética, no por texto (ver `alinearRotulosApartados`).
+  const corrimientoCronograma = volcarCronogramaYRoles(ws, a4);
 
   // f) y g) también insertan filas, y están MÁS ARRIBA que el cronograma: por
   // eso van al final del todo, cuando ya nadie depende de las direcciones de
   // abajo. `volcarRequisitos` devuelve cuántas filas metió, que es lo que
-  // desplaza a g).
+  // desplaza a g) — y ambos números TAMBIÉN desplazan q) en adelante, porque
+  // f)/g) están más arriba que el cronograma.
   //
   // La obligatoriedad de cada requisito la fija la matriz de las bases estándar
   // (Art. 72.4) según el procedimiento; la capacidad económica solo aparece si el
@@ -1222,17 +1409,16 @@ function llenarEstrategia(
     matrizRequisitos,
     precalif,
   );
-  volcarFactores(ws, a4, corrimiento);
+  const corrimientoFactores = volcarFactores(ws, a4, corrimiento);
 
-  // p) roles, q) agrupación, r) estandarizado, el cronograma de EJECUCIÓN y los
-  // rótulos estáticos de la sección de obras: a la izquierda y con el rótulo
-  // (hasta ":") en negrita, más la recomposición de merges que le toque a cada
-  // uno. Va AQUÍ, después de TODAS las inserciones (o, p, f, g) — no solo de la
-  // del cronograma—: `duplicateRow` puede desincronizar un merge ya recompuesto
-  // con cualquier inserción posterior que lo desplace, así que reparar antes de
-  // que corran f)/g) dejaría todo roto otra vez. Localiza cada rótulo por
-  // texto, no por fila, porque esos bloques solo tienen posición final aquí.
-  alinearRotulosApartados(ws);
+  // p) roles, el cronograma de EJECUCIÓN y su NOTA: por texto (localizan bien
+  // incluso con varias inserciones encima, comprobado con datos reales). q),
+  // r), s), t), la sección de obras y "III." en cambio se reparan por
+  // ARITMÉTICA (plantilla + desplazamiento total) — ver el comentario de
+  // `alinearRotulosApartados`: buscarlos por texto dejó de ser fiable cuando la
+  // inserción de arriba es grande, porque el propio texto puede aparecer
+  // desincronizado.
+  alinearRotulosApartados(ws, corrimientoCronograma + corrimiento + corrimientoFactores);
 
   // n) Nivel de interacción según la segmentación (paso A2).
   if (hitos.A2) {
