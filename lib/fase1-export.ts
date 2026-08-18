@@ -634,6 +634,16 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
       armarMerge(ws, r, 7, 8); // G:H inicio
       armarMerge(ws, r, 9, 10); // I:J fin
     }
+    // La fila de la NOTA misma (B:J, una sola fila, todo el ancho de la tabla)
+    // es TAMBIÉN una combinación de la plantilla que queda por debajo de la
+    // inserción de selección: mismo síntoma, celda por columna en vez de una
+    // combinada. `recombinarRotuloFase` es para combinaciones VERTICALES (una
+    // columna, varias filas) y esta es HORIZONTAL (una fila, varias columnas),
+    // así que se rearma directo con desarmarMerge/armarMerge, como una fila
+    // más de `filaCronograma` pero de B a J en vez de por bloques.
+    const filaNota = fila[ROTULO_NOTA_CRONOGRAMA];
+    desarmarMerge(ws, filaNota, 2, 10); // B..J
+    armarMerge(ws, filaNota, 2, 10);
   }
   for (const [rotulo, span] of Object.entries(ROTULOS_OBRAS_SPAN)) {
     const desde = fila[rotulo];
