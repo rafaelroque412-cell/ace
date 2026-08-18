@@ -618,7 +618,22 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet): void {
     }
   }
   if (fila[ROTULO_EJECUCION] != null && fila[ROTULO_NOTA_CRONOGRAMA] != null) {
-    recombinarRotuloFase(ws, "B", fila[ROTULO_EJECUCION], fila[ROTULO_NOTA_CRONOGRAMA] - 1);
+    const desde = fila[ROTULO_EJECUCION];
+    const hasta = fila[ROTULO_NOTA_CRONOGRAMA] - 1;
+    recombinarRotuloFase(ws, "B", desde, hasta);
+    // No basta con el rótulo (columna B): las combinaciones POR FILA de cada
+    // actividad de ejecución (C:F actividad, G:H inicio, I:J fin), armadas en
+    // `filaCronograma` durante el paso 2 de `volcarCronogramaYRoles`, quedan
+    // IGUAL de desincronizadas que el rótulo por la inserción de selección —
+    // se comprobó con datos reales: el rótulo salía bien pero cada celda de la
+    // fila aparecía repetida en vez de combinada. Se rearman aquí, en la
+    // posición FINAL, igual que el rótulo.
+    for (let r = desde; r <= hasta; r++) {
+      desarmarMerge(ws, r, 3, 10); // C..J
+      armarMerge(ws, r, 3, 6); // C:F actividad
+      armarMerge(ws, r, 7, 8); // G:H inicio
+      armarMerge(ws, r, 9, 10); // I:J fin
+    }
   }
   for (const [rotulo, span] of Object.entries(ROTULOS_OBRAS_SPAN)) {
     const desde = fila[rotulo];
