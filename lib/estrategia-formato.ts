@@ -951,6 +951,11 @@ function objetoEjecucion(objeto?: string): { uso: string; entrega: string } {
  *     TDR; obra → expediente técnico),
  *   · el EVALUADOR de e) (oficial de compra / comité / jurado; el jurado solo evalúa,
  *     la DEC conduce el resto, Cuadro N° 6 de la Guía).
+ *
+ * La DEC también aparece en ejecución contractual (Art. 14.2.i y 14.2.k del
+ * Reglamento): monitorea/evalúa la ejecución de TODOS los contratos y revisa
+ * que la conformidad que emite el área usuaria cumpla la normativa de
+ * contratación —sin entrar en lo técnico, que es responsabilidad de esta—.
  */
 export function modeloRolesP(opts: {
   proceso?: string;
@@ -984,6 +989,10 @@ export function modeloRolesP(opts: {
       etapa: "ejecucion_contractual",
       rol: `Área usuaria (ejecución contractual): asume la responsabilidad técnica y operativa de asegurar el uso eficiente ${ej.uso}.\nControl de ingreso y registro: verifica que ${ej.entrega} ingrese en óptimas condiciones.\nGestión de la conformidad: hace el seguimiento de las entregas y emite las conformidades correspondientes dentro de los plazos legales.`,
     },
+    {
+      etapa: "ejecucion_contractual",
+      rol: "Dependencia Encargada de las Contrataciones (DEC):\nMonitoreo de la ejecución: realiza el monitoreo y evaluación de la ejecución contractual del contrato.\nRevisión de la conformidad: verifica el cumplimiento de la normativa de contratación pública en la conformidad que emite el área usuaria, sin entrar en los aspectos técnicos del requerimiento, que son responsabilidad de esta.",
+    },
   ];
 }
 
@@ -996,7 +1005,7 @@ export function modeloRolesP(opts: {
  */
 export function esModeloRolesP(value: unknown, objeto?: string, tipoEvaluador?: string): boolean {
   const filas = leerFilas<{ rol?: string; etapa?: string }>(value);
-  if (filas.length !== 5) return false;
+  if (filas.length !== 6) return false;
   const mm = /^Área usuaria: al tratarse de (.+?), el área usuaria es responsable/.exec(filas[0].rol ?? "");
   if (!mm) return false;
   const esperado = modeloRolesP({ proceso: mm[1], objeto, tipoEvaluador });

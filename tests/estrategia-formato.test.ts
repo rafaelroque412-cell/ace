@@ -782,12 +782,14 @@ describe("p) roles y responsabilidades", () => {
       objeto: "bienes",
       tipoEvaluador: "oficial_compra",
     });
-    // Las cuatro etapas de la fase de selección, en orden.
+    // Las cuatro etapas de la fase de selección, en orden (ejecución contractual
+    // trae dos filas: área usuaria y DEC, Art. 14.2.i/k del Reglamento).
     expect(m.map((r) => r.etapa)).toEqual([
       "actos_preparatorios",
       "actos_preparatorios",
       "convocatoria",
       "post_convocatoria",
+      "ejecucion_contractual",
       "ejecucion_contractual",
     ]);
     // Área usuaria: cita el proceso y, en bienes, las Fichas Técnicas del LBSC.
@@ -797,6 +799,9 @@ describe("p) roles y responsabilidades", () => {
     // Convocatoria: el oficial de compra conduce el procedimiento.
     expect(m[2].rol).toContain("Oficial de compra");
     expect(m[2].rol).toContain("Conducción del procedimiento");
+    // Ejecución contractual: la DEC también monitorea/evalúa TODOS los contratos.
+    expect(m[5].rol).toContain("Dependencia Encargada de las Contrataciones (DEC)");
+    expect(m[5].rol).toContain("Monitoreo de la ejecución");
   });
 
   it("modeloRolesP: en servicios usa TDR, y el jurado solo evalúa (la DEC conduce)", async () => {
