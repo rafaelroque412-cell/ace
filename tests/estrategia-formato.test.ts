@@ -298,8 +298,15 @@ describe("los mapas de casillas cubren TODAS las opciones del select", () => {
     expect(sustentoAlElegirAgrupacion("items", NORMA_AGRUPACION.paquete)).toBe(NORMA_AGRUPACION.items);
     // Texto propio de la DEC → no se pisa.
     expect(sustentoAlElegirAgrupacion("paquete", "Se agrupan por economía de escala.")).toBeNull();
-    // Tipo sin norma → no propone nada.
-    expect(sustentoAlElegirAgrupacion("", "")).toBeNull();
+  });
+
+  it("sustentoAlElegirAgrupacion: sin tipo seleccionado ('Seleccionar'), el sustento pasa a NO CORRESPONDE", () => {
+    // Vacío al elegir "Seleccionar" (nunca se tocó el campo) → se completa solo.
+    expect(sustentoAlElegirAgrupacion("", "")).toBe("NO CORRESPONDE");
+    // Volvió a "Seleccionar" desde un mecanismo (traía su norma, sin editar) → se refresca.
+    expect(sustentoAlElegirAgrupacion("", NORMA_AGRUPACION.paquete)).toBe("NO CORRESPONDE");
+    // Texto propio de la DEC con "Seleccionar" → no se pisa.
+    expect(sustentoAlElegirAgrupacion("", "No aplica, se explica en el requerimiento.")).toBeNull();
   });
 });
 

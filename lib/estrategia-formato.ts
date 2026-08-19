@@ -226,12 +226,17 @@ export const NORMA_AGRUPACION: Readonly<Record<string, string>> = {
  * `sustentoAlElegirModalidadPago`: trae la norma del mecanismo (Art. 52) cuando el
  * sustento actual está VACÍO o es OTRA norma (venía de otro mecanismo, sin editar);
  * si la DEC escribió algo propio, devuelve null y se respeta lo escrito.
+ *
+ * Sin tipo seleccionado ("Seleccionar", ningún mecanismo aplica) el sustento pasa
+ * a "NO CORRESPONDE" bajo el mismo criterio de respeto: solo si estaba vacío o
+ * traía la norma de un mecanismo anterior que ya no aplica.
  */
 export function sustentoAlElegirAgrupacion(tipo: string, actual: string): string | null {
-  const norma = NORMA_AGRUPACION[tipo];
-  if (!norma) return null;
   const a = actual.trim();
   const esOtraNorma = a !== "" && (Object.values(NORMA_AGRUPACION) as string[]).includes(a);
+  if (!tipo) return !a || esOtraNorma ? PUNTO_NO_CORRESPONDE : null;
+  const norma = NORMA_AGRUPACION[tipo];
+  if (!norma) return null;
   return !a || esOtraNorma ? norma : null;
 }
 
