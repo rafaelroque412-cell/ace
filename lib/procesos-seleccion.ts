@@ -317,6 +317,19 @@ export const OBJETOS_POR_PROCEDIMIENTO: Record<string, ObjetoFilter[]> = Object.
 /** Valor del catálogo que declara, ya en la ficha, un procedimiento no competitivo. */
 export const PROCESO_NO_COMPETITIVO = "Procedimiento de Selección No Competitivo";
 
+/**
+ * Valores del catálogo cuya cuantía es SIEMPRE punto de referencia para las
+ * ofertas (Art. 48.2 Ley 32069), sin importar el sistema de entrega:
+ *   · Expertos y gerentes de proyecto: Art. 134.1, oferta fija al 100%.
+ *   · Concurso de Proyectos Arquitectónicos y Urbanísticos: el Art. 135.1 lo
+ *     restringe a consultoría de obra "solo diseño"/"formulación y diseño" u
+ *     obra "diseño y construcción" —los mismos sistemas que ya disparan el
+ *     mecanismo por el Art. 166.4/166.1-166.2—, así que el procedimiento en sí
+ *     ya lo implica, aunque i) (sistema de entrega) no se haya llenado todavía.
+ */
+export const PROCESO_EXPERTOS_GERENTES_PROYECTO = "Concurso Público abreviado para la contratación de expertos y gerentes de proyectos";
+export const PROCESO_CONCURSO_ARQUITECTONICO = "Concurso de Proyectos Arquitectónicos y Urbanísticos";
+
 export type TipoEvaluador = "oficial_compra" | "comite" | "jurado";
 
 /**

@@ -78,7 +78,11 @@ import {
   type TipoRequisitoArt72,
 } from "./requisitos-calificacion";
 import { requisitosDeProcedimiento, textoRequisitoObligatorio } from "./requisitos-por-procedimiento";
-import { tienePrecalificacion } from "./procesos-seleccion";
+import {
+  tienePrecalificacion,
+  PROCESO_CONCURSO_ARQUITECTONICO,
+  PROCESO_EXPERTOS_GERENTES_PROYECTO,
+} from "./procesos-seleccion";
 import type { HitosMap } from "./procurement-fases";
 import { objectTypeLabel, processTypeLabel } from "./legal-taxonomy";
 import { familiaProcedimiento } from "./aplicabilidad-fases";
@@ -1232,23 +1236,35 @@ function llenarEstrategia(
     mark(ws, SI_NO_ESTRATEGIA.cuantia_actualizada.si);
   }
   // II) ¿La cuantía es punto de referencia para las ofertas? Es una lista tasada
-  // (Art. 48.2 Ley). Detectable a partir del sistema de entrega de OBRA/consultoría
-  // de obra → SÍ: "solo construcción" (Art. 165), "diseño y construcción" y su
-  // variante con operación y mantenimiento (Art. 166.1/166.2 —el rubro ejecución
-  // de obra queda fijo al 100%, que es el punto de referencia; el de diseño se
-  // EVALÚA sobre 100 puntos, no lleva piso—), y consultoría de obra "solo
-  // formulación o solo diseño" (Art. 166.4, mínimo 90%). El resto → NO —incluidos
-  // gestión al riesgo/de agencia y entrega integrada (Art. 166.3: reglas
-  // GENERALES de evaluación, no este mecanismo) y la comparación de precios, que
-  // se evalúa por MENOR MONTO (Art. 98), no contra una referencia—. El caso del
-  // Art. 133 (servicios de operación/mantenimiento con diseño YA definido —no es
-  // lo mismo que el sistema de entrega "diseño de la operación y mantenimiento",
-  // que describe el alcance del contrato, no si la entidad ya tiene ese diseño
-  // hecho—) y el del Art. 135 (concurso de proyectos arquitectónicos, que no fija
-  // cuantía de referencia por sí mismo) no son detectables sin ambigüedad y
-  // quedan para marcarlos a mano. Si la DEC ya respondió, manda (el bucle de
-  // arriba ya marcó su casilla). Se marca aquí, antes de que el cronograma
-  // inserte filas, para que el "X" se desplace con su fila.
+  // (Art. 48.2 Ley). Dos señales, ambas verificadas verbatim contra el Reglamento:
+  //
+  // 1) El PROCEDIMIENTO de a) (var_a_proceso, el mismo catálogo de los Arts.
+  //    93/94/95) ya lo implica por sí solo en dos casos: expertos y gerentes de
+  //    proyecto (Art. 134.1, oferta fija al 100%) y el Concurso de Proyectos
+  //    Arquitectónicos (el Art. 135.1 lo restringe a consultoría de obra "solo
+  //    diseño"/"formulación y diseño" u obra "diseño y construcción" —los mismos
+  //    sistemas del punto 2—, así que aplica aunque i) no se haya llenado aún).
+  // 2) El SISTEMA DE ENTREGA de i), para obra/consultoría de obra en general:
+  //    "solo construcción" (Art. 165), "diseño y construcción" y su variante con
+  //    operación y mantenimiento (Art. 166.1/166.2 —el rubro ejecución de obra
+  //    queda fijo al 100%, que es el punto de referencia; el de diseño se EVALÚA
+  //    sobre 100 puntos, no lleva piso—), y consultoría de obra "solo formulación
+  //    o solo diseño" (Art. 166.4, mínimo 90%).
+  //
+  // El resto → NO —incluidos gestión al riesgo/de agencia y entrega integrada
+  // (Art. 166.3: reglas GENERALES de evaluación, no este mecanismo) y la
+  // comparación de precios, que se evalúa por MENOR MONTO (Art. 98), no contra
+  // una referencia—. El caso del Art. 133 (servicios de operación/mantenimiento
+  // con diseño YA definido —no es lo mismo que el sistema de entrega "diseño de
+  // la operación y mantenimiento", que describe el alcance del contrato, no si
+  // la entidad ya tiene ese diseño hecho—) comparte procedimiento del catálogo
+  // con consultorías que NO llevan el mecanismo ("Concurso Público para
+  // consultorías y servicios de mantenimiento vial" cubre los tres), así que no
+  // es detectable sin ambigüedad y queda para marcarlo a mano. Si la DEC ya
+  // respondió, manda (el bucle de arriba ya marcó su casilla). Se marca aquí,
+  // antes de que el cronograma inserte filas, para que el "X" se desplace con
+  // su fila.
+  const PROCEDIMIENTOS_CUANTIA_REFERENCIA = new Set([PROCESO_EXPERTOS_GERENTES_PROYECTO, PROCESO_CONCURSO_ARQUITECTONICO]);
   const SISTEMAS_ENTREGA_CUANTIA_REFERENCIA = new Set([
     "solo_construccion",
     "diseno_construccion",
@@ -1256,8 +1272,10 @@ function llenarEstrategia(
     "solo_formulacion_o_diseno",
   ]);
   if (!str(a4, "si_cuantia_referencia")) {
+    const procParaCuantiaRef = str(a4, "var_a_proceso") || str(a4, "var_a_procedimiento");
     const esCuantiaReferencia =
-      /obra/.test(objetoEstrategia) && SISTEMAS_ENTREGA_CUANTIA_REFERENCIA.has(str(a4, "var_i_sistema_entrega"));
+      PROCEDIMIENTOS_CUANTIA_REFERENCIA.has(procParaCuantiaRef) ||
+      (/obra/.test(objetoEstrategia) && SISTEMAS_ENTREGA_CUANTIA_REFERENCIA.has(str(a4, "var_i_sistema_entrega")));
     mark(ws, esCuantiaReferencia ? SI_NO_ESTRATEGIA.cuantia_referencia.si : SI_NO_ESTRATEGIA.cuantia_referencia.no);
   }
 

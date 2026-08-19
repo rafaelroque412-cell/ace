@@ -23,7 +23,7 @@ import {
   sustentoAlElegirAgrupacion,
 } from "@/lib/estrategia-formato";
 import { generarExcelF1, type ProcesoExport } from "@/lib/fase1-export";
-import { PROCESO_NO_COMPETITIVO } from "@/lib/procesos-seleccion";
+import { PROCESO_NO_COMPETITIVO, PROCESO_CONCURSO_ARQUITECTONICO, PROCESO_EXPERTOS_GERENTES_PROYECTO } from "@/lib/procesos-seleccion";
 import type { HitosMap } from "@/lib/procurement-fases";
 
 const proceso: ProcesoExport = {
@@ -997,6 +997,18 @@ describe("II) ¿la cuantía es punto de referencia? (Art. 48.2 Ley · 165 · 166
 
   it("CONSULTORÍA DE OBRA 'solo formulación o solo diseño' → SÍ (Art. 166.4, mínimo 90%)", async () => {
     const c = await celda("consultoria_obra", { var_i_sistema_entrega: "solo_formulacion_o_diseno" });
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
+  });
+
+  it("Concurso Público abreviado para expertos y gerentes de proyecto → SÍ (Art. 134.1), aunque el objeto sea servicios", async () => {
+    const c = await celda("servicios", { var_a_proceso: PROCESO_EXPERTOS_GERENTES_PROYECTO });
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
+  });
+
+  it("Concurso de Proyectos Arquitectónicos y Urbanísticos → SÍ (Art. 135.1), aunque i) no se haya llenado", async () => {
+    const c = await celda("obra", { var_a_proceso: PROCESO_CONCURSO_ARQUITECTONICO });
     expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
     expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
   });
