@@ -1232,17 +1232,33 @@ function llenarEstrategia(
     mark(ws, SI_NO_ESTRATEGIA.cuantia_actualizada.si);
   }
   // II) ¿La cuantía es punto de referencia para las ofertas? Es una lista tasada
-  // (Art. 48.2 Ley). El único caso detectable automáticamente es la OBRA bajo el
-  // sistema de entrega "solo construcción" (Art. 165) → SÍ; el resto → NO —incluida
-  // la comparación de precios, que se evalúa por MENOR MONTO (Art. 98), no contra
-  // una referencia—. El caso del Art. 133 (servicios de operación/mantenimiento)
-  // no es detectable y queda para marcarlo a mano. Si la DEC ya respondió, manda
-  // (el bucle de arriba ya marcó su casilla). Se marca aquí, antes de que el
-  // cronograma inserte filas, para que el "X" se desplace con su fila.
+  // (Art. 48.2 Ley). Detectable a partir del sistema de entrega de OBRA/consultoría
+  // de obra → SÍ: "solo construcción" (Art. 165), "diseño y construcción" y su
+  // variante con operación y mantenimiento (Art. 166.1/166.2 —el rubro ejecución
+  // de obra queda fijo al 100%, que es el punto de referencia; el de diseño se
+  // EVALÚA sobre 100 puntos, no lleva piso—), y consultoría de obra "solo
+  // formulación o solo diseño" (Art. 166.4, mínimo 90%). El resto → NO —incluidos
+  // gestión al riesgo/de agencia y entrega integrada (Art. 166.3: reglas
+  // GENERALES de evaluación, no este mecanismo) y la comparación de precios, que
+  // se evalúa por MENOR MONTO (Art. 98), no contra una referencia—. El caso del
+  // Art. 133 (servicios de operación/mantenimiento con diseño YA definido —no es
+  // lo mismo que el sistema de entrega "diseño de la operación y mantenimiento",
+  // que describe el alcance del contrato, no si la entidad ya tiene ese diseño
+  // hecho—) y el del Art. 135 (concurso de proyectos arquitectónicos, que no fija
+  // cuantía de referencia por sí mismo) no son detectables sin ambigüedad y
+  // quedan para marcarlos a mano. Si la DEC ya respondió, manda (el bucle de
+  // arriba ya marcó su casilla). Se marca aquí, antes de que el cronograma
+  // inserte filas, para que el "X" se desplace con su fila.
+  const SISTEMAS_ENTREGA_CUANTIA_REFERENCIA = new Set([
+    "solo_construccion",
+    "diseno_construccion",
+    "diseno_construccion_operacion_mantenimiento",
+    "solo_formulacion_o_diseno",
+  ]);
   if (!str(a4, "si_cuantia_referencia")) {
-    const esObraSoloConstruccion =
-      /obra/.test(objetoEstrategia) && str(a4, "var_i_sistema_entrega") === "solo_construccion";
-    mark(ws, esObraSoloConstruccion ? SI_NO_ESTRATEGIA.cuantia_referencia.si : SI_NO_ESTRATEGIA.cuantia_referencia.no);
+    const esCuantiaReferencia =
+      /obra/.test(objetoEstrategia) && SISTEMAS_ENTREGA_CUANTIA_REFERENCIA.has(str(a4, "var_i_sistema_entrega"));
+    mark(ws, esCuantiaReferencia ? SI_NO_ESTRATEGIA.cuantia_referencia.si : SI_NO_ESTRATEGIA.cuantia_referencia.no);
   }
 
   // a) Cabecera con el tipo de procedimiento y su nomenclatura, como en el

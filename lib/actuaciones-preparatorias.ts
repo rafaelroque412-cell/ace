@@ -687,7 +687,7 @@ const CAMPOS_ESTRATEGIA: CampoFormulario[] = [
       { name: "var_t_otras", label: "t) Otras variables según el objeto de la contratación", tipo: "textarea", ancho: "full", ayuda: "Incorporada por el D.S. N° 001-2026-EF." },
 
       // ===== Cierre del formato: variable II) y fecha al pie =====
-      { name: "si_cuantia_referencia", label: "II) ¿La cuantía de la contratación es punto de referencia?", tipo: "select", opciones: OPCIONES_SI_NO, recomendado: true, ayuda: "Marca SÍ solo cuando la ley usa la cuantía como referencia y no como tope: obras bajo el sistema «solo construcción» (Art. 165) y servicios de operación/mantenimiento (Art. 133). En el resto, NO. Se rellena solo para obras; para servicios, márcalo a mano.", baseLegal: "Art. 48.2 Ley 32069" },
+      { name: "si_cuantia_referencia", label: "II) ¿La cuantía de la contratación es punto de referencia?", tipo: "select", opciones: OPCIONES_SI_NO, recomendado: true, ayuda: "Marca SÍ solo cuando la ley usa la cuantía como referencia y no como tope: obras bajo «solo construcción» (Art. 165), «diseño y construcción» (Art. 166.1/166.2) y consultoría de obra «solo formulación o solo diseño» (Art. 166.4, mínimo 90%). En gestión al riesgo/de agencia y entrega integrada (Art. 166.3) NO aplica: siguen las reglas generales. Se rellena solo para esos sistemas de entrega de obra; para servicios con diseño ya definido (Art. 133) o concurso de proyectos arquitectónicos (Art. 135), márcalo a mano.", baseLegal: "Art. 48.2 Ley 32069" },
       { name: "fecha_elaboracion", label: "Fecha de elaboración del formato", tipo: "date", ayuda: "Se imprime al pie. Arranca con la fecha de hoy y es editable." },
 
       // Variables adicionales obligatorias para OBRAS y CONSULTORÍA DE OBRAS (Art. 154).,

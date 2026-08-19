@@ -965,7 +965,7 @@ describe("Formato de Estrategia · el bloque de obras (Art. 154) se oculta si no
   });
 })
 
-describe("II) ¿la cuantía es punto de referencia? (Art. 48.2 Ley · 165 · 98)", () => {
+describe("II) ¿la cuantía es punto de referencia? (Art. 48.2 Ley · 165 · 166 · 98)", () => {
   async function celda(objectType: string, a4: Record<string, unknown>) {
     const { buffer } = await generarExcelF1("estrategia", {
       hitos: { A4: { data: a4, status: "hecho" } },
@@ -983,17 +983,41 @@ describe("II) ¿la cuantía es punto de referencia? (Art. 48.2 Ley · 165 · 98)
     expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
   });
 
+  it("OBRA bajo 'diseño y construcción' → SÍ (Art. 166.1/166.2: el rubro ejecución queda fijo al 100%)", async () => {
+    const c = await celda("obra", { var_i_sistema_entrega: "diseno_construccion" });
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
+  });
+
+  it("OBRA bajo 'diseño, construcción, operación y mantenimiento' → SÍ (Art. 166.2 último párrafo)", async () => {
+    const c = await celda("obra", { var_i_sistema_entrega: "diseno_construccion_operacion_mantenimiento" });
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
+  });
+
+  it("CONSULTORÍA DE OBRA 'solo formulación o solo diseño' → SÍ (Art. 166.4, mínimo 90%)", async () => {
+    const c = await celda("consultoria_obra", { var_i_sistema_entrega: "solo_formulacion_o_diseno" });
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("X");
+    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("");
+  });
+
   it("un BIEN (comparación de precios se evalúa por menor monto, Art. 98) → NO", async () => {
     const c = await celda("bienes", {});
     expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("X");
     expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("");
   });
 
-  it("OBRA en OTRO sistema de entrega → NO (el Art. 165 es solo 'solo construcción')", async () => {
-    const c = await celda("obra", { var_i_sistema_entrega: "diseno_construccion" });
-    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no)).toBe("X");
-    expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si)).toBe("");
-  });
+  it(
+    "OBRA en gestión al riesgo/de agencia o entrega integrada → NO (Art. 166.3: reglas generales)",
+    async () => {
+      for (const sistema of ["gestion_diseno_construccion_riesgo", "gestion_diseno_construccion_agencia", "entrega_integrada_alianza"]) {
+        const c = await celda("obra", { var_i_sistema_entrega: sistema });
+        expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.no), sistema).toBe("X");
+        expect(c(SI_NO_ESTRATEGIA.cuantia_referencia.si), sistema).toBe("");
+      }
+    },
+    15000,
+  );
 
   it("si la DEC ya respondió, manda su respuesta (no la deriva)", async () => {
     const c = await celda("obra", { var_i_sistema_entrega: "solo_construccion", si_cuantia_referencia: "no" });
