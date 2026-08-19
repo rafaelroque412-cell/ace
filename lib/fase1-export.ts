@@ -815,9 +815,34 @@ function alinearRotulosApartados(ws: ExcelJS.Worksheet, desplazamiento: number):
     armarMerge(ws, filaNota, 2, 10);
   }
 
-  // p) Roles: los dos rótulos, las filas de rol de en medio y el valor del sustento.
+  // p) Roles: el título, los dos rótulos, las filas de rol de en medio y el
+  // valor del sustento. A diferencia de ejecución/q)/r)/s)/t), este bloque
+  // nunca recibía recomposición de merges — solo `alaIzquierda`, que asume que
+  // el merge sigue intacto. Confirmado en producción con datos reales:
+  // `duplicateRow` lo deja partido en 9 celdas repetidas por columna, igual
+  // que los demás bloques. Se repara aquí, por texto, con el mismo patrón
+  // robusto de `cell.unmerge()` directo que usa `recombinarBloqueDesdeAncla`
+  // (ver su comentario): `desarmarMerge`/`ws.unMergeCells` solos no alcanzan.
+  const repararFilaAncho = (r: number, c1: number, c2: number) => {
+    for (let c = c1; c <= c2; c++) {
+      const cell = ws.getCell(r, c);
+      if (cell.isMerged) cell.unmerge();
+      if (c !== c1) cell.value = null;
+    }
+    desarmarMerge(ws, r, c1, c2);
+    armarMerge(ws, r, c1, c2);
+  };
   const rH = fila[ROTULO_ROL];
   const rS = fila[ROTULO_ROL_SUSTENTO];
+  if (rH != null && rS != null) {
+    repararFilaAncho(rH - 1, 2, 10); // título "p) Los roles y responsabilidades…"
+    for (let r = rH; r < rS; r++) {
+      repararFilaAncho(r, 2, 5); // B:E rol / rótulo "Rol y responsabilidad:"
+      repararFilaAncho(r, 6, 10); // F:J etapa / rótulo "Etapa de la fase de selección:"
+    }
+    repararFilaAncho(rS, 2, 10); // rótulo del sustento
+    repararFilaAncho(rS + 1, 2, 10); // valor del sustento
+  }
   if (rH != null) alaIzquierda(rH);
   if (rS != null) {
     alaIzquierda(rS);
