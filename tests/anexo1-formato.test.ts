@@ -123,6 +123,23 @@ describe("k) sustento de la cuantía actualizada · precargado desde las fuentes
     expect(t).toContain("Herramienta: Otro (escrita) (Nota a proveedores)");
   });
 
+  it("una reunión (sin acta como la difusión) incluye fecha y resumen si se registraron", async () => {
+    const { sustentoCuantiaActualizada } = await import("@/lib/anexo1-interaccion");
+    const t = sustentoCuantiaActualizada({
+      herr_reuniones_informativas: true,
+      herr_reuniones_informativas_fecha: "2026-05-20",
+      herr_reuniones_informativas_resumen: "Se explicaron los alcances del proyecto a 5 proveedores.",
+    });
+    expect(t).toContain("Herramienta: Reuniones informativas (20/05/2026): Se explicaron los alcances del proyecto a 5 proveedores.");
+  });
+
+  it("una reunión marcada sin fecha ni resumen sale con solo la etiqueta (no queda pelada de más)", async () => {
+    const { sustentoCuantiaActualizada } = await import("@/lib/anexo1-interaccion");
+    const t = sustentoCuantiaActualizada({ herr_talleres: true });
+    expect(t).toContain("Herramienta: Talleres con la industria");
+    expect(t).not.toContain("Talleres con la industria (");
+  });
+
   it("sin casillas marcadas trae solo la frase base (k=SÍ nunca queda sin sustento)", async () => {
     const { sustentoCuantiaActualizada, INTRO_CUANTIA_ACTUALIZADA } = await import("@/lib/anexo1-interaccion");
     // A5 existe pero sin fuentes/herramientas marcadas: la frase base, sin lista.

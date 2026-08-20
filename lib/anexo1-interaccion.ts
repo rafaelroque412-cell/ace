@@ -8,6 +8,14 @@
 // Cada entrada lleva la celda exacta de la plantilla (lib/plantillas-f1/
 // anexo-1.xlsx, byte a byte "6. MATERIAL - ANEXO-1.xlsx").
 
+/** dd/mm/aaaa a partir de un ISO de <input type="date">. Mismo formato que fase1-export.ts. */
+function fechaCortaLocal(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 /** Fuentes de información para la indagación (Art. 48.2). */
 export const FUENTES_ANEXO1 = [
   {
@@ -208,9 +216,14 @@ export function sustentoCuantiaActualizada(a5: Record<string, unknown> | null | 
       const bruto = a5[`${h.key}_detalle`];
       const detalle = typeof bruto === "string" ? bruto.trim() : "";
       herramientas.push(detalle ? `Herramienta: ${h.label} (${detalle})` : `Herramienta: ${h.label}`);
-    } else {
-      herramientas.push(`Herramienta: ${h.label}`);
+      continue;
     }
+    // Reuniones sin acta (Art. 50.1.b no exige una, a diferencia de la difusión,
+    // Art. 51): fecha + resumen de lo tratado, para que la línea no salga pelada
+    // sin ningún sustento real de lo que se hizo.
+    const fecha = typeof a5[`${h.key}_fecha`] === "string" ? (a5[`${h.key}_fecha`] as string).trim() : "";
+    const resumen = typeof a5[`${h.key}_resumen`] === "string" ? (a5[`${h.key}_resumen`] as string).trim() : "";
+    herramientas.push(`Herramienta: ${h.label}${fecha ? ` (${fechaCortaLocal(fecha)})` : ""}${resumen ? `: ${resumen}` : ""}`);
   }
   const lineas = [...fuentes, ...herramientas];
   // Sin casillas marcadas en A5: solo la frase base. No se queda vacío, para que k)

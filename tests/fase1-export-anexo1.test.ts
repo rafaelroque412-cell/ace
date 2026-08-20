@@ -406,6 +406,31 @@ describe("Anexo N° 1 · huecos cerrados: difusión (Art. 51) y fecha de la inte
     expect(c("B26")).not.toContain("Reunión de confirmación");
   });
 
+  it("una reunión (Reuniones informativas / Talleres / Eventos, sin acta como la difusión) sale con fecha y resumen", async () => {
+    const c = await anexo1({
+      A5: {
+        data: {
+          nivel: "consulta_mercado_basica",
+          herr_talleres: true,
+          herr_talleres_fecha: "2026-05-18",
+          herr_talleres_resumen: "Se convocó a la industria para exponer el proyecto.",
+        },
+        status: "hecho",
+      },
+    });
+    const s = c("B26");
+    expect(s).toContain("Talleres con la industria (18/05/2026): Se convocó a la industria para exponer el proyecto.");
+  });
+
+  it("una reunión marcada sin fecha ni resumen no queda pelada con paréntesis vacíos", async () => {
+    const c = await anexo1({
+      A5: { data: { nivel: "consulta_mercado_basica", herr_reuniones_individuales: true }, status: "hecho" },
+    });
+    const s = c("B26");
+    expect(s).toContain("Reuniones individuales");
+    expect(s).not.toContain("Reuniones individuales (");
+  });
+
   it("la fecha de la interacción sale en el sustento", async () => {
     const c = await anexo1({
       A5: { data: { nivel: "indagacion_basica", fuente_historica: true, interaccion_fecha: "2026-05-10" }, status: "hecho" },

@@ -2060,11 +2060,21 @@ function llenarAnexo1(
   for (const h of HERRAMIENTAS_ANEXO1) {
     if (!a5[h.key]) continue;
     mark(ws, h.celda);
-    herramientasMarcadas.push(h.label);
     if ("detalleCelda" in h && h.detalleCelda) {
       const detalle = str(a5, `${h.key}_detalle`);
       if (detalle) setCell(ws, h.detalleCelda, detalle);
+      herramientasMarcadas.push(detalle ? `${h.label} (${detalle})` : h.label);
+      continue;
     }
+    // Reuniones sin acta (a diferencia de la difusión, el Art. 50.1.b no exige
+    // una): fecha + resumen de lo tratado, para que la etiqueta no salga pelada
+    // sin ningún sustento real de lo que se hizo. Difusión y solicitud de
+    // información no tienen estos campos —la primera tiene su propio flujo de
+    // actas (Art. 51); la segunda, la tabla de proveedores— así que aquí quedan
+    // sin fecha/resumen y se pushea solo la etiqueta, como antes.
+    const fecha = str(a5, `${h.key}_fecha`);
+    const resumen = str(a5, `${h.key}_resumen`);
+    herramientasMarcadas.push(`${h.label}${fecha ? ` (${fechaCorta(fecha)})` : ""}${resumen ? `: ${resumen}` : ""}`);
   }
 
   // Conclusiones de la interacción (Art. 47.1: perfeccionar el requerimiento,

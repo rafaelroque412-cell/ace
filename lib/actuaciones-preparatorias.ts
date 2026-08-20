@@ -1475,6 +1475,33 @@ export const PASOS_F1: Record<string, PasoDetalle> = {
           ancho: "full",
           baseLegal: "Art. 50.1.b Reglamento"
       },
+      // Reuniones (Art. 50.1.b) sin acta como la difusión (no la exige el
+      // Reglamento), pero SÍ con fecha y resumen: sin esto, el Anexo N° 1
+      // terminaba imprimiendo solo la etiqueta pelada ("Herramienta de consulta
+      // al mercado utilizada(s): Reuniones informativas.") sin ningún sustento
+      // real de lo hecho. Se excluyen "Otro/Otros" (ya tienen su campo de
+      // detalle arriba) y la difusión (tiene su propio flujo de actas, Art. 51).
+      ...HERRAMIENTAS_ANEXO1.filter((h) => h.clase.startsWith("Reuniones") && !("detalleCelda" in h)).flatMap((h) => [
+        {
+          name: `${h.key}_fecha`,
+          recomendado: true,
+          label: `Fecha: ${h.label}`,
+          tipo: "date" as const,
+          dependeDe: { campo: h.key, valor: ["true"] },
+          baseLegal: "Art. 50.1.b Reglamento",
+          ayuda: `Solo si marcaste "${h.label}". Fecha en que se realizó.`,
+        },
+        {
+          name: `${h.key}_resumen`,
+          recomendado: true,
+          label: `Resumen: ${h.label}`,
+          tipo: "textarea" as const,
+          ancho: "full" as const,
+          dependeDe: { campo: h.key, valor: ["true"] },
+          baseLegal: "Art. 50.1.b Reglamento",
+          ayuda: `Solo si marcaste "${h.label}". Quiénes participaron y qué se trató.`,
+        },
+      ]),
       // Difusión del requerimiento (Art. 51): su flujo —consultas técnicas,
       // absolución y acta— ocurre EN la Pladicop, así que aquí solo se REFERENCIA
       // (N° y fecha del acta, resumen), no se replica. Visible solo si se marcó la
