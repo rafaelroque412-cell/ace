@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRightCircle, Briefcase, Loader } from "lucide-react";
 import { HITO_STATUS_META, type HitosMap, hitosDeFase, progresoDeFase } from "@/lib/procurement-fases";
 import { necesidadStatusLabel, necesidadStatusTono } from "@/lib/necesidad-workflow";
+import { cn } from "@/lib/utils";
 import { Badge, Button, buttonClasses } from "../ui";
 
 type AvanceFase1 = {
@@ -141,7 +142,7 @@ export const PanelDerivacion = memo(function PanelDerivacion({
               </div>
             </div>
           ) : null}
-          <Link className={buttonClasses({ variant: "primary" })} href={`/expedientes/${processId}`}>
+          <Link className={cn(buttonClasses({ variant: "primary" }), "justify-self-start")} href={`/expedientes/${processId}`}>
             <Briefcase size={15} />
             Abrir expediente
           </Link>
@@ -154,6 +155,7 @@ export const PanelDerivacion = memo(function PanelDerivacion({
           </p>
           <Button
             variant="primary"
+            className="justify-self-start"
             disabled={!puedeDerivar || deriving || status !== "conforme"}
             onClick={derivar}
             type="button"
