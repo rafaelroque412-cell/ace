@@ -1508,6 +1508,30 @@ export const PASOS_F1: Record<string, PasoDetalle> = {
           baseLegal: "Art. 51.1-51.3 Reglamento · consultas técnicas absueltas obligatoriamente por el área usuaria y la DEC",
           ayuda: "Resumen de los comentarios recibidos de los proveedores y cómo se absolvieron. El detalle completo y el acta viven en la Pladicop."
       },
+      // La absolución (51.3) y la reunión de confirmación/aclaración (51.4) son
+      // DOS actos con DOS actas distintas —la de la reunión la dirige la DEC y se
+      // publica al día hábil siguiente de realizada (51.5)—; antes solo se
+      // referenciaba la de la absolución, así que si la entidad hacía la reunión
+      // no había dónde registrarla.
+      {
+          name: "difusion_reunion_acta_numero",
+          recomendado: true,
+          label: "N° del acta de la reunión de confirmación y/o aclaración",
+          tipo: "text",
+          dependeDe: { campo: "herr_difusion", valor: ["true"] },
+          baseLegal: "Art. 51.4-51.5 Reglamento · la DEC dirige la reunión de confirmación y/o aclaración con los proveedores, dentro de los 3 días hábiles siguientes a la absolución; el acta se publica en la Pladicop al día hábil siguiente de realizada",
+          ayuda: "Solo si, tras la absolución, se realizó la reunión de confirmación y/o aclaración con los proveedores. N° del acta publicada en la Pladicop.",
+          placeholder: "ACTA N° 004-2026-DEC-MDCH"
+      },
+      {
+          name: "difusion_reunion_acta_fecha",
+          recomendado: true,
+          label: "Fecha de publicación del acta de la reunión en la Pladicop",
+          tipo: "date",
+          dependeDe: { campo: "herr_difusion", valor: ["true"] },
+          baseLegal: "Art. 51.5 Reglamento",
+          ayuda: "Fecha en que se publicó en la Pladicop el acta de la reunión de confirmación y/o aclaración. Déjala vacía si esa reunión no se realizó."
+      },
       // Proveedores con los que se cotizó. Se registran en la CONSULTA al mercado
       // (Art. 49) y también en la INDAGACIÓN AVANZADA, donde el Art. 48.2 permite
       // "solicitar información a los potenciales proveedores". NO en la indagación

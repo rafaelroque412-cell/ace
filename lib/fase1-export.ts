@@ -1923,10 +1923,11 @@ function narrativaConsulta(
 /**
  * Difusión del requerimiento (Art. 51), para el sustento de la CONSULTA.
  *
- * La difusión es una herramienta de consulta al mercado (Art. 50.1.a). Su acta
- * de absolución es OBLIGATORIA (Art. 51.3) y la maneja la Pladicop; aquí solo se
- * REFERENCIA (N°, fecha y resumen), tal como se registró en A5. Si no se marcó
- * la difusión, no se escribe nada.
+ * La difusión es una herramienta de consulta al mercado (Art. 50.1.a). Son DOS
+ * actos con DOS actas —la absolución de consultas (Art. 51.3) y, si se realizó,
+ * la reunión de confirmación y/o aclaración que dirige la DEC (Art. 51.4-51.5)—
+ * y la maneja la Pladicop; aquí solo se REFERENCIAN (N°, fecha y resumen), tal
+ * como se registraron en A5. Si no se marcó la difusión, no se escribe nada.
  */
 function narrativaDifusion(a5: Record<string, unknown>): string {
   if (!a5.herr_difusion) return "";
@@ -1937,7 +1938,18 @@ function narrativaDifusion(a5: Record<string, unknown>): string {
     .filter(Boolean)
     .join(" ");
   const base = `Difusión del requerimiento (Art. 51): las consultas y/o comentarios técnicos se absolvieron mediante ${ref}, publicada en la Pladicop.`;
-  return resumen ? `${base} ${resumen}` : base;
+  const conResumen = resumen ? `${base} ${resumen}` : base;
+
+  // Reunión de confirmación y/o aclaración (Art. 51.4-51.5): un segundo acto,
+  // opcional en el formulario porque no siempre se llega a realizar, pero con
+  // su PROPIA acta cuando sí ocurre — no es la misma que la de la absolución.
+  const actaReunion = str(a5, "difusion_reunion_acta_numero");
+  const fechaReunion = str(a5, "difusion_reunion_acta_fecha");
+  if (!actaReunion && !fechaReunion) return conResumen;
+  const refReunion = [actaReunion ? `el ${actaReunion}` : "un acta", fechaReunion ? `del ${fechaCorta(fechaReunion)}` : ""]
+    .filter(Boolean)
+    .join(" ");
+  return `${conResumen} Reunión de confirmación y/o aclaración (Art. 51.4-51.5): dirigida por la DEC, con ${refReunion}, publicada en la Pladicop.`;
 }
 
 /** dd/mm/aaaa a partir de un ISO de <input type="date">. */

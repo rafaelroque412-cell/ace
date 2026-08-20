@@ -370,6 +370,42 @@ describe("Anexo N° 1 · huecos cerrados: difusión (Art. 51) y fecha de la inte
     expect(s).toContain("Se ajustó la garantía a 24 meses.");
   });
 
+  it("la reunión de confirmación (Art. 51.4-51.5), si se realizó, sale con SU PROPIA acta", async () => {
+    const c = await anexo1({
+      A5: {
+        data: {
+          nivel: "consulta_mercado_basica",
+          herr_difusion: true,
+          difusion_acta_numero: "ACTA N° 003-2026-DEC",
+          difusion_acta_fecha: "2026-05-20",
+          difusion_reunion_acta_numero: "ACTA N° 004-2026-DEC",
+          difusion_reunion_acta_fecha: "2026-05-22",
+        },
+        status: "hecho",
+      },
+    });
+    const s = c("B26");
+    // Las dos actas conviven: la de la absolución (51.3) y la de la reunión (51.5).
+    expect(s).toContain("ACTA N° 003-2026-DEC");
+    expect(s).toContain("Reunión de confirmación y/o aclaración (Art. 51.4-51.5)");
+    expect(s).toContain("ACTA N° 004-2026-DEC");
+  });
+
+  it("sin reunión de confirmación registrada, el sustento no la menciona", async () => {
+    const c = await anexo1({
+      A5: {
+        data: {
+          nivel: "consulta_mercado_basica",
+          herr_difusion: true,
+          difusion_acta_numero: "ACTA N° 003-2026-DEC",
+          difusion_acta_fecha: "2026-05-20",
+        },
+        status: "hecho",
+      },
+    });
+    expect(c("B26")).not.toContain("Reunión de confirmación");
+  });
+
   it("la fecha de la interacción sale en el sustento", async () => {
     const c = await anexo1({
       A5: { data: { nivel: "indagacion_basica", fuente_historica: true, interaccion_fecha: "2026-05-10" }, status: "hecho" },
