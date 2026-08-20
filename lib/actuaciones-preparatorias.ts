@@ -1563,8 +1563,15 @@ export const PASOS_F1: Record<string, PasoDetalle> = {
                   label: "Promedio de las propuestas"
               }
           ],
-          baseLegal: "Art. 5.c Ley (principio de valor por dinero) · Art. 53 Reglamento (cuantía)",
-          ayuda: "Con qué criterio se obtiene la cuantía de las propuestas de la tabla. Por defecto, la menor."
+          // El Art. 5.1.c de la Ley (valor por dinero) NO respalda "menor propuesta
+          // por defecto": dice explícitamente "que no procure únicamente el menor
+          // precio", y regula la evaluación de ofertas en la fase de SELECCIÓN, no
+          // la determinación de la cuantía en actuaciones preparatorias. El
+          // Reglamento no fija un método (menor/promedio) para esto —es un criterio
+          // operativo de la DEC—, así que se cita solo el Art. 53 (cuantía de la
+          // contratación), que sí es el artículo del que depende este campo.
+          baseLegal: "Art. 53 Reglamento (cuantía de la contratación)",
+          ayuda: "Con qué criterio se obtiene la cuantía de las propuestas de la tabla. Por defecto, la menor. El Reglamento no fija un método específico: es un criterio operativo de la DEC."
       },
       {
           name: "sustento_citas",
