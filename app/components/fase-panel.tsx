@@ -1057,15 +1057,33 @@ function conCitas(
   }
   if (code !== "A5") return base;
   const next = { ...base };
+  // El nivel de interacción REALIZADO arranca en el MÍNIMO que exige la
+  // segmentación (A2, Art. 127.1 para bienes/servicios · Art. 153.1 para
+  // obras/consultorías de obra): la DEC parte del piso legal en vez de un
+  // desplegable vacío, y puede subirlo si lo cree pertinente (Art. 127.2). Solo
+  // se siembra si el campo aún no existe: si la DEC ya eligió un nivel —igual,
+  // mayor o incluso insuficiente, que el aviso de abajo señala—, se respeta.
+  if (!("nivel" in base) && a2Data) {
+    const seg = clasificarSegmentacion({
+      objeto: a2Data.objeto === "obras_consultoria_obras" ? "obras_consultoria_obras" : "bienes_servicios",
+      cuantiaAlta: Boolean(a2Data.cuantiaAlta),
+      condicionesRiesgo: Array.isArray(a2Data.condicionesRiesgo) ? (a2Data.condicionesRiesgo as string[]) : [],
+      criteriosBasica: Array.isArray(a2Data.criteriosBasica) ? (a2Data.criteriosBasica as string[]) : [],
+      centralizada: Boolean(a2Data.centralizada),
+      esIoarr: Boolean(a2Data.esIoarr),
+    });
+    next.nivel = seg.nivel;
+  }
   // Solo se siembra lo que AÚN NO EXISTE: una cadena vacía guardada a
   // propósito es una decisión del usuario y no se pisa.
   //
   // La cita SIGUE al nivel elegido: el Art. 48 es de la indagación y los
   // Arts. 49-50 de la consulta al mercado. Antes se sembraba siempre el 48, así
-  // que una consulta salía sustentada con el artículo de la indagación. Sin
-  // nivel todavía no se siembra nada: no se puede citar lo que no se ha elegido.
+  // que una consulta salía sustentada con el artículo de la indagación. Se lee
+  // de `next.nivel` (no `base.nivel`) para que, si el nivel se acaba de sembrar
+  // arriba, la cita salga junto con él en la misma pasada.
   if (!("sustento_citas" in base)) {
-    const citas = citasDeNivel(String(base.nivel ?? ""));
+    const citas = citasDeNivel(String(next.nivel ?? ""));
     if (citas) next.sustento_citas = citas;
   }
   // La fecha de elaboración arranca hoy y queda editable: es la fecha del día
