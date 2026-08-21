@@ -15,6 +15,9 @@ import { searchLegalSources } from "./legal-chat";
 import { objectTypeLabel, processDocKindLabel, processTypeLabel } from "./legal-taxonomy";
 import { evaluateProcurementRules } from "./procurement-rules";
 import type { ProcurementProcess } from "./processes";
+import { draftKinds, type DraftKind } from "./draft-kinds";
+
+export { draftKinds, type DraftKind };
 
 export type ProcessDocumentWithText = {
   id: string;
@@ -52,40 +55,6 @@ export type ProcessRiskResult = {
   items: ProcessRiskItem[];
   model: string;
 };
-
-type DraftKind =
-  | "informe_tecnico"
-  | "informe_legal"
-  | "acta_admision"
-  | "acta_calificacion"
-  | "acta_buena_pro"
-  | "acta_desierto"
-  | "memorando"
-  | "informe_evaluacion"
-  // Ejecución contractual (Módulo 8) y archivo (Módulo 9)
-  | "orden_inicio"
-  | "acta_conformidad"
-  | "informe_penalidad"
-  | "informe_adicional"
-  | "acta_liquidacion"
-  | "expediente_unico";
-
-export const draftKinds: Array<{ label: string; value: DraftKind }> = [
-  { label: "Informe técnico", value: "informe_tecnico" },
-  { label: "Informe legal", value: "informe_legal" },
-  { label: "Acta de admisión", value: "acta_admision" },
-  { label: "Acta de calificación", value: "acta_calificacion" },
-  { label: "Acta de otorgamiento de buena pro", value: "acta_buena_pro" },
-  { label: "Acta de declaratoria de desierto", value: "acta_desierto" },
-  { label: "Memorando", value: "memorando" },
-  { label: "Informe de evaluación de ofertas", value: "informe_evaluacion" },
-  { label: "Orden de inicio de la prestación", value: "orden_inicio" },
-  { label: "Acta de conformidad", value: "acta_conformidad" },
-  { label: "Informe de penalidad", value: "informe_penalidad" },
-  { label: "Informe de adicionales / ampliaciones", value: "informe_adicional" },
-  { label: "Acta de liquidación del contrato", value: "acta_liquidacion" },
-  { label: "Expediente electrónico único (índice)", value: "expediente_unico" },
-];
 
 function normalize(text: string) {
   return text

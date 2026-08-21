@@ -30,6 +30,7 @@ import {
   processTypeLabel,
 } from "@/lib/legal-taxonomy";
 import { instruirExpediente } from "@/lib/expediente-instruccion";
+import { draftKinds } from "@/lib/draft-kinds";
 import { PhaseTracker } from "./phase-tracker";
 import { FaseUnoPanel } from "./fase-preparatoria/fase-uno-panel";
 import { FaseDosPanel } from "./fase-seleccion/fase-dos-panel";
@@ -125,17 +126,6 @@ type RiskRow = {
   }>;
   created_at: string;
 };
-
-const draftOptions = [
-  { label: "Informe técnico", value: "informe_tecnico" },
-  { label: "Informe legal", value: "informe_legal" },
-  { label: "Acta de admisión", value: "acta_admision" },
-  { label: "Acta de calificación", value: "acta_calificacion" },
-  { label: "Acta de buena pro", value: "acta_buena_pro" },
-  { label: "Acta de desierto", value: "acta_desierto" },
-  { label: "Memorando", value: "memorando" },
-  { label: "Informe de evaluación", value: "informe_evaluacion" },
-];
 
 // Insignia de resultado de evaluación. Valores computados EFECTIVOS (styles.css
 // encadena varios overrides: peso 780 no 900, y cada estado toma su token
@@ -926,7 +916,7 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
               <label className="grid gap-1.5">
                 <span className="text-[12px] font-semibold text-muted">Documento a generar</span>
                 <Select onChange={(event) => setDraftKind(event.target.value)} value={draftKind}>
-                  {draftOptions.map((item) => (
+                  {draftKinds.map((item) => (
                     <option key={item.value} value={item.value}>
                       {item.label}
                     </option>
