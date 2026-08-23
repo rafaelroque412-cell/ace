@@ -1,4 +1,4 @@
-// Lee un .docx ya generado y lo devuelve como párrafos con formato.
+// Lee un .docx ya generado y lo devuelve como párrafos (y tablas) con formato.
 //
 // ── Por qué extraer del archivo y no componer aparte ──────────────────────────
 //
@@ -28,6 +28,14 @@ export type ParrafoDocx = {
   alineacion: string;
   fragmentos: FragmentoDocx[];
 };
+
+export type TablaDocx = {
+  /** Cada fila es una lista de celdas; cada celda, sus párrafos (casi siempre uno). */
+  filas: { cabecera: boolean; celdas: ParrafoDocx[][] }[];
+};
+
+/** Un bloque del cuerpo del documento, en el orden en que aparece. */
+export type BloqueDocx = { tipo: "parrafo"; parrafo: ParrafoDocx } | { tipo: "tabla"; tabla: TablaDocx };
 
 /** Quita las etiquetas XML de un fragmento y decodifica las entidades básicas. */
 function limpiar(xml: string): string {
@@ -65,26 +73,89 @@ function leerRun(runXml: string): FragmentoDocx {
 }
 
 /**
+ * `<w:p>…</w:p>` (o autocerrado) → párrafo con formato.
+ *
+ * Un encabezado de sección (`heading()` en los compositores, `HeadingLevel.*`
+ * de la librería `docx`) no lleva `<w:b/>` en sus runs: la negrita la aporta el
+ * ESTILO del párrafo (`<w:pStyle w:val="Heading2"/>`), definido en
+ * `word/styles.xml`, no el run. Sin esto, un título de sección salía sin
+ * negrita en la previa aunque en Word sí la tuviera.
+ */
+function leerParrafo(bloque: string): ParrafoDocx {
+  const alineacion = bloque.match(/<w:jc\s+w:val="([^"]+)"/)?.[1] ?? "";
+  const esEncabezado = /<w:pStyle\s+w:val="Heading\d"/.test(bloque);
+  const fragmentos: FragmentoDocx[] = [];
+  for (const r of bloque.matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)) {
+    const frag = leerRun(r[0]);
+    if (frag.texto) fragmentos.push(esEncabezado ? { ...frag, negrita: true } : frag);
+  }
+  return { alineacion, fragmentos };
+}
+
+/**
+ * `<w:tbl>…</w:tbl>` → tabla con sus filas y celdas.
+ *
+ * Sin esto, una matriz (riesgo, cronograma) se leía como una secuencia de
+ * párrafos sueltos —los `<w:p>` de cada celda, uno tras otro, sin más—: el
+ * texto llegaba pero la cuadrícula desaparecía por completo.
+ */
+function leerTabla(bloque: string): TablaDocx {
+  const filas: TablaDocx["filas"] = [];
+  for (const tr of bloque.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)) {
+    const filaXml = tr[0];
+    const cabecera = /<w:tblHeader\s*\/>|<w:tblHeader\s+w:val="(?:true|1|on)"/.test(filaXml);
+    const celdas: ParrafoDocx[][] = [];
+    for (const tc of filaXml.matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)) {
+      const celdaXml = tc[0];
+      const parrafos: ParrafoDocx[] = [];
+      for (const p of celdaXml.matchAll(/<w:p\b[^>]*\/>|<w:p\b[\s\S]*?<\/w:p>/g)) {
+        parrafos.push(leerParrafo(p[0]));
+      }
+      celdas.push(parrafos);
+    }
+    filas.push({ cabecera, celdas });
+  }
+  return { filas };
+}
+
+/**
  * `.docx` (buffer) → lista de párrafos con formato.
  *
  * Los párrafos vacíos se conservan: en estos formatos el espaciado en blanco
  * (líneas de firma, separaciones) es parte de la maqueta, no ruido.
+ *
+ * No entiende tablas (las aplana a sus párrafos internos, sin la cuadrícula):
+ * sirve para los documentos de A6, que no llevan ninguna. Para documentos con
+ * tablas, usar `leerDocxBloques`.
  */
 export async function leerDocx(buffer: Buffer | Uint8Array): Promise<ParrafoDocx[]> {
+  const bloques = await leerDocxBloques(buffer);
+  const parrafos: ParrafoDocx[] = [];
+  for (const b of bloques) {
+    if (b.tipo === "parrafo") parrafos.push(b.parrafo);
+    else for (const fila of b.tabla.filas) for (const celda of fila.celdas) parrafos.push(...celda);
+  }
+  return parrafos;
+}
+
+/**
+ * `.docx` (buffer) → bloques en el orden del documento, con las tablas intactas.
+ *
+ * El cuerpo del documento solo anida párrafos y tablas a su nivel superior, así
+ * que un único recorrido secuencial con alternancia basta: al llegar a un
+ * `<w:tbl>` el patrón lo consume ENTERO (con sus `<w:p>` internos incluidos)
+ * antes de que el regex pueda intentar matchear esos párrafos por separado, así
+ * que nunca se cuentan dos veces.
+ */
+export async function leerDocxBloques(buffer: Buffer | Uint8Array): Promise<BloqueDocx[]> {
   const zip = await JSZip.loadAsync(buffer);
   const xml = (await zip.file("word/document.xml")?.async("string")) ?? "";
 
-  const parrafos: ParrafoDocx[] = [];
-  // `<w:p …>…</w:p>` o `<w:p/>` autocerrado (un párrafo vacío de la maqueta).
-  for (const p of xml.matchAll(/<w:p\b[^>]*\/>|<w:p\b[\s\S]*?<\/w:p>/g)) {
-    const bloque = p[0];
-    const alineacion = bloque.match(/<w:jc\s+w:val="([^"]+)"/)?.[1] ?? "";
-    const fragmentos: FragmentoDocx[] = [];
-    for (const r of bloque.matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)) {
-      const frag = leerRun(r[0]);
-      if (frag.texto) fragmentos.push(frag);
-    }
-    parrafos.push({ alineacion, fragmentos });
+  const bloques: BloqueDocx[] = [];
+  for (const m of xml.matchAll(/<w:tbl\b[\s\S]*?<\/w:tbl>|<w:p\b[^>]*\/>|<w:p\b[\s\S]*?<\/w:p>/g)) {
+    const bloque = m[0];
+    if (bloque.startsWith("<w:tbl")) bloques.push({ tipo: "tabla", tabla: leerTabla(bloque) });
+    else bloques.push({ tipo: "parrafo", parrafo: leerParrafo(bloque) });
   }
-  return parrafos;
+  return bloques;
 }

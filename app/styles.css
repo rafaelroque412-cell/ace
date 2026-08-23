@@ -10742,6 +10742,30 @@ a.panelOrigen:hover {
   color: #999;
 }
 
+/* Tabla de N columnas (matriz de segmentación, cronograma): a diferencia de
+   `.hojaTabla` (etiqueta/valor a 2 columnas con el `th` fijo al 38%), aquí la
+   cabecera va en la primera fila, sombreada, y las columnas se reparten según
+   su contenido —igual que en el .docx que se exporta. */
+.hojaTablaGrid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0 9px;
+  font-size: 11.5px;
+}
+
+.hojaTablaGrid th,
+.hojaTablaGrid td {
+  border: 1px solid #999;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.hojaTablaGrid th {
+  background: #e7e9ec;
+  font-weight: 700;
+}
+
 /* Aviso de cuántos datos faltan, sobre la hoja. */
 .previaAviso {
   margin: 0 0 12px;

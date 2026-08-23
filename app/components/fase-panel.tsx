@@ -127,6 +127,7 @@ import { ComitePreviewModal } from "./comite-preview-modal";
 import { InformeAprobacionPreviewModal } from "./informe-aprobacion-preview-modal";
 import { Anexo2PreviewModal } from "./anexo2-preview-modal";
 import { EvaluadoresPreviewModal } from "./evaluadores-preview-modal";
+import { SegmentacionPreviewModal } from "./segmentacion-preview-modal";
 import { AdelantosEditor, CronogramaEditor, FactoresEditor, PuntosEditor, RolesEditor } from "./cronograma-roles-editor";
 import { EvaluadoresEditor } from "./evaluadores-editor";
 import {
@@ -154,6 +155,7 @@ type FormatoExport = {
   word?: boolean;
   /** Clave de la vista previa de este formato, si tiene una. */
   previa?:
+    | "segmentacion"
     | "estrategia"
     | "anexo1"
     | "certificacion"
@@ -167,7 +169,7 @@ type FormatoExport = {
 // designación, declaración jurada y consentimiento de datos personales), así que
 // cada entrada es una LISTA aunque casi todos exporten un solo formato.
 const EXPORT_FORMATO: Record<string, FormatoExport[]> = {
-  A2: [{ path: "fase1/segmentacion-informe", label: "Informe de Segmentación", word: true }],
+  A2: [{ path: "fase1/segmentacion-informe", label: "Informe de Segmentación", word: true, previa: "segmentacion" }],
   A4: [{ path: "fase1/export?formato=estrategia", label: "Formato de Estrategia", previa: "estrategia" }],
   A5: [{ path: "fase1/export?formato=anexo1", label: "Anexo N° 1 (Interacción)", previa: "anexo1" }],
   A6: [
@@ -2857,6 +2859,13 @@ function PasoCard({
               condición es la clave y no el código del paso. La descarga que
               recibe el modal es la del formato de ESA previa, no la del primer
               exportable. */}
+          {previaAbierta?.previa === "segmentacion" ? (
+            <SegmentacionPreviewModal
+              onClose={cerrarPrevia}
+              onDescargar={() => void descargar(previaAbierta)}
+              processId={processId}
+            />
+          ) : null}
           {previaAbierta?.previa === "anexo1" ? (
             <Anexo1PreviewModal
               onClose={cerrarPrevia}
