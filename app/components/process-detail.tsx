@@ -270,6 +270,7 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
   const [detectingRisks, setDetectingRisks] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [declaringDesierto, setDeclaringDesierto] = useState(false);
+  const [confirmDesierto, setConfirmDesierto] = useState(false);
   const [confirmDeleteProcess, setConfirmDeleteProcess] = useState(false);
   const [deletingProcess, setDeletingProcess] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -550,9 +551,7 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
   }
 
   async function declareDesierto() {
-    if (!window.confirm("¿Declarar DESIERTO este procedimiento? La selección se cierra sin adjudicación.")) {
-      return;
-    }
+    setConfirmDesierto(false);
     setDeclaringDesierto(true);
     setError("");
     try {
@@ -661,16 +660,23 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
             <span className={`processStatus status-${process.status}`}>{processStatusLabel(process.status)}</span>
           )}
           {permisos.manage ? (
-            <Button
-              variant="primary"
-              destructive
-              size="sm"
-              disabled={deletingProcess}
-              loading={deletingProcess}
-              onClick={() => setConfirmDeleteProcess(true)}
-            >
-              {!deletingProcess ? <Trash2 size={14} /> : null} Eliminar expediente
-            </Button>
+            // Separado del selector de Estado con un borde y margen propios: son
+            // dos acciones de frecuencia muy distinta (cambiar estado es habitual,
+            // eliminar no) y antes quedaban una junto a la otra sin más que un
+            // `gap-2`, a un clic de distancia por error. El variant "ghost" le
+            // baja el peso visual sin ocultarlo: sigue en rojo al pasar el mouse.
+            <div className="ml-1 flex items-end border-l border-line pl-3">
+              <Button
+                variant="ghost"
+                destructive
+                size="sm"
+                disabled={deletingProcess}
+                loading={deletingProcess}
+                onClick={() => setConfirmDeleteProcess(true)}
+              >
+                {!deletingProcess ? <Trash2 size={14} /> : null} Eliminar expediente
+              </Button>
+            </div>
           ) : null}
         </div>
       </header>
@@ -931,7 +937,7 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
                 <button
                   className="secondaryButton compactButton desiertoButton"
                   disabled={declaringDesierto}
-                  onClick={declareDesierto}
+                  onClick={() => setConfirmDesierto(true)}
                   type="button"
                 >
                   {declaringDesierto ? <Loader size={15} /> : <Ban size={15} />}
@@ -1010,6 +1016,16 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
         confirmLabel="Eliminar"
         onConfirm={() => void deleteProcess()}
         onCancel={() => setConfirmDeleteProcess(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDesierto}
+        title="Declarar desierto"
+        message="¿Declarar DESIERTO este procedimiento? La selección se cierra sin adjudicación."
+        tone="warning"
+        confirmLabel="Declarar desierto"
+        onConfirm={() => void declareDesierto()}
+        onCancel={() => setConfirmDesierto(false)}
       />
     </div>
   );
