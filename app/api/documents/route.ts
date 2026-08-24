@@ -45,9 +45,18 @@ export async function GET() {
 
     getSupabaseServerConfig();
 
-    const documents = await supabaseRest<DocumentRecord[]>(
-      "documents?select=id,title,file_name,file_size,mime_type,storage_bucket,storage_path,document_type,process_type,source_entity,status,error_message,metadata,created_at,updated_at&order=created_at.desc&limit=30",
-    );
+    let query =
+      "documents?select=id,title,file_name,file_size,mime_type,storage_bucket,storage_path,document_type,process_type,source_entity,status,error_message,metadata,created_at,updated_at,oficina_id,es_institucional&order=created_at.desc&limit=30";
+    // La biblioteca es de la oficina que sube: cada quien ve la suya y lo
+    // marcado como institucional (la Ley, el Reglamento, plantillas comunes).
+    // Admin ve todo, igual que el resto del scope por oficina (lib/auth.ts).
+    if (!auth.user.isAdmin) {
+      query += auth.user.oficinaId
+        ? `&or=(es_institucional.eq.true,oficina_id.eq.${auth.user.oficinaId})`
+        : "&es_institucional=eq.true";
+    }
+
+    const documents = await supabaseRest<DocumentRecord[]>(query);
 
     return NextResponse.json({ documents });
   } catch (error) {
@@ -111,6 +120,9 @@ export async function POST(request: Request) {
         : null;
     const documentType = normalizeDocumentType(formData.get("documentType"));
     const requestedProcessType = normalizeProcessType(formData.get("processType"));
+    // Institucional = visible para cualquier oficina; si no, solo la que sube
+    // lo ve (y admin, que ve todo). Default false: la excepción se marca.
+    const esInstitucional = formData.get("esInstitucional") === "true";
 
     const scopedProcessType = resolveDocumentProcessType(documentType, requestedProcessType);
     if ("error" in scopedProcessType) {
@@ -150,6 +162,7 @@ export async function POST(request: Request) {
     const inserted = await supabaseRest<DocumentRecord[]>("documents", {
       body: JSON.stringify({
         document_type: documentType,
+        es_institucional: esInstitucional,
         file_name: file.name,
         file_size: file.size,
         metadata: {
@@ -162,6 +175,7 @@ export async function POST(request: Request) {
           uploadSource: "web",
         },
         mime_type: file.type,
+        oficina_id: auth.user.oficinaId ?? null,
         process_type: processType,
         source_entity: sourceEntity,
         status: "uploaded",

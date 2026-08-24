@@ -18,6 +18,10 @@ export type DocumentRecord = {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  /** Oficina de quien lo subió (FK a expedientes_oficinas); null en filas anteriores a la migración. */
+  oficina_id?: string | null;
+  /** Visible para cualquier oficina (p. ej. la Ley/Reglamento), no solo la que lo subió. */
+  es_institucional?: boolean;
 };
 
 export async function getSupabaseAdminClient() {
