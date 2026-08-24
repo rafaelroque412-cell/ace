@@ -14,6 +14,7 @@
 import {
   AlignmentType,
   Document,
+  Footer,
   Packer,
   PageBreak,
   Paragraph,
@@ -60,6 +61,8 @@ export type EvaluadoresDocInput = {
    * Se toma de Configuración › Usuarios (el usuario con rol de la DEC).
    */
   emisor: { grado?: string; nombre: string };
+  /** Nombre completo del usuario en sesión que generó el documento. */
+  elaboradoPor?: string | null;
 };
 
 /**
@@ -77,7 +80,13 @@ export function numeroMemo(raw: string): string {
     .trim();
 }
 
-function base(children: Paragraph[]): Document {
+/**
+ * `elaboradoPor` es la trazabilidad de quién generó el documento en el
+ * sistema, no una firma: va en el pie de página —se repite en cada una, a
+ * diferencia de un párrafo en el cuerpo— y no en el cuerpo que se imprime y
+ * se firma.
+ */
+function base(children: Paragraph[], elaboradoPor?: string | null): Document {
   return new Document({
     styles: {
       default: {
@@ -86,6 +95,18 @@ function base(children: Paragraph[]): Document {
     },
     sections: [
       {
+        footers: elaboradoPor
+          ? {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [new TextRun({ font: FUENTE, size: 16, text: `Elaborado por: ${elaboradoPor}` })],
+                  }),
+                ],
+              }),
+            }
+          : undefined,
         properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
         children,
       },
@@ -229,7 +250,7 @@ export async function buildMemoDesignacionDocx(input: EvaluadoresDocInput): Prom
     p([run("Atentamente;")], AlignmentType.LEFT),
   ];
 
-  return Buffer.from(await Packer.toBuffer(base(children)));
+  return Buffer.from(await Packer.toBuffer(base(children, input.elaboradoPor)));
 }
 
 // ===== 2. Anexo N° 1 · Declaración jurada de no conflicto de interés =====
@@ -284,7 +305,7 @@ function paginaJurada(input: EvaluadoresDocInput, i: IntegranteDoc, esUltima: bo
 export async function buildDeclaracionJuradaDocx(input: EvaluadoresDocInput): Promise<Buffer> {
   const integrantes = input.integrantes.length ? input.integrantes : [{ nombre: "", dni: "" }];
   const children = integrantes.flatMap((i, idx) => paginaJurada(input, i, idx === integrantes.length - 1));
-  return Buffer.from(await Packer.toBuffer(base(children)));
+  return Buffer.from(await Packer.toBuffer(base(children, input.elaboradoPor)));
 }
 
 // ===== 3. Anexo N° 3 · Consentimiento para el tratamiento de datos personales =====
@@ -343,7 +364,7 @@ function paginaConsentimiento(input: EvaluadoresDocInput, i: IntegranteDoc, esUl
 export async function buildConsentimientoDatosDocx(input: EvaluadoresDocInput): Promise<Buffer> {
   const integrantes = input.integrantes.length ? input.integrantes : [{ nombre: "", dni: "" }];
   const children = integrantes.flatMap((i, idx) => paginaConsentimiento(input, i, idx === integrantes.length - 1));
-  return Buffer.from(await Packer.toBuffer(base(children)));
+  return Buffer.from(await Packer.toBuffer(base(children, input.elaboradoPor)));
 }
 
 export type EvaluadorDocKind = "memo" | "jurada" | "consentimiento";

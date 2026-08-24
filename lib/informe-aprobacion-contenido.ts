@@ -34,7 +34,14 @@ export type Bloque =
   | { tipo: "tabla"; filas: Array<{ etiqueta: string; valor: string }> }
   /** Regla horizontal a todo el ancho del área de escritura. */
   | { tipo: "linea" }
-  | { tipo: "espacio" };
+  | { tipo: "espacio" }
+  /**
+   * Trazabilidad de quién generó el documento en el sistema —no una firma—:
+   * va en el pie de página, no en el cuerpo que se imprime. Es un bloque
+   * aparte (no "parrafo") para que quien arma el .docx sepa desviarlo al
+   * `Footer` en vez de meterlo entre los párrafos del cuerpo.
+   */
+  | { tipo: "pie"; fragmentos: Fragmento[] };
 
 const VACIO = "—";
 
@@ -254,6 +261,10 @@ export function contenidoInformeAprobacion(d: DatosInformeAprobacion): Bloque[] 
     { tipo: "espacio" },
     propio("Atentamente,"),
   );
+
+  if (d.elaboradoPor) {
+    bloques.push({ fragmentos: [{ texto: `Elaborado por: ${d.elaboradoPor}` }], tipo: "pie" });
+  }
 
   return bloques;
 }

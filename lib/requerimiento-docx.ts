@@ -10,6 +10,7 @@
 import {
   AlignmentType,
   Document,
+  Footer,
   Packer,
   Paragraph,
   Table,
@@ -103,6 +104,8 @@ export type RequerimientoDocInput = {
   fuenteFinanciamiento: string;
   clasificadorGasto: string;
   montoEstimado: string;
+  /** Nombre completo del usuario en sesión que descargó el requerimiento. */
+  elaboradoPor?: string | null;
 };
 
 const texto = (v: string | null | undefined) => (v ?? "").trim();
@@ -647,10 +650,31 @@ export async function generarRequerimientoDocx(input: RequerimientoDocInput): Pr
   if (texto(input.areaUsuaria)) {
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [run(texto(input.areaUsuaria))] }));
   }
+  const elaboradoPor = texto(input.elaboradoPor);
 
   const doc = new Document({
     styles: { default: { document: { run: { font: FUENTE, size: TAM } } } },
-    sections: [{ properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children }],
+    sections: [
+      {
+        // Trazabilidad de quién descargó el documento (distinta de la firma de
+        // arriba, que es del responsable del área usuaria registrado en la
+        // ficha, Art. 44): va en el pie de página, no en el cuerpo que se firma.
+        footers: elaboradoPor
+          ? {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [run(`Elaborado por: ${elaboradoPor}`, { size: 16 })],
+                  }),
+                ],
+              }),
+            }
+          : undefined,
+        properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
+        children,
+      },
+    ],
   });
   return Buffer.from(await Packer.toBuffer(doc));
 }

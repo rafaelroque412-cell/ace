@@ -10695,6 +10695,18 @@ a.panelOrigen:hover {
   margin: 0 0 6px;
 }
 
+/* Pie de página del .docx ("Elaborado por"): separado del cuerpo con un
+   borde superior —en Word queda al pie de cada hoja; aquí, al final de la
+   previa— y a menor tamaño, como en el documento real (8pt). */
+.hojaPie {
+  margin: 16px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
 .hojaVinetas {
   margin: 0 0 9px;
   padding-left: 22px;

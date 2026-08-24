@@ -1,6 +1,7 @@
 import {
   AlignmentType,
   Document,
+  Footer,
   HeadingLevel,
   Packer,
   Paragraph,
@@ -427,6 +428,25 @@ function paragraph(text: string) {
   return new Paragraph({ children: [new TextRun(text)], spacing: { after: 120 } });
 }
 
+/**
+ * Pie de página con la trazabilidad de quién generó el documento —no una
+ * firma, así que no va en el cuerpo que se imprime—: alineado a la izquierda,
+ * a 8 pt.
+ */
+function footerElaboradoPor(elaboradoPor: string | null | undefined) {
+  if (!elaboradoPor) return undefined;
+  return {
+    default: new Footer({
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          children: [new TextRun({ size: 16, text: `Elaborado por: ${elaboradoPor}` })],
+        }),
+      ],
+    }),
+  };
+}
+
 function heading(text: string) {
   return new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 220, after: 80 }, text });
 }
@@ -454,6 +474,7 @@ async function buildExpedienteUnicoDocx(
   documents: DraftDocumentRow[],
   processType: string,
   today: string,
+  elaboradoPor?: string | null,
 ): Promise<Buffer> {
   const fecha = (value?: string | null) =>
     value ? new Date(value).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
@@ -499,7 +520,7 @@ async function buildExpedienteUnicoDocx(
     paragraph("Firma / responsable del archivo: ______________________________"),
   );
 
-  const document = new Document({ sections: [{ children }] });
+  const document = new Document({ sections: [{ children, footers: footerElaboradoPor(elaboradoPor) }] });
   return Buffer.from(await Packer.toBuffer(document));
 }
 
@@ -516,6 +537,8 @@ export async function buildAdministrativeDraftDocx(input: {
   process: ProcurementProcess;
   risks?: ProcessRiskResult | null;
   documents?: DraftDocumentRow[];
+  /** Nombre completo del usuario en sesión que generó el borrador. */
+  elaboradoPor?: string | null;
 }): Promise<Buffer> {
   const processType = input.process.procedure_type
     ? processTypeLabel(input.process.procedure_type) ?? input.process.procedure_type
@@ -526,7 +549,7 @@ export async function buildAdministrativeDraftDocx(input: {
   // Módulo 9: el "expediente electrónico único" es un índice/carátula que lista
   // todas las actuaciones cargadas, no el documento administrativo de plantilla.
   if (input.draftKind === "expediente_unico") {
-    return buildExpedienteUnicoDocx(input.process, input.documents ?? [], processType, today);
+    return buildExpedienteUnicoDocx(input.process, input.documents ?? [], processType, today, input.elaboradoPor);
   }
   const sources = await searchLegalSources({
     filters: { processType: input.process.procedure_type ?? "" },
@@ -604,6 +627,6 @@ export async function buildAdministrativeDraftDocx(input: {
     paragraph("Firma / área emisora: ______________________________"),
   );
 
-  const document = new Document({ sections: [{ children }] });
+  const document = new Document({ sections: [{ children, footers: footerElaboradoPor(input.elaboradoPor) }] });
   return Buffer.from(await Packer.toBuffer(document));
 }

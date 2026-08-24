@@ -157,5 +157,27 @@ export async function leerDocxBloques(buffer: Buffer | Uint8Array): Promise<Bloq
     if (bloque.startsWith("<w:tbl")) bloques.push({ tipo: "tabla", tabla: leerTabla(bloque) });
     else bloques.push({ tipo: "parrafo", parrafo: leerParrafo(bloque) });
   }
+
+  // El pie de página ("Elaborado por") vive en un XML aparte
+  // (`word/footerN.xml`), no en `word/document.xml`: sin esto, la previa
+  // dejaba de enseñarlo por completo en cuanto se movía del cuerpo al pie.
+  const footers = Object.keys(zip.files)
+    .filter((name) => /^word\/footer\d+\.xml$/.test(name))
+    .sort();
+  for (const name of footers) {
+    const footerXml = (await zip.file(name)?.async("string")) ?? "";
+    const parrafosFooter: ParrafoDocx[] = [];
+    for (const p of footerXml.matchAll(/<w:p\b[^>]*\/>|<w:p\b[\s\S]*?<\/w:p>/g)) {
+      const parrafo = leerParrafo(p[0]);
+      if (parrafo.fragmentos.length > 0) parrafosFooter.push(parrafo);
+    }
+    if (parrafosFooter.length > 0) {
+      // Un párrafo vacío como separador: en la hoja de la previa no hay línea
+      // divisoria de página que marque dónde empieza el pie.
+      bloques.push({ tipo: "parrafo", parrafo: { alineacion: "", fragmentos: [] } });
+      for (const parrafo of parrafosFooter) bloques.push({ tipo: "parrafo", parrafo });
+    }
+  }
+
   return bloques;
 }

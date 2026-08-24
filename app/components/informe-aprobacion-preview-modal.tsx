@@ -162,5 +162,15 @@ function BloqueVista({ bloque }: { bloque: Bloque }) {
       return <hr className="hojaLinea" />;
     case "espacio":
       return <div className="hojaEspacio" />;
+    case "pie":
+      return (
+        <p className="hojaPie">
+          {bloque.fragmentos.map((f, i) => {
+            if (f.negrita) return <strong key={i}>{f.texto}</strong>;
+            if (f.cursiva) return <em key={i}>{f.texto}</em>;
+            return <span key={i}>{f.texto}</span>;
+          })}
+        </p>
+      );
   }
 }

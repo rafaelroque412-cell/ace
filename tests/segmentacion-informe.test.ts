@@ -348,6 +348,22 @@ describe("buildSegmentacionInformeDocx", () => {
     expect(footer).toContain("NUMPAGES");
   });
 
+  // "Elaborado por" es la trazabilidad de quién generó el documento, no una
+  // firma: va en el pie de página (se repite en cada hoja), a la izquierda y
+  // a 8pt — no en el cuerpo que se imprime y se firma.
+  it('"Elaborado por" va en el pie de página, a la izquierda y a 8pt', async () => {
+    const { documento, footer } = await partesDelDocx(
+      await buildSegmentacionInformeDocx({ ...base, elaboradoPor: "Juan Pérez — DEC" }),
+    );
+
+    expect(documento).not.toContain("Elaborado por");
+    expect(footer).not.toBeNull();
+    expect(footer).toContain("Elaborado por: Juan Pérez — DEC");
+    expect(footer).toContain('<w:jc w:val="left"');
+    // docx mide en MEDIOS puntos: 16 = 8pt.
+    expect(footer).toContain('<w:sz w:val="16"');
+  });
+
   it("las citas de la norma van en cursiva y sangradas, separadas del análisis", async () => {
     const { documento } = await partesDelDocx(await buildSegmentacionInformeDocx(base));
     const texto = await textoDelDocx(await buildSegmentacionInformeDocx(base));

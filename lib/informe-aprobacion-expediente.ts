@@ -53,6 +53,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
   Packer,
   Paragraph,
   Tab,
@@ -131,6 +132,8 @@ export type DatosInformeAprobacion = {
    * titular o la AGA delegó la facultad. `null` cuando la aprobación no es delegada.
    */
   delegacion: { resolucion: string; fecha: string } | null;
+  /** Nombre completo del usuario en sesión que generó el informe. */
+  elaboradoPor?: string | null;
 };
 
 import { contenidoInformeAprobacion, type Bloque, type Fragmento } from "./informe-aprobacion-contenido";
@@ -249,14 +252,44 @@ function bloqueAParrafos(b: Bloque): (Paragraph | Table)[] {
       ];
     case "espacio":
       return [new Paragraph({ children: [], spacing: { after: 60, line: INTERLINEADO } })];
+    // Se desvía al `Footer` de la sección (ver `construirInformeAprobacion`),
+    // así que aquí no produce nada en el cuerpo.
+    case "pie":
+      return [];
   }
 }
 
 export async function construirInformeAprobacion(d: DatosInformeAprobacion): Promise<Buffer> {
-  const hijos = contenidoInformeAprobacion(d).flatMap(bloqueAParrafos);
+  const bloques = contenidoInformeAprobacion(d);
+  // El pie de página ("Elaborado por") viaja como bloque aparte —no un
+  // párrafo del cuerpo— para que la vista previa (que lee estos mismos
+  // bloques) y el .docx real coincidan sin una segunda composición.
+  const piePagina = bloques.filter((b): b is Extract<Bloque, { tipo: "pie" }> => b.tipo === "pie");
+  const hijos = bloques.flatMap(bloqueAParrafos);
 
   const doc = new Document({
-    sections: [{ children: hijos, properties: { page: { margin: MARGENES } } }],
+    sections: [
+      {
+        children: hijos,
+        footers:
+          piePagina.length > 0
+            ? {
+                default: new Footer({
+                  children: piePagina.map(
+                    (b) =>
+                      new Paragraph({
+                        alignment: AlignmentType.LEFT,
+                        children: b.fragmentos.map(
+                          (f) => new TextRun({ bold: f.negrita, font: FUENTE, italics: f.cursiva, size: 16, text: f.texto }),
+                        ),
+                      }),
+                  ),
+                }),
+              }
+            : undefined,
+        properties: { page: { margin: MARGENES } },
+      },
+    ],
     styles: {
       default: {
         document: {

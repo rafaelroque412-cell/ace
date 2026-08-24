@@ -11,7 +11,7 @@
 // texto ISO y se formatean partiendo la cadena, sin zona horaria), para poder
 // probarlo sin red ni relojes.
 
-import { AlignmentType, Document, Packer, Paragraph, TextRun } from "docx";
+import { AlignmentType, Document, Footer, Packer, Paragraph, TextRun } from "docx";
 
 export type AnuncioFuturoInput = {
   entidad: string;
@@ -37,6 +37,8 @@ export type AnuncioFuturoInput = {
   plazoReducido?: number | null;
   /** Fecha del documento (ISO); la fija el llamador para no depender del reloj. */
   hoy: string;
+  /** Nombre completo del usuario en sesión que generó el anuncio. */
+  elaboradoPor?: string | null;
 };
 
 const MESES = [
@@ -145,8 +147,28 @@ export async function buildAnuncioFuturoDocx(input: AnuncioFuturoInput): Promise
       ],
     }),
   );
-
-  const document = new Document({ sections: [{ children: hijos }] });
+  const document = new Document({
+    sections: [
+      {
+        // "Elaborado por" es la trazabilidad de quién generó el documento en el
+        // sistema, no una firma: va en el pie de página, no en el cuerpo que se
+        // imprime y se firma.
+        footers: input.elaboradoPor
+          ? {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [new TextRun({ size: 16, text: `Elaborado por: ${input.elaboradoPor}` })],
+                  }),
+                ],
+              }),
+            }
+          : undefined,
+        children: hijos,
+      },
+    ],
+  });
   return Buffer.from(await Packer.toBuffer(document));
 }
 

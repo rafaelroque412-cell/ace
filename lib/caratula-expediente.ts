@@ -18,6 +18,7 @@
 import {
   AlignmentType,
   Document,
+  Footer,
   HeadingLevel,
   Packer,
   Paragraph,
@@ -49,6 +50,8 @@ export type DatosCaratula = {
   resumen: ResumenExpediente;
   /** Fecha de emisión ya formateada: la construye quien llama, no este módulo. */
   fechaEmision: string;
+  /** Nombre completo del usuario en sesión que generó la carátula. */
+  elaboradoPor?: string | null;
 };
 
 function celda(texto: string, opciones?: { negrita?: boolean; ancho?: number }): TableCell {
@@ -182,6 +185,20 @@ export async function construirCaratula(datos: DatosCaratula): Promise<Buffer> {
             spacing: { before: 240 },
           }),
         ],
+        // "Elaborado por" es la trazabilidad de quién generó el documento en el
+        // sistema, no una firma: va en el pie de página, no en el cuerpo.
+        footers: datos.elaboradoPor
+          ? {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [new TextRun({ font: FUENTE, size: 16, text: `Elaborado por: ${datos.elaboradoPor}` })],
+                  }),
+                ],
+              }),
+            }
+          : undefined,
         properties: { page: { margin: MARGENES } },
       },
     ],

@@ -95,6 +95,8 @@ export type SegmentacionInformeInput = {
     piaResolucionFecha: string | null;
     piaResolucionNumero: string | null;
   } | null;
+  /** Nombre completo del usuario en sesión que generó el informe. */
+  elaboradoPor?: string | null;
 };
 
 const CELL_MARGIN = { top: 60, bottom: 60, left: 90, right: 90 };
@@ -888,6 +890,17 @@ export async function buildSegmentacionInformeDocx(input: SegmentacionInformeInp
                   new TextRun({ size: 16, children: [PageNumber.TOTAL_PAGES] }),
                 ],
               }),
+              // Trazabilidad de quién generó el documento en el sistema, no una
+              // firma: va en el pie de página, no en el cuerpo que se imprime.
+              ...(input.elaboradoPor
+                ? [
+                    new Paragraph({
+                      alignment: AlignmentType.LEFT,
+                      spacing: { after: 0 },
+                      children: [new TextRun({ size: 16, text: `Elaborado por: ${input.elaboradoPor}` })],
+                    }),
+                  ]
+                : []),
             ],
           }),
         },
