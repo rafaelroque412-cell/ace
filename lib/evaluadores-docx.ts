@@ -107,7 +107,8 @@ function base(children: Paragraph[], elaboradoPor?: string | null): Document {
               }),
             }
           : undefined,
-        properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
+        // Márgenes normales: 2.5 cm superior/inferior, 3 cm izquierda/derecha.
+        properties: { page: { margin: { top: 1418, bottom: 1418, left: 1701, right: 1701 } } },
         children,
       },
     ],

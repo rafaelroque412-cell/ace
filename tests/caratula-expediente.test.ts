@@ -127,4 +127,17 @@ describe("carátula del expediente", () => {
     expect(texto).toContain("No sustituye");
     expect(texto).toContain("54");
   });
+
+  it("usa el margen normal: 2.5cm superior/inferior, 3cm izquierda/derecha", async () => {
+    const { default: JSZip } = (await import("jszip")) as unknown as {
+      default: { loadAsync: (b: Buffer) => Promise<{ file: (p: string) => { async: (t: "string") => Promise<string> } | null }> };
+    };
+    const zip = await JSZip.loadAsync(await construirCaratula(BASE));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    // docx mide en twips (567 = 1cm): 1418 ≈ 2.5cm, 1701 = 3cm.
+    expect(xml).toContain('w:top="1418"');
+    expect(xml).toContain('w:bottom="1418"');
+    expect(xml).toContain('w:left="1701"');
+    expect(xml).toContain('w:right="1701"');
+  });
 });

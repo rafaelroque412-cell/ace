@@ -131,8 +131,8 @@ const ESTILOS = {
   },
 };
 
-// Márgenes: 3 cm a la izquierda (para el archivador) y 2.5 cm el resto.
-const MARGENES = { top: 1418, right: 1418, bottom: 1418, left: 1701 };
+// Márgenes normales: 2.5 cm superior/inferior, 3 cm izquierda/derecha.
+const MARGENES = { top: 1418, right: 1701, bottom: 1418, left: 1701 };
 
 // Categorías del numeral 125.1 del Reglamento. Se imprimen como CITA LITERAL
 // (cursiva y entrecomilladas), así que deben coincidir palabra por palabra con

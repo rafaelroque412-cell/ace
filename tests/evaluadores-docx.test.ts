@@ -171,3 +171,15 @@ describe("buildEvaluadorDoc · despacho por tipo", () => {
     expect(await texto(await buildEvaluadorDoc("consentimiento", BASE))).toContain("ANEXO N° 3");
   });
 });
+
+describe("márgenes de página", () => {
+  it("usa el margen normal: 2.5cm superior/inferior, 3cm izquierda/derecha", async () => {
+    const zip = await JSZip.loadAsync(await buildMemoDesignacionDocx(BASE));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    // docx mide en twips (567 = 1cm): 1418 ≈ 2.5cm, 1701 = 3cm.
+    expect(xml).toContain('w:top="1418"');
+    expect(xml).toContain('w:bottom="1418"');
+    expect(xml).toContain('w:left="1701"');
+    expect(xml).toContain('w:right="1701"');
+  });
+});

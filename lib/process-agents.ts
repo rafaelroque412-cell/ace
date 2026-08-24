@@ -428,6 +428,9 @@ function paragraph(text: string) {
   return new Paragraph({ children: [new TextRun(text)], spacing: { after: 120 } });
 }
 
+// Márgenes normales: 2.5 cm superior/inferior, 3 cm izquierda/derecha.
+const MARGENES = { top: 1418, bottom: 1418, left: 1701, right: 1701 };
+
 /**
  * Pie de página con la trazabilidad de quién generó el documento —no una
  * firma, así que no va en el cuerpo que se imprime—: alineado a la izquierda,
@@ -520,7 +523,9 @@ async function buildExpedienteUnicoDocx(
     paragraph("Firma / responsable del archivo: ______________________________"),
   );
 
-  const document = new Document({ sections: [{ children, footers: footerElaboradoPor(elaboradoPor) }] });
+  const document = new Document({
+    sections: [{ children, footers: footerElaboradoPor(elaboradoPor), properties: { page: { margin: MARGENES } } }],
+  });
   return Buffer.from(await Packer.toBuffer(document));
 }
 
@@ -627,6 +632,10 @@ export async function buildAdministrativeDraftDocx(input: {
     paragraph("Firma / área emisora: ______________________________"),
   );
 
-  const document = new Document({ sections: [{ children, footers: footerElaboradoPor(input.elaboradoPor) }] });
+  const document = new Document({
+    sections: [
+      { children, footers: footerElaboradoPor(input.elaboradoPor), properties: { page: { margin: MARGENES } } },
+    ],
+  });
   return Buffer.from(await Packer.toBuffer(document));
 }

@@ -30,11 +30,11 @@ import {
 } from "docx";
 import type { ResumenExpediente } from "./expediente-columnas";
 
-// Arial 10.5 justificado con margen izquierdo de 3 cm para el archivador: el
-// mismo estilo que el resto de documentos que emite la entidad.
+// Arial 10.5 justificado con márgenes normales: el mismo estilo que el resto
+// de documentos que emite la entidad.
 const FUENTE = "Arial";
 const CUERPO = 21;
-const MARGENES = { top: 1418, right: 1418, bottom: 1418, left: 1701 };
+const MARGENES = { top: 1418, right: 1701, bottom: 1418, left: 1701 };
 
 export type DatosCaratula = {
   nomenclatura: string;

@@ -165,6 +165,8 @@ export async function buildAnuncioFuturoDocx(input: AnuncioFuturoInput): Promise
               }),
             }
           : undefined,
+        // Márgenes normales: 2.5 cm superior/inferior, 3 cm izquierda/derecha.
+        properties: { page: { margin: { top: 1418, bottom: 1418, left: 1701, right: 1701 } } },
         children: hijos,
       },
     ],

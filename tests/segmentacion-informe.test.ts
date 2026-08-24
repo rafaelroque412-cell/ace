@@ -337,7 +337,11 @@ describe("buildSegmentacionInformeDocx", () => {
     expect(estilos).toContain('<w:color w:val="000000"'); // títulos en negro
     expect(estilos).not.toContain('w:val="2F5496"'); // NO el azul por defecto de Word
 
-    expect(documento).toContain('w:left="1701"'); // margen izquierdo 3 cm
+    // Margen normal: 2.5cm superior/inferior, 3cm izquierda/derecha.
+    expect(documento).toContain('w:top="1418"');
+    expect(documento).toContain('w:bottom="1418"');
+    expect(documento).toContain('w:left="1701"');
+    expect(documento).toContain('w:right="1701"');
     expect(documento).toContain('<w:sz w:val="18"'); // tablas a 9pt
     expect(documento).toContain('w:fill="E7E9EC"'); // cabecera sombreada
     expect(documento).toContain("<w:tblHeader"); // cabecera repetida al partir página
