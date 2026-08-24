@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { entitiesMatch, normalizeEntity } from "@/lib/entity-utils";
+import { entitiesMatch, esOficinaAbastecimiento, normalizeEntity } from "@/lib/entity-utils";
 import { esIdSeguro } from "@/lib/supabase-server";
 import {
   type AppRole,
@@ -252,6 +252,15 @@ export async function requireLegal(): Promise<AuthResult> {
 export function getOfficeFilter(user: SessionUser): string | null {
   if (user.isAdmin) return null;
   return normalizeEntity(user.entity) || null;
+}
+
+// Expedientes y Contratos (menú "Procesos") son exclusivos de la oficina de
+// Abastecimiento (la DEC): el resto de oficinas no gestiona procedimientos de
+// contratación. Necesidades queda FUERA a propósito: la crea y gestiona el
+// área usuaria que pide algo, de cualquier oficina. Admin ve todo, igual que
+// el resto del scope por oficina (getOfficeFilter, getArchivoScopeLevel).
+export function puedeUsarProcesos(user: SessionUser): boolean {
+  return user.isAdmin || esOficinaAbastecimiento(user.entity);
 }
 
 // ── Scope del archivo de expedientes (buscar / subir / responder) ───────────

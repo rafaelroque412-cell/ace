@@ -36,9 +36,12 @@ export const NAVEGACION = [
   },
   {
     items: [
+      // Necesidades queda FUERA a propósito: la crea y gestiona el área
+      // usuaria que pide algo (cualquier oficina, no solo Abastecimiento);
+      // solo Expedientes y Contratos son trabajo exclusivo de la DEC.
       { href: "/necesidades", icon: "ClipboardList", id: "necesidades", label: "Necesidades", adminOnly: false },
-      { href: "/expedientes", icon: "Briefcase", id: "expedientes", label: "Expedientes", adminOnly: false },
-      { href: "/contratos", icon: "FileText", id: "contratos", label: "Contratos", adminOnly: false },
+      { href: "/expedientes", icon: "Briefcase", id: "expedientes", label: "Expedientes", adminOnly: false, soloAbastecimiento: true },
+      { href: "/contratos", icon: "FileText", id: "contratos", label: "Contratos", adminOnly: false, soloAbastecimiento: true },
     ],
     label: "Procesos",
   },
@@ -92,6 +95,8 @@ export const NAVEGACION = [
     label: string;
     adminOnly: boolean;
     requiredRole?: string;
+    /** Expedientes/Contratos: exclusivo de la oficina de Abastecimiento. */
+    soloAbastecimiento?: boolean;
   }>;
 }>;
 

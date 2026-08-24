@@ -1,4 +1,4 @@
-import { getArchivoScopeLevel, getSessionUser, type SessionUser } from "@/lib/auth";
+import { getArchivoScopeLevel, getSessionUser, puedeUsarProcesos, type SessionUser } from "@/lib/auth";
 import { contarNecesidadesPendientes } from "@/lib/necesidades-bandeja";
 import { NAVEGACION, type ActiveId } from "@/lib/navegacion";
 import { supabaseRest } from "@/lib/supabase-server";
@@ -60,6 +60,9 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
   const bandejaNecesidades = user ? await contarNecesidadesPendientes(user) : 0;
   const isAdmin = Boolean(user?.isAdmin);
   const scopeText = user ? scopePhrase(user) : "";
+  // Expedientes/Contratos son exclusivos de la oficina de Abastecimiento
+  // (ver lib/auth.ts): sin sesión, no se muestran.
+  const puedeProcesos = user ? puedeUsarProcesos(user) : false;
 
   // El menu se adapta al rol: los usuarios no administradores no ven las
   // opciones exclusivas de administracion (menos ruido, mas facil de usar).
@@ -67,7 +70,13 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
   // renderiza las secciones que recibe.
   const sections = NAVEGACION.map((section) => ({
     ...section,
-    items: section.items.filter((item) => !item.adminOnly || isAdmin),
+    items: section.items.filter((item) => {
+      // `as const satisfies` deja cada item con su tipo literal exacto: solo
+      // los tres de "Procesos" tienen la clave `soloAbastecimiento` en su
+      // tipo, así que el resto necesita el chequeo `in` antes de leerla.
+      const soloAbastecimiento = "soloAbastecimiento" in item && item.soloAbastecimiento;
+      return (!item.adminOnly || isAdmin) && (!soloAbastecimiento || puedeProcesos);
+    }),
   })).filter((section) => section.items.length > 0);
 
   return (
