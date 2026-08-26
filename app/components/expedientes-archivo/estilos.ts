@@ -141,6 +141,16 @@ export const EXP_EMPTY_TITLE = "m-0 text-base font-bold text-exp-ink";
 
 export const EXP_EMPTY_DESC = "m-0 max-w-[360px] text-sm leading-normal text-exp-muted";
 
+// Ilustración grande (aro punteado girando) del estado vacío principal de la
+// pestaña Buscar/Subir — distinta del ícono chico de EXP_EMPTY_ICON.
+export const EXP_EMPTY_ILLUSTRATION =
+  "relative mx-auto mb-3 flex size-20 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-info-soft)_100%)] " +
+  "before:absolute before:-inset-1 before:animate-[expSpin_20s_linear_infinite] before:rounded-full before:border-2 before:border-dashed before:border-exp-brand before:opacity-30 before:content-['']";
+
+// ── Contenedor de una pestaña completa (Buscar / Subir) ─────────────────────
+
+export const EXP_TAB_CONTENT = "px-[26px] pb-[26px] pt-5";
+
 // ── Pie de página compartido (overlay/panel/toast/paginación) ──────────────
 
 export const EXP_SKELETON = "animate-exp-shimmer rounded-md bg-[linear-gradient(90deg,var(--exp-line-soft)_25%,var(--exp-line)_50%,var(--exp-line-soft)_75%)] bg-[length:200%_100%]";

@@ -40,7 +40,36 @@ import { TablaExpedientes } from "./tabla-expedientes";
 import { TarjetasExpedientes } from "./tarjetas-expedientes";
 import { Pagination } from "./pagination";
 import { SkeletonList, SkeletonStats } from "./skeleton";
-import { EXP_SPIN, expBtnClass } from "./estilos";
+import {
+  EXP_EMPTY,
+  EXP_EMPTY_DESC,
+  EXP_EMPTY_ILLUSTRATION,
+  EXP_EMPTY_TITLE,
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_HELP_TEXT,
+  EXP_ICON_BUTTON,
+  EXP_ICON_BUTTON_DANGER,
+  EXP_LIST,
+  EXP_LIST_ITEM,
+  EXP_LIST_ITEM_ACTIONS,
+  EXP_LIST_ITEM_BODY,
+  EXP_LIST_ITEM_ICON,
+  EXP_LIST_ITEM_META,
+  EXP_LIST_ITEM_TITLE,
+  EXP_SPIN,
+  EXP_STATS,
+  EXP_STAT_HEADER,
+  EXP_TAB_CONTENT,
+  expBtnClass,
+  expMessageClass,
+  expStatCardClass,
+  expStatusClass,
+} from "./estilos";
 import { cn } from "@/lib/utils";
 
 const STATUS_PILLS: { id: StatusFilter; label: string }[] = [
@@ -179,43 +208,62 @@ export function BuscarTabContent({
   setTab,
 }: BuscarTabContentProps) {
   return (
-    <div className="expTabContent">
+    <div className={cn("tw", EXP_TAB_CONTENT)}>
       {/* Elige cómo se interpreta lo que escribes en el MISMO buscador —cambia
           el marcador de posición, el rótulo y el botón de envío—, no a qué
           panel se va. */}
-      <div className="expSearchModes" role="group" aria-label="Modo de búsqueda">
+      <div className="mb-3.5 grid grid-cols-2 gap-2.5 max-[640px]:grid-cols-1" role="group" aria-label="Modo de búsqueda">
         <button
           type="button"
           aria-pressed={mode === "buscar"}
-          className={"expSearchModeCard" + (mode === "buscar" ? " active" : "")}
+          className={cn(
+            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand",
+            mode === "buscar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1px_var(--color-exp-brand)]",
+          )}
           onClick={() => changeMode("buscar")}
         >
-          <span className="expSearchModeIcon">
+          <span
+            className={cn(
+              "grid size-[38px] shrink-0 place-items-center rounded-[10px] bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "buscar" && "bg-exp-brand text-white",
+            )}
+          >
             <Search size={18} />
           </span>
-          <span className="expSearchModeText">
-            <span className="expSearchModeTitle">Buscar</span>
-            <span className="expSearchModeDesc">Por el contenido del documento</span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-sm font-bold text-exp-ink">Buscar</span>
+            <span className="text-xs leading-tight text-exp-muted">Por el contenido del documento</span>
           </span>
         </button>
         <button
           type="button"
           aria-pressed={mode === "preguntar"}
-          className={"expSearchModeCard" + (mode === "preguntar" ? " active" : "")}
+          className={cn(
+            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand",
+            mode === "preguntar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1px_var(--color-exp-brand)]",
+          )}
           onClick={() => changeMode("preguntar")}
         >
-          <span className="expSearchModeIcon">
+          <span
+            className={cn(
+              "grid size-[38px] shrink-0 place-items-center rounded-[10px] bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "preguntar" && "bg-exp-brand text-white",
+            )}
+          >
             <Bot size={18} />
           </span>
-          <span className="expSearchModeText">
-            <span className="expSearchModeTitle">Preguntar a la IA</span>
-            <span className="expSearchModeDesc">Respuesta y ubicación, en lenguaje natural</span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-sm font-bold text-exp-ink">Preguntar a la IA</span>
+            <span className="text-xs leading-tight text-exp-muted">Respuesta y ubicación, en lenguaje natural</span>
           </span>
         </button>
       </div>
 
-      <form onSubmit={runSearch} className="expSearchBar">
-        <Search size={18} className="expSearchHint" />
+      <form
+        onSubmit={runSearch}
+        className="expSearchBar mb-4 flex items-center gap-3 rounded-exp border border-exp-line bg-exp-line-soft p-3.5 transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] focus-within:border-exp-brand focus-within:bg-exp-panel focus-within:shadow-[0_0_0_3px_rgba(15,118,110,0.10)]"
+      >
+        <Search size={18} className="inline-flex shrink-0 items-center gap-1 text-exp-muted" />
         <input
           id="exp-search-input"
           type="search"
@@ -226,20 +274,25 @@ export function BuscarTabContent({
               ? "Ej. licencia de funcionamiento, predio 2024, oficio 0345…"
               : "Ej. ¿Dónde está el expediente de la licencia 2024-0345?"
           }
-          className="expSearchInput"
+          className="min-w-0 flex-1 border-0 bg-transparent py-1 text-[15px] text-exp-ink outline-none placeholder:text-exp-muted"
           aria-label={mode === "buscar" ? "Buscar en el contenido" : "Preguntar a la IA"}
         />
         {mode === "buscar" ? (
           <button
             type="button"
-            className={"expFilterToggle" + (showFilters ? " active" : "")}
+            className={cn(
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-exp-line bg-exp-panel px-3 py-2 text-[13px] font-semibold text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:text-exp-ink",
+              showFilters && "border-exp-brand bg-exp-brand/[0.06] text-exp-brand",
+            )}
             onClick={() => setShowFilters((v) => !v)}
             aria-expanded={showFilters}
             title="Filtros"
           >
             <Filter size={15} /> Filtros
             {activeFilterCount > 0 ? (
-              <span className="expFilterBadge">{activeFilterCount}</span>
+              <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-exp-brand px-[5px] text-[11px] font-bold text-white">
+                {activeFilterCount}
+              </span>
             ) : null}
           </button>
         ) : null}
@@ -262,44 +315,44 @@ export function BuscarTabContent({
       </form>
 
       {mode === "buscar" && showFilters ? (
-        <div className="expFilters" aria-label="Filtros de búsqueda">
-          <div className="expFilterField">
-            <label className="expFilterLabel" htmlFor="filter-anio">Año</label>
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-exp border border-exp-line bg-exp-line-soft p-3.5" aria-label="Filtros de búsqueda">
+          <div className="flex min-w-[140px] flex-1 basis-[180px] flex-col gap-1">
+            <label className="text-xs font-semibold text-exp-muted" htmlFor="filter-anio">Año</label>
             <input
               id="filter-anio"
               type="number"
               value={filterAnio}
               onChange={(e) => setFilterAnio(e.target.value)}
               placeholder="Ej. 2024"
-              className="expField-input"
+              className={EXP_FIELD_CONTROL}
             />
           </div>
           {isAdmin ? (
-            <div className="expFilterField">
-              <label className="expFilterLabel" htmlFor="filter-oficina">Oficina</label>
+            <div className="flex min-w-[140px] flex-1 basis-[180px] flex-col gap-1">
+              <label className="text-xs font-semibold text-exp-muted" htmlFor="filter-oficina">Oficina</label>
               <input
                 id="filter-oficina"
                 value={filterOficina}
                 onChange={(e) => setFilterOficina(e.target.value)}
                 placeholder="Ej. Subgerencia de Tránsito"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
               />
             </div>
           ) : null}
-          <div className="expFilterField">
-            <label className="expFilterLabel" htmlFor="filter-materia">Materia</label>
+          <div className="flex min-w-[140px] flex-1 basis-[180px] flex-col gap-1">
+            <label className="text-xs font-semibold text-exp-muted" htmlFor="filter-materia">Materia</label>
             <input
               id="filter-materia"
               value={filterMateria}
               onChange={(e) => setFilterMateria(e.target.value)}
               placeholder="Ej. contratación"
-              className="expField-input"
+              className={EXP_FIELD_CONTROL}
             />
           </div>
           {activeFilterCount > 0 ? (
             <button
               type="button"
-              className={cn(expBtnClass("ghost"), "expFilterClear")}
+              className={cn(expBtnClass("ghost"), "shrink-0 grow-0")}
               onClick={() => {
                 setFilterAnio("");
                 setFilterOficina("");
@@ -313,8 +366,8 @@ export function BuscarTabContent({
       ) : null}
 
       {displayStats.pending > 0 ? (
-        <span className="expHelpText" style={{ marginTop: 8 }}>
-          <Loader2 size={12} className="expSpin" /> {displayStats.pending} expediente
+        <span className={cn(EXP_HELP_TEXT, "mt-2")}>
+          <Loader2 size={12} className={EXP_SPIN} /> {displayStats.pending} expediente
           {displayStats.pending === 1 ? "" : "s"} en proceso aún no aparece
           {displayStats.pending === 1 ? "" : "n"} en la búsqueda (se indexa
           {displayStats.pending === 1 ? "" : "n"} en segundo plano).
@@ -322,11 +375,8 @@ export function BuscarTabContent({
       ) : null}
 
       {mode === "preguntar" && !query && !answer ? (
-        <div className="expSuggestedQuestions" aria-label="Ejemplos de preguntas">
-          <span
-            className="expHelpText"
-            style={{ marginTop: 0, marginBottom: 4 }}
-          >
+        <div className="mt-2 flex flex-col gap-1.5" aria-label="Ejemplos de preguntas">
+          <span className={cn(EXP_HELP_TEXT, "mb-1 mt-0")}>
             <Lightbulb size={12} /> Prueba con una de estas preguntas:
           </span>
           {[
@@ -337,7 +387,7 @@ export function BuscarTabContent({
             <button
               key={q}
               type="button"
-              className="expSuggestedQuestion"
+              className="flex w-full items-center gap-2 rounded-exp border border-exp-line bg-exp-line-soft px-3 py-2 text-left text-[13px] text-exp-ink-soft transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-brand-soft hover:text-exp-brand [&>svg]:shrink-0 [&>svg]:text-exp-brand"
               onClick={() => {
                 setQuery(q);
                 setTimeout(() => {
@@ -356,39 +406,45 @@ export function BuscarTabContent({
       ) : null}
 
       {searchMessage ? (
-        <div className="expMessage expMessage-info" role="status">
+        <div className={expMessageClass("info")} role="status">
           <Info size={16} />
           <span>{searchMessage}</span>
         </div>
       ) : null}
 
       {answer ? (
-        <div className="expAnswerCard">
-          <div className="expAnswerHeader">
-            <div className="expAnswerAvatar">
+        <div className="my-4 rounded-exp border border-exp-brand bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_100%)] p-5">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-full bg-exp-brand text-white">
               <Sparkles size={16} />
             </div>
             <div>
-              <h3 className="expAnswerTitle">Respuesta de la IA</h3>
-              <p className="expAnswerSubtitle">
+              <h3 className="m-0 text-sm font-bold text-exp-ink">Respuesta de la IA</h3>
+              <p className="m-0 text-xs text-exp-muted">
                 Basada en los expedientes del archivo. Las citas [E#] enlazan a las fuentes.
               </p>
             </div>
           </div>
-          <p className="expAnswerText">{answer.answer}</p>
+          <p className="m-0 mb-3 whitespace-pre-wrap text-sm leading-relaxed text-exp-ink">{answer.answer}</p>
           {answer.sources.length > 0 ? (
-            <div className="expAnswerSources">
-              <p className="expAnswerSourcesLabel">Fuentes ({answer.sources.length})</p>
+            <div className="flex flex-col gap-1.5 border-t border-exp-brand/15 pt-3">
+              <p className="m-0 mb-1 text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">
+                Fuentes ({answer.sources.length})
+              </p>
               {answer.sources.map((source, index) => (
                 <button
                   key={`${source.expedienteId}-${index}`}
                   type="button"
-                  className="expCitation"
+                  className="flex w-full items-center gap-1.5 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-1.5 text-left text-xs transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-brand-soft"
                   onClick={() => void openExpedienteById(source.expedienteId)}
                 >
-                  <span className="expCitationNumber">E{index + 1}</span>
-                  <span className="expCitationTitle">{source.title}</span>
-                  <span className="expCitationSource">{source.citation}</span>
+                  <span className="shrink-0 rounded bg-exp-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    E{index + 1}
+                  </span>
+                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-exp-ink">
+                    {source.title}
+                  </span>
+                  <span className="whitespace-nowrap text-[11px] text-exp-muted">{source.citation}</span>
                 </button>
               ))}
             </div>
@@ -397,11 +453,11 @@ export function BuscarTabContent({
       ) : null}
 
       {results ? (
-        <div className="expResults">
-          <div className="expFormSectionHeader">
-            <h3 className="expFormSectionTitle">
+        <div className="my-4 flex flex-col gap-2.5">
+          <div className={EXP_FORM_SECTION_HEADER}>
+            <h3 className={EXP_FORM_SECTION_TITLE}>
               <FileText size={16} /> Resultados
-              <span className="expFormSectionHint">
+              <span className={EXP_FORM_SECTION_HINT}>
                 {results.length} coincidencia{results.length === 1 ? "" : "s"}
               </span>
             </h3>
@@ -411,45 +467,43 @@ export function BuscarTabContent({
             : results.map((source) => (
                 <article
                   key={source.expedienteId}
-                  className="expResultCard"
+                  className="grid cursor-pointer grid-cols-[40px_1fr_auto] items-start gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-px hover:border-exp-brand hover:shadow-exp"
                   onClick={() => void openExpedienteById(source.expedienteId)}
                 >
-                  <div className="expResultIcon">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-exp bg-exp-brand-soft text-exp-brand">
                     <FileText size={18} />
                   </div>
-                  <div className="expResultBody">
-                    <h4 className="expResultTitle">{source.title}</h4>
-                    <div className="expResultMeta">
+                  <div className="min-w-0">
+                    <h4 className="m-0 mb-1 text-sm font-bold leading-snug text-exp-ink">{source.title}</h4>
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-exp-muted">
                       {source.serieDocumento ? (
-                        <span className="expResultMetaItem">{source.serieDocumento}</span>
+                        <span className="inline-flex items-center gap-1">{source.serieDocumento}</span>
                       ) : null}
-                      {source.anio ? (
-                        <span className="expResultMetaItem">{source.anio}</span>
-                      ) : null}
-                      {source.materia ? (
-                        <span className="expResultMetaItem">{source.materia}</span>
-                      ) : null}
+                      {source.anio ? <span className="inline-flex items-center gap-1">{source.anio}</span> : null}
+                      {source.materia ? <span className="inline-flex items-center gap-1">{source.materia}</span> : null}
                       {source.pageStart ? (
-                        <span className="expResultMetaItem">pág. {source.pageStart}</span>
+                        <span className="inline-flex items-center gap-1">pág. {source.pageStart}</span>
                       ) : null}
                     </div>
                     {source.ubicacionResumen ? (
-                      <div className="expResultMeta">
-                        <span className="expResultMetaItem">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-exp-muted">
+                        <span className="inline-flex items-center gap-1 [&>svg]:size-3">
                           <MapPin size={12} /> {source.ubicacionResumen}
                         </span>
                       </div>
                     ) : null}
                     {source.excerpt ? (
-                      <p className="expResultExcerpt">{source.excerpt}</p>
+                      <p className="m-0 mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-exp-ink-soft">
+                        {source.excerpt}
+                      </p>
                     ) : null}
                   </div>
-                  <div className="expResultActions">
+                  <div className="flex items-center gap-1">
                     <a
                       href={`/api/expedientes-archivo/${source.expedienteId}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       title="Abrir PDF"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -462,71 +516,76 @@ export function BuscarTabContent({
       ) : null}
 
       {displayStats.total > 0 ? (
-        <div className="expStats" aria-label="Resumen del archivo">
-          <div className="expStatCard statBrand">
-            <div className="expStatHeader">
-              <span className="expStatLabel">Total</span>
-              <FileText className="expStatIcon" size={16} />
+        <div className={cn("expStats", EXP_STATS)} aria-label="Resumen del archivo">
+          <div className={expStatCardClass("statBrand")}>
+            <div className={EXP_STAT_HEADER}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Total</span>
+              <FileText className="size-5 text-exp-muted opacity-60" size={16} />
             </div>
-            <span className="expStatValue">{displayStats.total}</span>
-            <span className="expStatHint">expedientes en el archivo</span>
+            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.total}</span>
+            <span className="mt-0.5 text-[11px] text-exp-muted">expedientes en el archivo</span>
           </div>
-          <div className="expStatCard statSuccess">
-            <div className="expStatHeader">
-              <span className="expStatLabel">Indexados</span>
-              <CheckCircle2 className="expStatIcon" size={16} />
+          <div className={expStatCardClass("statSuccess")}>
+            <div className={EXP_STAT_HEADER}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Indexados</span>
+              <CheckCircle2 className="size-5 text-exp-muted opacity-60" size={16} />
             </div>
-            <span className="expStatValue">{displayStats.indexed}</span>
-            <span className="expStatHint">listos para buscar</span>
+            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.indexed}</span>
+            <span className="mt-0.5 text-[11px] text-exp-muted">listos para buscar</span>
           </div>
-          <div className="expStatCard statWarning">
-            <div className="expStatHeader">
-              <span className="expStatLabel">Pendientes</span>
-              <Loader2 className="expStatIcon" size={16} />
+          <div className={expStatCardClass("statWarning")}>
+            <div className={EXP_STAT_HEADER}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Pendientes</span>
+              <Loader2 className="size-5 text-exp-muted opacity-60" size={16} />
             </div>
-            <span className="expStatValue">{displayStats.pending}</span>
-            <span className="expStatHint">procesándose ahora</span>
+            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.pending}</span>
+            <span className="mt-0.5 text-[11px] text-exp-muted">procesándose ahora</span>
           </div>
-          <div className="expStatCard statDanger">
-            <div className="expStatHeader">
-              <span className="expStatLabel">Con error</span>
-              <AlertCircle className="expStatIcon" size={16} />
+          <div className={expStatCardClass("statDanger")}>
+            <div className={EXP_STAT_HEADER}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Con error</span>
+              <AlertCircle className="size-5 text-exp-muted opacity-60" size={16} />
             </div>
-            <span className="expStatValue">{displayStats.error}</span>
-            <span className="expStatHint">requieren atención</span>
+            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.error}</span>
+            <span className="mt-0.5 text-[11px] text-exp-muted">requieren atención</span>
           </div>
-          <div className="expStatCard statInfo">
-            <div className="expStatHeader">
-              <span className="expStatLabel">Tamaño</span>
-              <FileUp className="expStatIcon" size={16} />
+          <div className={expStatCardClass("statInfo")}>
+            <div className={EXP_STAT_HEADER}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Tamaño</span>
+              <FileUp className="size-5 text-exp-muted opacity-60" size={16} />
             </div>
-            <span className="expStatValue">{formatBytes(displayStats.totalBytes)}</span>
-            <span className="expStatHint">en Supabase Storage</span>
+            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">
+              {formatBytes(displayStats.totalBytes)}
+            </span>
+            <span className="mt-0.5 text-[11px] text-exp-muted">en Supabase Storage</span>
           </div>
         </div>
       ) : null}
 
       {expedientes.length > 0 ? (
         <>
-          <div className="expListHeader">
+          <div className="expListHeader mb-3.5 flex flex-wrap items-center gap-2.5 rounded-exp border border-exp-line bg-exp-panel p-2.5">
             <input
               type="search"
               placeholder="Filtra la lista por título, materia u oficina…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="expListSearch"
+              className="min-w-[180px] flex-1 rounded-lg border border-exp-line bg-exp-line-soft px-3 py-2 text-[13px] transition-all duration-[120ms] ease-linear focus:border-exp-brand focus:bg-exp-panel focus:shadow-[0_0_0_3px_rgba(15,118,110,0.10)] focus:outline-none"
               aria-label="Filtro rápido de la lista"
             />
             {/* Cómo se dibuja la MISMA lista: un control segmentado, no pestañas. */}
             <div
-              className="expSegmented"
+              className="relative inline-flex rounded-lg border border-exp-line bg-exp-line-soft p-0.5"
               role="group"
               aria-label="Modo de vista"
             >
               <button
                 type="button"
                 aria-pressed={viewMode === "lista"}
-                className={viewMode === "lista" ? "active" : ""}
+                className={cn(
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "lista" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                )}
                 onClick={() => setViewMode("lista")}
                 title="Vista lista"
                 aria-label="Vista lista"
@@ -536,7 +595,10 @@ export function BuscarTabContent({
               <button
                 type="button"
                 aria-pressed={viewMode === "tabla"}
-                className={viewMode === "tabla" ? "active" : ""}
+                className={cn(
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "tabla" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                )}
                 onClick={() => setViewMode("tabla")}
                 title="Vista tabla"
                 aria-label="Vista tabla"
@@ -546,7 +608,10 @@ export function BuscarTabContent({
               <button
                 type="button"
                 aria-pressed={viewMode === "tarjetas"}
-                className={viewMode === "tarjetas" ? "active" : ""}
+                className={cn(
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "tarjetas" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                )}
                 onClick={() => setViewMode("tarjetas")}
                 title="Vista tarjetas"
                 aria-label="Vista tarjetas"
@@ -554,29 +619,39 @@ export function BuscarTabContent({
                 <Grid3x3 size={14} />
               </button>
             </div>
-            <div className="expPillGroup" role="group" aria-label="Filtrar por estado">
+            <div className="inline-flex flex-wrap gap-1" role="group" aria-label="Filtrar por estado">
               {STATUS_PILLS.map((s) => (
                 <button
                   key={s.id}
                   type="button"
                   aria-pressed={statusFilter === s.id}
-                  className={statusFilter === s.id ? "expPill active" : "expPill"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border border-exp-line bg-exp-panel px-2.5 py-1.5 text-xs font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:border-exp-line hover:text-exp-ink",
+                    statusFilter === s.id && "border-exp-brand bg-exp-brand text-white hover:text-white",
+                  )}
                   onClick={() => setStatusFilter(s.id)}
                 >
                   {s.label}
-                  <span className="expPillCount">{displayStatusCounts[s.id]}</span>
+                  <span
+                    className={cn(
+                      "min-w-4 rounded-full bg-exp-line-soft px-1.5 py-px text-center text-[10px] font-bold text-exp-muted",
+                      statusFilter === s.id && "bg-white/20 text-white",
+                    )}
+                  >
+                    {displayStatusCounts[s.id]}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
           {hasActiveFilters() ? (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <span className="expHelpText" style={{ marginTop: 0 }}>
+            <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+              <span className={cn(EXP_HELP_TEXT, "mt-0")}>
                 <Filter size={12} /> Filtros activos:
               </span>
               {searchInput ? (
-                <span className="expFilterChip">
+                <span className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-brand-soft py-[3px] pl-2.5 pr-2 text-xs font-semibold text-exp-brand [&>button]:inline-flex [&>button]:items-center [&>button]:border-0 [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-inherit [&>button]:opacity-70 hover:[&>button]:opacity-100">
                   Búsqueda: &quot;{searchInput.slice(0, 20)}&quot;
                   <button onClick={() => setSearchInput("")} aria-label="Quitar filtro">
                     <X size={12} />
@@ -584,7 +659,7 @@ export function BuscarTabContent({
                 </span>
               ) : null}
               {advancedFilters.oficina ? (
-                <span className="expFilterChip">
+                <span className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-brand-soft py-[3px] pl-2.5 pr-2 text-xs font-semibold text-exp-brand [&>button]:inline-flex [&>button]:items-center [&>button]:border-0 [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-inherit [&>button]:opacity-70 hover:[&>button]:opacity-100">
                   Oficina: {advancedFilters.oficina}
                   <button
                     onClick={() =>
@@ -597,7 +672,7 @@ export function BuscarTabContent({
                 </span>
               ) : null}
               {advancedFilters.estante ? (
-                <span className="expFilterChip">
+                <span className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-brand-soft py-[3px] pl-2.5 pr-2 text-xs font-semibold text-exp-brand [&>button]:inline-flex [&>button]:items-center [&>button]:border-0 [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-inherit [&>button]:opacity-70 hover:[&>button]:opacity-100">
                   Estante: {advancedFilters.estante}
                   <button
                     onClick={() =>
@@ -610,7 +685,7 @@ export function BuscarTabContent({
                 </span>
               ) : null}
               {advancedFilters.tipoDocumento ? (
-                <span className="expFilterChip">
+                <span className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-brand-soft py-[3px] pl-2.5 pr-2 text-xs font-semibold text-exp-brand [&>button]:inline-flex [&>button]:items-center [&>button]:border-0 [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-inherit [&>button]:opacity-70 hover:[&>button]:opacity-100">
                   Tipo: {advancedFilters.tipoDocumento}
                   <button
                     onClick={() =>
@@ -623,7 +698,7 @@ export function BuscarTabContent({
                 </span>
               ) : null}
               {statusFilter !== "todos" ? (
-                <span className="expFilterChip">
+                <span className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-brand-soft py-[3px] pl-2.5 pr-2 text-xs font-semibold text-exp-brand [&>button]:inline-flex [&>button]:items-center [&>button]:border-0 [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-inherit [&>button]:opacity-70 hover:[&>button]:opacity-100">
                   Estado: {STATUS_PILLS.find((p) => p.id === statusFilter)?.label}
                   <button onClick={() => setStatusFilter("todos")} aria-label="Quitar filtro">
                     <X size={12} />
@@ -640,10 +715,10 @@ export function BuscarTabContent({
             </div>
           ) : null}
 
-          <div className="expAdvancedFilters">
+          <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))_auto] items-end gap-2.5 rounded-exp border border-exp-line bg-exp-line-soft p-3">
             {isAdmin ? (
-              <div className="expField">
-                <label className="expField-label">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>
                   <Filter size={11} /> Oficina
                 </label>
                 <input
@@ -652,32 +727,32 @@ export function BuscarTabContent({
                     setAdvancedFilters((f) => ({ ...f, oficina: e.target.value }))
                   }
                   placeholder="Filtrar por oficina"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   aria-label="Filtrar por oficina"
                 />
               </div>
             ) : null}
-            <div className="expField">
-              <label className="expField-label">Estante</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Estante</label>
               <input
                 value={advancedFilters.estante}
                 onChange={(e) =>
                   setAdvancedFilters((f) => ({ ...f, estante: e.target.value }))
                 }
                 placeholder="Nº estante"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
                 aria-label="Filtrar por estante"
               />
             </div>
-            <div className="expField">
-              <label className="expField-label">Tipo de documento</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Tipo de documento</label>
               <input
                 value={advancedFilters.tipoDocumento}
                 onChange={(e) =>
                   setAdvancedFilters((f) => ({ ...f, tipoDocumento: e.target.value }))
                 }
                 placeholder="Resolución, Oficio…"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
                 aria-label="Filtrar por tipo de documento"
               />
             </div>
@@ -692,15 +767,25 @@ export function BuscarTabContent({
           </div>
 
           {canManage && selectedIds.size > 0 ? (
-            <div className="expBulkBar" role="region" aria-label="Acciones masivas">
-              <strong>{selectedIds.size}</strong>
-              <span>seleccionado{selectedIds.size === 1 ? "" : "s"}</span>
-              <button type="button" onClick={() => setSelectedIds(new Set())}>
+            <div
+              className="mb-3.5 flex animate-[expSlideDown_200ms_ease] items-center gap-2.5 rounded-exp bg-[linear-gradient(90deg,var(--color-exp-brand)_0%,var(--color-exp-brand-dark)_100%)] px-3.5 py-2.5 text-white shadow-[0_4px_14px_rgba(15,118,110,0.25)]"
+              role="region"
+              aria-label="Acciones masivas"
+            >
+              <strong className="text-[13px] font-bold">{selectedIds.size}</strong>
+              <span className="mr-auto text-xs opacity-85">
+                seleccionado{selectedIds.size === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-[120ms] ease-linear hover:border-white/40 hover:bg-white/25"
+                onClick={() => setSelectedIds(new Set())}
+              >
                 <X size={14} /> Cancelar
               </button>
               <button
                 type="button"
-                className="primary"
+                className="inline-flex items-center gap-1.5 rounded-md border border-white bg-white px-3 py-1.5 text-xs font-semibold text-exp-brand transition-colors duration-[120ms] ease-linear hover:bg-exp-brand-soft"
                 onClick={() => setBulkOpen(true)}
               >
                 <MapPin size={14} /> Mover / reasignar
@@ -714,16 +799,16 @@ export function BuscarTabContent({
               <SkeletonList count={5} />
             </>
           ) : filteredExps.length === 0 ? (
-            <div className="expEmpty">
-              <div className="expEmptyIllustration">
+            <div className={EXP_EMPTY}>
+              <div className={EXP_EMPTY_ILLUSTRATION}>
                 <FileText size={28} />
               </div>
-              <h3 className="expEmpty-title">
+              <h3 className={EXP_EMPTY_TITLE}>
                 {expedientes.length === 0
                   ? "El archivo está vacío"
                   : "Sin coincidencias"}
               </h3>
-              <p className="expEmpty-desc">
+              <p className={EXP_EMPTY_DESC}>
                 {expedientes.length === 0
                   ? "Sube el primer expediente para empezar a indexar contenido."
                   : "No hay expedientes que coincidan con los filtros aplicados. Prueba ajustando los criterios."}
@@ -731,7 +816,7 @@ export function BuscarTabContent({
               {expedientes.length === 0 && canManage ? (
                 <button
                   type="button"
-                  className={cn(expBtnClass("primary"), "expEmpty-action")}
+                  className={cn(expBtnClass("primary"), "mt-2")}
                   onClick={() => setTab("subir")}
                 >
                   <Plus size={16} /> Subir primer expediente
@@ -741,11 +826,11 @@ export function BuscarTabContent({
           ) : (
             <>
               {viewMode === "lista" ? (
-                <div className="expList" role="list">
+                <div className={EXP_LIST} role="list">
                   {filteredExps.map((exp) => (
                     <article
                       key={exp.id}
-                      className="expListItem"
+                      className={cn(EXP_LIST_ITEM, "cursor-pointer")}
                       onClick={() => setOpenExp(exp)}
                       role="listitem"
                       tabIndex={0}
@@ -756,12 +841,12 @@ export function BuscarTabContent({
                         }
                       }}
                     >
-                      <div className="expListItemIcon">
+                      <div className={EXP_LIST_ITEM_ICON}>
                         <FileText size={18} />
                       </div>
-                      <div className="expListItemBody">
-                        <h4 className="expListItemTitle">{exp.title}</h4>
-                        <div className="expListItemMeta">
+                      <div className={EXP_LIST_ITEM_BODY}>
+                        <h4 className={EXP_LIST_ITEM_TITLE}>{exp.title}</h4>
+                        <div className={EXP_LIST_ITEM_META}>
                           {exp.serie_documento ? (
                             <span>{exp.serie_documento}</span>
                           ) : (
@@ -770,16 +855,13 @@ export function BuscarTabContent({
                           {exp.anio ? <span>· {exp.anio}</span> : null}
                           {exp.oficina ? <span>· {exp.oficina}</span> : null}
                           <span>· {formatBytes(exp.file_size)}</span>
-                          <span
-                            className={`expStatus expStatus-${exp.status}`}
-                            data-status={exp.status}
-                          >
+                          <span className={expStatusClass(exp.status)} data-status={exp.status}>
                             {statusLabel(exp.status)}
                           </span>
                         </div>
                         {exp.nro_estante || exp.nro_piso || exp.nro_local ? (
-                          <div className="expListItemMeta">
-                            <span className="expResultMetaItem">
+                          <div className={EXP_LIST_ITEM_META}>
+                            <span className="inline-flex items-center gap-1 [&>svg]:size-3">
                               <MapPin size={12} />
                               {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
                                 .filter(Boolean)
@@ -789,7 +871,7 @@ export function BuscarTabContent({
                         ) : null}
                       </div>
                       <div
-                        className="expListItemActions"
+                        className={EXP_LIST_ITEM_ACTIONS}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {canManage ? (
@@ -799,12 +881,12 @@ export function BuscarTabContent({
                               checked={selectedIds.has(exp.id)}
                               onChange={() => toggleSelect(exp.id)}
                               aria-label={`Seleccionar ${exp.title}`}
-                              style={{ marginRight: 4 }}
+                              className="mr-1"
                             />
                             <button
                               type="button"
                               onClick={() => setOpenExp(exp)}
-                              className="expIconButton"
+                              className={EXP_ICON_BUTTON}
                               aria-label="Ver detalle"
                               title="Ver detalle"
                             >
@@ -814,20 +896,20 @@ export function BuscarTabContent({
                               type="button"
                               onClick={() => void reindexExpediente(exp.id)}
                               disabled={reindexingId === exp.id}
-                              className="expIconButton"
+                              className={EXP_ICON_BUTTON}
                               aria-label="Reindexar"
                               title="Reindexar"
                             >
                               <RefreshCw
                                 size={14}
-                                className={reindexingId === exp.id ? "expSpin" : ""}
+                                className={reindexingId === exp.id ? EXP_SPIN : ""}
                               />
                             </button>
                             <a
                               href={`/api/expedientes-archivo/${exp.id}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="expIconButton"
+                              className={EXP_ICON_BUTTON}
                               aria-label="Descargar PDF"
                               title="Descargar PDF"
                             >
@@ -837,7 +919,7 @@ export function BuscarTabContent({
                               type="button"
                               onClick={() => void deleteExpediente(exp)}
                               disabled={deletingId === exp.id}
-                              className="expIconButton danger"
+                              className={cn(EXP_ICON_BUTTON, EXP_ICON_BUTTON_DANGER)}
                               aria-label="Eliminar"
                               title="Eliminar"
                             >
@@ -849,7 +931,7 @@ export function BuscarTabContent({
                             href={`/api/expedientes-archivo/${exp.id}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="expIconButton"
+                            className={EXP_ICON_BUTTON}
                             aria-label="Abrir PDF"
                             title="Abrir PDF"
                           >
@@ -891,19 +973,7 @@ export function BuscarTabContent({
                 />
               )}
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: 16,
-                  padding: "12px 14px",
-                  background: "var(--exp-line-soft)",
-                  borderRadius: "var(--exp-radius)",
-                  fontSize: 12,
-                  color: "var(--exp-muted)",
-                }}
-              >
+              <div className="mt-4 flex items-center justify-between rounded-exp bg-exp-line-soft px-3.5 py-3 text-xs text-exp-muted [&>span>strong]:font-bold [&>span>strong]:text-exp-ink">
                 <span>
                   Mostrando <strong>{filteredExps.length}</strong> de{" "}
                   {expedientes.length} expediente{expedientes.length === 1 ? "" : "s"}
