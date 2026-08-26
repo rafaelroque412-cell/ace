@@ -322,6 +322,7 @@ export function SubirTabContent({
           setLastUbicacion={setLastUbicacion}
           onUploaded={onUploaded}
           showToast={showToast}
+          showConfirm={showConfirm}
         />
       ) : (
       <form onSubmit={uploadExpediente}>

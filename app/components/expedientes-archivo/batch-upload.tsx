@@ -80,12 +80,14 @@ export function BatchUpload({
   setLastUbicacion,
   onUploaded,
   showToast,
+  showConfirm,
 }: {
   autoExtract: boolean;
   lastUbicacion: LastUbicacion;
   setLastUbicacion: (u: LastUbicacion) => void;
   onUploaded: () => void;
   showToast: (message: string, kind?: ToastKind) => void;
+  showConfirm: (d: { title: string; message: string; variant: "danger" | "warning"; onConfirm: () => void | Promise<void> }) => void;
 }) {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [loc, setLoc] = useState<LastUbicacion>(() => ({ ...EMPTY_LOC, ...lastUbicacion }));
@@ -554,7 +556,20 @@ export function BatchUpload({
                 <button
                   type="button"
                   className="expBtn expBtn-ghost"
-                  onClick={() => setItems([])}
+                  onClick={() =>
+                    showConfirm({
+                      title: "¿Vaciar el lote?",
+                      message:
+                        items.some((it) => it.status !== "pending")
+                          ? `Se perderán los ${items.length} PDF del lote, incluida la lectura con IA ya hecha. ¿Estás seguro?`
+                          : `Se quitarán los ${items.length} PDF del lote. ¿Estás seguro?`,
+                      variant: "warning",
+                      onConfirm: () => {
+                        setItems([]);
+                        showToast("Lote vaciado", "info");
+                      },
+                    })
+                  }
                   disabled={running}
                 >
                   <X size={14} /> Vaciar lote

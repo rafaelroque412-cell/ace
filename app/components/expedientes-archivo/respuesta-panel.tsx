@@ -215,7 +215,24 @@ export function RespuestaPanel({
     return { ok: true, nro: res.nroOficio ?? null, numeracionError: res.numeracionError ?? null };
   }
 
-  async function handleSaveRespuesta() {
+  // Mensaje de la confirmación: el correlativo es un número de serie
+  // municipal (RPC `expedientes_next_doc_number`, por oficina + tipo). Una
+  // vez asignado no se puede devolver ni reutilizar, así que la primera
+  // asignación —tanto al guardar como al descargar— pide visto bueno.
+  function confirmarAsignacion(confirmLabel: string, onConfirm: () => void) {
+    setConfirmSave({
+      title: "Asignar número de documento",
+      message:
+        "Este documento aún no tiene número. Se le asignará el siguiente correlativo oficial de la oficina — es un número de serie municipal y no se puede deshacer ni reutilizar. ¿Continuar?",
+      confirmLabel,
+      onConfirm: () => {
+        setConfirmSave(null);
+        onConfirm();
+      },
+    });
+  }
+
+  async function guardarRespuestaAhora() {
     setSaving(true);
     try {
       const saved = await saveRespuestaNow();
@@ -236,11 +253,29 @@ export function RespuestaPanel({
     }
   }
 
-  async function handleExport() {
+  function handleSaveRespuesta() {
+    if (!state.nroAsignado) {
+      confirmarAsignacion("Asignar y guardar", () => void guardarRespuestaAhora());
+      return;
+    }
+    void guardarRespuestaAhora();
+  }
+
+  function handleExport() {
     if (!state.cuerpo.trim()) {
       showToast("No hay cuerpo de respuesta para exportar.", "warning");
       return;
     }
+    // Descargar es lo que el usuario pidió, pero por debajo también archiva
+    // y asigna número si aún no lo tiene: eso no debe pasar sin que lo sepa.
+    if (!state.nroAsignado) {
+      confirmarAsignacion("Asignar y descargar", () => void exportarAhora());
+      return;
+    }
+    void exportarAhora();
+  }
+
+  async function exportarAhora() {
     setExporting(true);
     try {
       // El documento FINAL siempre queda archivado: si aun no tiene numero,
