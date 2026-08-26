@@ -52,7 +52,16 @@ import {
   type TourStep,
 } from "./expedientes-archivo/onboarding-tour";
 import { UndoToasts, useUndoStack } from "./expedientes-archivo/undo";
-import { expBtnClass } from "./expedientes-archivo/estilos";
+import {
+  EXP_HELP_TEXT,
+  EXP_SLIDE_OVER_BODY,
+  EXP_TOAST,
+  EXP_TOAST_CLOSE,
+  EXP_TOAST_ICON,
+  EXP_TOAST_MESSAGE,
+  expBtnClass,
+} from "./expedientes-archivo/estilos";
+import { cn } from "@/lib/utils";
 import { useToasts } from "./expedientes-archivo/use-toasts";
 import { useExpedienteSearch } from "./expedientes-archivo/use-expediente-search";
 import { useExpedientesPreferences } from "./expedientes-archivo/use-preferences";
@@ -165,6 +174,14 @@ function buildSerieDocumental(
 
 /** Prefijo de los identificadores de esta lista de pestañas en la página. */
 const BASE_PESTANAS = "archivo";
+
+// "expTab"/"active" se conservan como marcadores literales (no aportan CSS
+// propio) porque el tour guiado (onboarding-tour.tsx) las busca por
+// `document.querySelector(".expTab:first-of-type")`.
+const EXP_TAB =
+  "expTab relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-exp border-0 bg-transparent px-[18px] py-3.5 text-sm font-semibold text-exp-muted " +
+  "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-exp-line-soft hover:text-exp-ink";
+const EXP_TAB_ACTIVE = "active bg-exp-brand-soft text-exp-brand";
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -1369,34 +1386,41 @@ export function ExpedientesArchivoWorkspace({
   }
 
   return (
-    <div className="expPanel" id="expedientes-archivo">
+    <div className="tw expPanel overflow-hidden rounded-exp-lg border border-exp-line bg-exp-panel shadow-exp-sm" id="expedientes-archivo">
       {/* Apunta al panel, no al contenido de una pestaña concreta: así el salto
           funciona en las tres y no solo en Buscar. */}
-      <a className="expSkipLink" href={`#${idPanel(BASE_PESTANAS)}`}>
+      <a
+        className="absolute left-2 -top-10 z-[999] rounded-md bg-exp-brand px-4 py-2 text-[13px] font-semibold text-white no-underline transition-[top] duration-200 ease-linear focus:top-2 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-white"
+        href={`#${idPanel(BASE_PESTANAS)}`}
+      >
         Saltar al contenido principal
       </a>
 
-      <div className="expPanelHeader">
-        <div className="expPanelHeaderText">
-          <p className="expPanelHeaderEyebrow">
+      <div className="flex items-start justify-between gap-4 border-b border-exp-line bg-[linear-gradient(180deg,var(--color-exp-brand-soft)_0%,transparent_100%)] px-[26px] pb-[18px] pt-[22px]">
+        <div className="min-w-0 flex-1">
+          <p className="m-0 mb-1.5 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.6px] text-exp-brand [&>svg]:size-3">
             <Sparkles size={12} /> Biblioteca de expedientes
           </p>
-          <h2 className="expPanelHeaderTitle">
+          <h2 className="m-0 text-[22px] font-bold leading-[1.3] text-exp-ink">
             Busca el contenido y localiza dónde está el expediente físico
           </h2>
-          <p className="expPanelHeaderSubtitle">
+          <p className="mt-1 max-w-[78ch] text-sm leading-relaxed text-exp-muted">
             Usa el buscador para encontrar expedientes por contenido, o sube nuevos PDF con OCR automático.
           </p>
-          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span className="expStatusDot" title="Conectado" aria-hidden="true" />
-            <span className="expHelpText" style={{ marginTop: 0 }}>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span
+              className="relative inline-block size-2 shrink-0 rounded-full bg-exp-success after:absolute after:inset-0 after:animate-exp-pulse after:rounded-full after:bg-inherit after:content-['']"
+              title="Conectado"
+              aria-hidden="true"
+            />
+            <span className={cn(EXP_HELP_TEXT, "mt-0")}>
               <Compass size={12} />
               Atajo: Ctrl+K para buscar · Ctrl+I para chat · ? para ayuda
             </span>
-            <div className="expSettingsGroup" role="group" aria-label="Preferencias de visualización">
+            <div className="ml-auto inline-flex items-center gap-1" role="group" aria-label="Preferencias de visualización">
               <button
                 type="button"
-                className="expSettingsBtn"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-transparent text-exp-muted transition-colors duration-[120ms] ease-linear hover:bg-exp-line-soft hover:text-exp-ink aria-pressed:border-exp-brand aria-pressed:bg-exp-brand-soft aria-pressed:text-exp-brand"
                 onClick={toggleDensity}
                 aria-pressed={density === "compact"}
                 aria-label={density === "compact" ? "Modo compacto activado" : "Modo cómodo"}
@@ -1406,7 +1430,7 @@ export function ExpedientesArchivoWorkspace({
               </button>
               <button
                 type="button"
-                className="expSettingsBtn"
+                className="inline-flex size-8 items-center justify-center rounded-md border border-transparent text-exp-muted transition-colors duration-[120ms] ease-linear hover:bg-exp-line-soft hover:text-exp-ink aria-pressed:border-exp-brand aria-pressed:bg-exp-brand-soft aria-pressed:text-exp-brand"
                 onClick={toggleTheme}
                 aria-pressed={resolvedTheme === "dark"}
                 aria-label={resolvedTheme === "dark" ? "Modo oscuro activado" : "Modo claro"}
@@ -1418,17 +1442,20 @@ export function ExpedientesArchivoWorkspace({
             </div>
           </div>
         </div>
-        <div className="expPanelHeaderIcon" aria-hidden="true">
+        <div
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-exp-brand text-white shadow-[0_4px_12px_rgba(15,118,110,0.20)]"
+          aria-hidden="true"
+        >
           <BookOpen size={20} />
         </div>
       </div>
 
-      <div className="expTabBar">
+      <div className="sticky top-0 z-10 flex items-center gap-1 overflow-x-auto bg-exp-panel px-[18px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* La lista solo puede contener pestañas: el botón de atajos vive fuera,
             justo después. Antes estaba dentro y el lector lo contaba como una
             pestaña más ("4 de 4") sin serlo. */}
         <div
-          className="expTabBarPestanas"
+          className="flex items-center gap-1"
           role="tablist"
           aria-label="Secciones del archivo"
           onKeyDown={(e) => {
@@ -1443,7 +1470,7 @@ export function ExpedientesArchivoWorkspace({
           <button
             type="button"
             {...propsPestana(BASE_PESTANAS, "buscar", tab)}
-            className={tab === "buscar" ? "expTab active" : "expTab"}
+            className={cn(EXP_TAB, tab === "buscar" && EXP_TAB_ACTIVE)}
             onClick={() => setTab("buscar")}
           >
             <Search size={15} /> Buscar
@@ -1452,15 +1479,18 @@ export function ExpedientesArchivoWorkspace({
             <button
               type="button"
               {...propsPestana(BASE_PESTANAS, "subir", tab)}
-              className={tab === "subir" ? "expTab active" : "expTab"}
+              className={cn(EXP_TAB, tab === "subir" && EXP_TAB_ACTIVE)}
               onClick={() => setTab("subir")}
               onMouseEnter={() => void importarSubir()}
               onFocus={() => void importarSubir()}
             >
               <UploadCloud size={15} /> Subir
               {hasPending ? (
-                <span className="expTabBadge" aria-label="Procesando">
-                  <span className="expPingDot" style={{ width: 6, height: 6 }} />
+                <span
+                  className="ml-0.5 inline-flex items-center justify-center gap-1 rounded-full bg-exp-brand-soft px-[5px] text-[10px] font-bold text-exp-brand [.expTab.active_&]:bg-exp-brand [.expTab.active_&]:text-white"
+                  aria-label="Procesando"
+                >
+                  <span className="relative inline-block size-1.5 rounded-full bg-exp-brand before:absolute before:inset-0 before:animate-[expPing_1.5s_cubic-bezier(0,0,0.2,1)_infinite] before:rounded-full before:bg-inherit before:content-['']" />
                   {displayStatusCounts.pendientes}
                 </span>
               ) : null}
@@ -1470,7 +1500,7 @@ export function ExpedientesArchivoWorkspace({
             <button
               type="button"
               {...propsPestana(BASE_PESTANAS, "responder", tab)}
-              className={tab === "responder" ? "expTab active" : "expTab"}
+              className={cn(EXP_TAB, tab === "responder" && EXP_TAB_ACTIVE)}
               onClick={() => setTab("responder")}
               onMouseEnter={() => void importarRespuesta()}
               onFocus={() => void importarRespuesta()}
@@ -1481,7 +1511,7 @@ export function ExpedientesArchivoWorkspace({
         </div>
         <button
           type="button"
-          className="expTabHelp"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 py-2 text-xs font-semibold text-exp-muted transition-colors duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-exp-line-soft hover:text-exp-ink [&>kbd]:rounded [&>kbd]:border [&>kbd]:border-exp-line [&>kbd]:bg-exp-panel [&>kbd]:px-1.5 [&>kbd]:py-0.5 [&>kbd]:font-mono [&>kbd]:text-[11px] [&>kbd]:font-bold [&>kbd]:text-exp-brand"
           onClick={() => setHelpOpen(true)}
           aria-label="Ver atajos de teclado"
         >
@@ -1695,8 +1725,8 @@ export function ExpedientesArchivoWorkspace({
           subtitulo="Navega más rápido con el teclado"
           titulo="Atajos de teclado"
         >
-            <div className="expSlideOver-body">
-              <table className="expHelpTable">
+            <div className={cn("tw", EXP_SLIDE_OVER_BODY)}>
+              <table className="w-full border-collapse text-[13px] [&_td]:px-3 [&_td]:py-2.5 [&_td:first-child]:w-40 [&_td:first-child]:whitespace-nowrap [&_tr]:border-b [&_tr]:border-exp-line-soft [&_tr:last-child]:border-b-0 [&_kbd]:mx-px [&_kbd]:inline-block [&_kbd]:rounded [&_kbd]:border [&_kbd]:border-exp-line [&_kbd]:bg-exp-line-soft [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:font-mono [&_kbd]:text-[11px] [&_kbd]:font-semibold [&_kbd]:text-exp-brand">
                 <tbody>
                   <tr>
                     <td>
@@ -1775,11 +1805,16 @@ export function ExpedientesArchivoWorkspace({
           }}
         >
           <AlertDialog.Portal>
-            <AlertDialog.Overlay className="expConfirm" />
-            <AlertDialog.Content className="expConfirmDialog expConfirmPortal">
-            <div className="expConfirmHeader">
+            <AlertDialog.Overlay className="tw fixed inset-0 z-[250] flex animate-exp-fade-in items-center justify-center bg-[rgba(15,23,42,0.5)] p-5 backdrop-blur-[3px]" />
+            <AlertDialog.Content className="tw fixed inset-5 z-[251] m-auto h-fit w-full max-w-[420px] animate-exp-pop-in overflow-hidden rounded-exp-lg bg-exp-panel shadow-[0_20px_60px_rgba(15,23,42,0.25)]">
+            <div className="flex items-center gap-3 border-b border-exp-line px-5 py-[18px]">
               <div
-                className={`expConfirmIcon ${confirm.variant === "danger" ? "danger" : "warning"}`}
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-full",
+                  confirm.variant === "danger"
+                    ? "bg-exp-danger-soft text-exp-danger"
+                    : "bg-exp-warning-soft text-exp-warning",
+                )}
               >
                 {confirm.variant === "danger" ? (
                   <Trash2 size={20} />
@@ -1788,13 +1823,13 @@ export function ExpedientesArchivoWorkspace({
                 )}
               </div>
               <AlertDialog.Title asChild>
-                <h3 className="expConfirmTitle">{confirm.title}</h3>
+                <h3 className="m-0 text-[15px] font-bold text-exp-ink">{confirm.title}</h3>
               </AlertDialog.Title>
             </div>
             <AlertDialog.Description asChild>
-              <p className="expConfirmBody">{confirm.message}</p>
+              <p className="px-5 py-[18px] text-sm leading-relaxed text-exp-ink-soft">{confirm.message}</p>
             </AlertDialog.Description>
-            <div className="expConfirmFooter">
+            <div className="flex justify-end gap-2.5 border-t border-exp-line bg-exp-line-soft px-5 py-3.5">
               <AlertDialog.Cancel asChild>
                 <button type="button" className={expBtnClass("ghost")}>
                   Cancelar
@@ -1831,7 +1866,7 @@ export function ExpedientesArchivoWorkspace({
 
       <button
         type="button"
-        className="expFab"
+        className="fixed bottom-5 right-5 z-50 hidden size-14 items-center justify-center rounded-full border-0 bg-exp-brand text-white shadow-[0_6px_20px_rgba(15,118,110,0.4)] transition-all duration-200 ease-linear hover:scale-105 hover:bg-exp-brand-dark hover:shadow-[0_8px_24px_rgba(15,118,110,0.5)] active:scale-95 max-[768px]:inline-flex"
         onClick={() => (canManage ? setTab("subir") : tour.restart())}
         aria-label={canManage ? "Subir nuevo expediente" : "Ver tutorial"}
         title={canManage ? "Subir nuevo expediente" : "Ver tutorial"}
@@ -1839,13 +1874,13 @@ export function ExpedientesArchivoWorkspace({
         {canManage ? <PlusCircle size={22} /> : <Compass size={22} />}
       </button>
 
-      <div aria-live="polite" aria-atomic="true" className="expSrOnly">
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
         {toasts.map((t) => (
           <span key={t.id}>{t.message}</span>
         ))}
       </div>
 
-      <div>
+      <div className="fixed bottom-5 right-5 z-[300] flex flex-col gap-2">
         {toasts.map((toast) => {
           const Icon =
             toast.kind === "success"
@@ -1858,14 +1893,20 @@ export function ExpedientesArchivoWorkspace({
           return (
             <div
               key={toast.id}
-              className={`expToast expToast-${toast.kind}`}
+              className={cn(
+                EXP_TOAST,
+                "max-w-[400px]",
+                toast.kind === "success" && "bg-exp-success",
+                toast.kind === "error" && "bg-exp-danger",
+                toast.kind === "warning" && "bg-exp-warning",
+              )}
               role="status"
             >
-              <Icon className="expToast-icon" size={18} />
-              <span className="expToast-message">{toast.message}</span>
+              <Icon className={EXP_TOAST_ICON} size={18} />
+              <span className={EXP_TOAST_MESSAGE}>{toast.message}</span>
               <button
                 type="button"
-                className="expToast-close"
+                className={EXP_TOAST_CLOSE}
                 onClick={() => dismissToast(toast.id)}
                 aria-label="Cerrar notificación"
               >
