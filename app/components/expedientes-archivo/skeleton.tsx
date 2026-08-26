@@ -13,6 +13,9 @@ import {
   EXP_STATS,
   EXP_STAT_HEADER,
   EXP_TABLE,
+  EXP_TABLE_TD,
+  EXP_TABLE_TH,
+  EXP_TABLE_THEAD,
   EXP_TABLE_WRAP,
   expStatCardClass,
 } from "./estilos";
@@ -81,30 +84,30 @@ export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
     <div className={cn("tw", EXP_TABLE_WRAP)} aria-busy="true">
       <table className={EXP_TABLE}>
-        <thead>
+        <thead className={EXP_TABLE_THEAD}>
           <tr>
-            <th className="w-9"></th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th className="w-[140px]"></th>
+            <th className={cn(EXP_TABLE_TH, "w-9")}></th>
+            <th className={EXP_TABLE_TH}></th>
+            <th className={EXP_TABLE_TH}></th>
+            <th className={EXP_TABLE_TH}></th>
+            <th className={EXP_TABLE_TH}></th>
+            <th className={EXP_TABLE_TH}></th>
+            <th className={cn(EXP_TABLE_TH, "w-[140px]")}></th>
           </tr>
         </thead>
         <tbody>
           {Array.from({ length: rows }).map((_, i) => (
             <tr key={i}>
-              <td><div className={cn(EXP_SKELETON, "size-4 rounded-[3px]")} /></td>
-              <td>
+              <td className={EXP_TABLE_TD}><div className={cn(EXP_SKELETON, "size-4 rounded-[3px]")} /></td>
+              <td className={EXP_TABLE_TD}>
                 <div className={cn(EXP_SKELETON, "mb-1.5 h-[13px] w-4/5")} />
                 <div className={cn(EXP_SKELETON, "h-2.5 w-1/2")} />
               </td>
-              <td><div className={cn(EXP_SKELETON, "h-3 w-10")} /></td>
-              <td><div className={cn(EXP_SKELETON, "h-3 w-20")} /></td>
-              <td><div className={cn(EXP_SKELETON, "h-3 w-[50px]")} /></td>
-              <td><div className={cn(EXP_SKELETON, "h-[18px] w-[70px] rounded-full")} /></td>
-              <td>
+              <td className={EXP_TABLE_TD}><div className={cn(EXP_SKELETON, "h-3 w-10")} /></td>
+              <td className={EXP_TABLE_TD}><div className={cn(EXP_SKELETON, "h-3 w-20")} /></td>
+              <td className={EXP_TABLE_TD}><div className={cn(EXP_SKELETON, "h-3 w-[50px]")} /></td>
+              <td className={EXP_TABLE_TD}><div className={cn(EXP_SKELETON, "h-[18px] w-[70px] rounded-full")} /></td>
+              <td className={EXP_TABLE_TD}>
                 <div className="flex gap-1">
                   <div className={cn(EXP_SKELETON, "size-7 rounded-md")} />
                   <div className={cn(EXP_SKELETON, "size-7 rounded-md")} />

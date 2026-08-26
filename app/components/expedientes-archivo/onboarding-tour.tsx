@@ -4,6 +4,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { X, ChevronLeft, ChevronRight, Sparkles, HelpCircle } from "lucide-react";
 import { expBtnClass } from "./estilos";
+import { cn } from "@/lib/utils";
 
 export type TourStep = {
   id: string;
@@ -128,18 +129,18 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
         <Popover.Portal>
           <Popover.Content
             aria-label="Tutorial guiado"
-            className="expTour"
+            className="tw z-[201] w-[min(360px,calc(100vw-32px))] animate-exp-pop-in overflow-hidden rounded-exp-lg border border-exp-line bg-exp-panel shadow-[0_20px_60px_rgba(15,23,42,0.25)]"
             collisionPadding={16}
             side={step.position ?? "bottom"}
             sideOffset={16}
           >
-        <div className="expTourHeader">
-          <div className="expTourBadge">
+        <div className="flex items-center justify-between border-b border-exp-line bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_100%)] px-4 py-3">
+          <div className="inline-flex items-center gap-1 rounded-full border border-exp-brand bg-exp-panel px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.5px] text-exp-brand">
             <Sparkles size={12} /> Paso {currentStep + 1} de {steps.length}
           </div>
           <button
             type="button"
-            className="expTourClose"
+            className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-exp-muted transition-colors duration-[120ms] ease-linear hover:bg-exp-line-soft hover:text-exp-ink"
             onClick={() => {
               // Cerrar con X = descartar (no volver a mostrar)
               onComplete?.();
@@ -150,21 +151,28 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
             <X size={16} />
           </button>
         </div>
-        <div className="expTourBody">
-          <h3 className="expTourTitle">{step.title}</h3>
-          <p className="expTourContent">{step.content}</p>
-          {step.action ? <p className="expTourAction">{step.action}</p> : null}
+        <div className="px-[18px] py-4">
+          <h3 className="m-0 mb-2 text-base font-bold text-exp-ink">{step.title}</h3>
+          <p className="m-0 mb-2 text-[13px] leading-relaxed text-exp-ink-soft">{step.content}</p>
+          {step.action ? (
+            <p className="m-0 rounded-exp bg-exp-brand-soft px-2.5 py-2 text-xs font-medium text-exp-brand">
+              {step.action}
+            </p>
+          ) : null}
         </div>
-        <div className="expTourFooter">
-          <div className="expTourProgress" aria-hidden="true">
+        <div className="flex items-center justify-between gap-3 border-t border-exp-line bg-exp-line-soft px-4 py-3">
+          <div className="flex gap-1" aria-hidden="true">
             {steps.map((_, i) => (
               <span
                 key={i}
-                className={`expTourDot ${i <= currentStep ? "active" : ""}`}
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full bg-exp-line transition-all duration-[120ms] ease-linear",
+                  i <= currentStep && "w-[18px] rounded-full bg-exp-brand",
+                )}
               />
             ))}
           </div>
-          <div className="expTourActions">
+          <div className="flex gap-1.5">
             {!isFirst ? (
               <button
                 type="button"
@@ -256,7 +264,7 @@ export function TourTrigger({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
-      className="expTourTrigger"
+      className="tw inline-flex items-center gap-1 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-[5px] text-xs font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-line-soft hover:text-exp-brand"
       onClick={onClick}
       title="Ver tutorial"
       aria-label="Ver tutorial guiado"

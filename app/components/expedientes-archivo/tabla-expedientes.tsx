@@ -3,10 +3,28 @@
 import { memo } from "react";
 import { RefreshCw, Download, Replace, Trash2, FileText, MapPin } from "lucide-react";
 import type { TablaExpedientesProps } from "./types";
+import {
+  EXP_EMPTY,
+  EXP_EMPTY_DESC,
+  EXP_EMPTY_ICON,
+  EXP_EMPTY_TITLE,
+  EXP_ICON_BUTTON,
+  EXP_ICON_BUTTON_DANGER,
+  EXP_LIST_ITEM_ACTIONS,
+  EXP_SPIN,
+  EXP_TABLE,
+  EXP_TABLE_TBODY,
+  EXP_TABLE_TD,
+  EXP_TABLE_TH,
+  EXP_TABLE_THEAD,
+  EXP_TABLE_WRAP,
+  expStatusClass,
+} from "./estilos";
+import { cn } from "@/lib/utils";
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
   return (
-    <span className={`expStatus expStatus-${status}`} data-status={status}>
+    <span className={expStatusClass(status)} data-status={status}>
       {label}
     </span>
   );
@@ -29,9 +47,15 @@ function SortBtn({
 }) {
   const arrow = sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : "";
   return (
+    // Sin tipografía propia a propósito: hereda font/color del <th> padre
+    // (reset .tw button { font: inherit; color: inherit } en tailwind.css),
+    // igual que hacía `.expTableSortBtn` heredando de `.expTable th`.
     <button
       type="button"
-      className={`expTableSortBtn ${sortBy === col ? "activeSort" : ""}`}
+      className={cn(
+        "inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+        sortBy === col && "text-exp-brand",
+      )}
       onClick={() => onSort(col)}
     >
       {children}
@@ -60,12 +84,12 @@ export const TablaExpedientes = memo(function TablaExpedientes({
   statusLabel,
 }: TablaExpedientesProps) {
   return (
-    <div className="expTableWrap">
-      <table className="expTable">
-        <thead>
+    <div className={cn("tw", EXP_TABLE_WRAP)}>
+      <table className={EXP_TABLE}>
+        <thead className={EXP_TABLE_THEAD}>
           <tr>
             {canManage ? (
-              <th style={{ width: 36 }}>
+              <th className={cn(EXP_TABLE_TH, "w-9")}>
                 <input
                   type="checkbox"
                   checked={exps.length > 0 && exps.every((e) => selectedIds.has(e.id))}
@@ -74,38 +98,41 @@ export const TablaExpedientes = memo(function TablaExpedientes({
                 />
               </th>
             ) : null}
-            <th>
+            <th className={EXP_TABLE_TH}>
               <SortBtn col="title" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
                 Título
               </SortBtn>
             </th>
-            <th>
+            <th className={EXP_TABLE_TH}>
               <SortBtn col="anio" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
                 Año
               </SortBtn>
             </th>
-            <th>Ubicación</th>
-            <th>
+            <th className={EXP_TABLE_TH}>Ubicación</th>
+            <th className={EXP_TABLE_TH}>
               <SortBtn col="file_size" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
                 Tamaño
               </SortBtn>
             </th>
-            <th>
+            <th className={EXP_TABLE_TH}>
               <SortBtn col="status" sortBy={sortBy} sortDir={sortDir} onSort={onSort}>
                 Estado
               </SortBtn>
             </th>
-            {canManage ? <th style={{ width: 140 }}>Acciones</th> : null}
+            {canManage ? <th className={cn(EXP_TABLE_TH, "w-[140px]")}>Acciones</th> : null}
           </tr>
         </thead>
-        <tbody>
+        <tbody className={EXP_TABLE_TBODY}>
           {exps.map((exp) => (
             <tr
               key={exp.id}
-              className={selectedIds.has(exp.id) ? "selected" : ""}
+              className={cn(
+                "transition-colors duration-[120ms] ease-linear",
+                selectedIds.has(exp.id) ? "bg-exp-brand-soft hover:bg-exp-brand-soft" : "hover:bg-exp-line-soft",
+              )}
             >
               {canManage ? (
-                <td>
+                <td className={EXP_TABLE_TD}>
                   <input
                     type="checkbox"
                     checked={selectedIds.has(exp.id)}
@@ -114,52 +141,52 @@ export const TablaExpedientes = memo(function TablaExpedientes({
                   />
                 </td>
               ) : null}
-              <td>
+              <td className={EXP_TABLE_TD}>
                 <button
                   type="button"
-                  className="expTableTitle"
+                  className="border-0 bg-transparent p-0 text-left text-[13px] font-bold text-exp-ink transition-colors duration-[120ms] ease-linear hover:text-exp-brand"
                   onClick={() => onOpen(exp)}
                 >
                   {exp.title}
                 </button>
-                <div className="expTableSub">
+                <div className="mt-0.5 text-[11px] text-exp-muted">
                   {exp.anio ? `${exp.anio}` : ""}
                   {exp.oficina ? ` · ${exp.oficina}` : ""}
                 </div>
               </td>
-              <td>{exp.anio ?? "—"}</td>
-              <td>
-                <span className="expTableUbicacion">
-                  <MapPin size={11} style={{ display: "inline", marginRight: 4 }} />
+              <td className={EXP_TABLE_TD}>{exp.anio ?? "—"}</td>
+              <td className={EXP_TABLE_TD}>
+                <span className="inline-flex items-center font-mono text-xs text-exp-warning [&>svg]:mr-1">
+                  <MapPin size={11} />
                   {[exp.nro_estante && `E${exp.nro_estante}`, exp.nro_piso && `P${exp.nro_piso}`, exp.nro_local]
                     .filter(Boolean)
                     .join(" / ") || "—"}
                 </span>
               </td>
-              <td>{formatBytes(exp.file_size)}</td>
-              <td>
+              <td className={EXP_TABLE_TD}>{formatBytes(exp.file_size)}</td>
+              <td className={EXP_TABLE_TD}>
                 <StatusBadge status={exp.status} label={statusLabel(exp.status)} />
               </td>
               {canManage ? (
-                <td>
-                  <div className="expListItemActions" onClick={(e) => e.stopPropagation()}>
+                <td className={EXP_TABLE_TD}>
+                  <div className={EXP_LIST_ITEM_ACTIONS} onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => void reindex(exp.id)}
                       disabled={reindexingId === exp.id}
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       title="Reindexar"
                       aria-label="Reindexar"
                     >
                       <RefreshCw
                         size={14}
-                        className={reindexingId === exp.id ? "expSpin" : ""}
+                        className={reindexingId === exp.id ? EXP_SPIN : ""}
                       />
                     </button>
                     <button
                       type="button"
                       onClick={() => onDownload(exp)}
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       title="Descargar"
                       aria-label="Descargar"
                     >
@@ -168,7 +195,7 @@ export const TablaExpedientes = memo(function TablaExpedientes({
                     <button
                       type="button"
                       onClick={() => onReplace(exp)}
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       title="Reemplazar PDF"
                       aria-label="Reemplazar PDF"
                     >
@@ -178,7 +205,7 @@ export const TablaExpedientes = memo(function TablaExpedientes({
                       type="button"
                       onClick={() => onDelete(exp)}
                       disabled={reindexingId === exp.id || deletingId === exp.id}
-                      className="expIconButton danger"
+                      className={cn(EXP_ICON_BUTTON, EXP_ICON_BUTTON_DANGER)}
                       title="Eliminar"
                       aria-label="Eliminar"
                     >
@@ -192,12 +219,12 @@ export const TablaExpedientes = memo(function TablaExpedientes({
         </tbody>
       </table>
       {exps.length === 0 ? (
-        <div className="expEmpty" style={{ borderRadius: 0, border: 0 }}>
-          <div className="expEmpty-icon">
+        <div className={cn(EXP_EMPTY, "rounded-none border-0")}>
+          <div className={EXP_EMPTY_ICON}>
             <FileText size={24} />
           </div>
-          <h3 className="expEmpty-title">Sin resultados</h3>
-          <p className="expEmpty-desc">
+          <h3 className={EXP_EMPTY_TITLE}>Sin resultados</h3>
+          <p className={EXP_EMPTY_DESC}>
             No hay expedientes que coincidan con los filtros aplicados.
           </p>
         </div>

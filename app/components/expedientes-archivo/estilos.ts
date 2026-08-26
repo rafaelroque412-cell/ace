@@ -104,6 +104,43 @@ export const EXP_TABLE_WRAP = "overflow-hidden rounded-exp border border-exp-lin
 
 export const EXP_TABLE = "w-full border-collapse text-[13px]";
 
+export const EXP_TABLE_THEAD = "sticky top-0 z-[1] bg-exp-line-soft";
+
+export const EXP_TABLE_TH =
+  "whitespace-nowrap border-b border-exp-line px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted";
+
+export const EXP_TABLE_TD = "border-b border-exp-line-soft px-3.5 py-3 align-middle text-exp-ink";
+
+// El borde inferior de la última fila se quita desde el <tbody> (selector
+// arbitrario), no por archivo: es más simple que calcular "soy la última"
+// dentro del `.map`.
+export const EXP_TABLE_TBODY = "[&>tr:last-child>td]:border-b-0";
+
+export const EXP_TABLE_ROW = "transition-colors duration-[120ms] ease-linear hover:bg-exp-line-soft";
+export const EXP_TABLE_ROW_SELECTED = "bg-exp-brand-soft hover:bg-exp-brand-soft";
+
+// ── Botón de icono (acciones por fila: reindexar, descargar, eliminar...) ───
+
+export const EXP_ICON_BUTTON =
+  "inline-flex size-8 items-center justify-center rounded-lg border border-exp-line bg-exp-panel text-exp-muted no-underline " +
+  "transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-brand-soft hover:text-exp-brand " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
+
+export const EXP_ICON_BUTTON_DANGER =
+  "hover:border-exp-danger hover:bg-exp-danger-soft hover:text-exp-danger";
+
+// ── Estado vacío (sin resultados / sin acceso) ───────────────────────────────
+
+export const EXP_EMPTY =
+  "flex flex-col items-center gap-3 rounded-exp-lg border border-dashed border-exp-line bg-exp-line-soft px-6 py-12 text-center text-exp-muted";
+
+export const EXP_EMPTY_ICON =
+  "flex size-16 items-center justify-center rounded-full bg-exp-panel text-exp-brand shadow-exp-sm";
+
+export const EXP_EMPTY_TITLE = "m-0 text-base font-bold text-exp-ink";
+
+export const EXP_EMPTY_DESC = "m-0 max-w-[360px] text-sm leading-normal text-exp-muted";
+
 // ── Pie de página compartido (overlay/panel/toast/paginación) ──────────────
 
 export const EXP_SKELETON = "animate-exp-shimmer rounded-md bg-[linear-gradient(90deg,var(--exp-line-soft)_25%,var(--exp-line)_50%,var(--exp-line-soft)_75%)] bg-[length:200%_100%]";

@@ -12,6 +12,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import type { ExpedienteItem } from "./types";
+import { cn } from "@/lib/utils";
 
 export type CommandAction = {
   id: string;
@@ -185,16 +186,16 @@ export const CommandPalette = memo(function CommandPalette({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="expCmdOverlay" />
+        <Dialog.Overlay className="tw fixed inset-0 z-[200] flex animate-exp-fade-in justify-center bg-[rgba(15,23,42,0.55)] pt-[10vh] backdrop-blur-[4px]" />
         <Dialog.Content
           aria-label="Búsqueda rápida"
-          className="expCmd expCmdPortal"
+          className="tw fixed inset-x-0 top-[10vh] z-[201] mx-auto flex max-h-[70vh] w-[min(640px,92vw)] animate-exp-pop-in flex-col overflow-hidden rounded-exp-lg bg-exp-panel shadow-[0_30px_80px_rgba(15,23,42,0.30)]"
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             inputRef.current?.focus();
           }}
         >
-        <div className="expCmd-header">
+        <div className="flex items-center gap-2.5 border-b border-exp-line bg-exp-panel px-4 py-3.5 [&>svg]:shrink-0 [&>svg]:text-exp-muted">
           <Search size={18} />
           <input
             ref={inputRef}
@@ -206,20 +207,20 @@ export const CommandPalette = memo(function CommandPalette({
             }}
             onKeyDown={onKeyDown}
             placeholder="Busca un expediente o una acción…"
-            className="expCmd-input"
+            className="flex-1 border-0 bg-transparent py-1 text-[15px] text-exp-ink outline-none placeholder:text-exp-muted"
             aria-label="Búsqueda rápida"
           />
-          <kbd style={{ fontSize: 11, color: "var(--exp-muted)" }}>Esc</kbd>
+          <kbd className="text-[11px] text-exp-muted">Esc</kbd>
         </div>
-        <ul className="expCmd-list" ref={listRef}>
+        <ul className="m-0 flex-1 list-none overflow-auto py-1.5" ref={listRef}>
           {allItems.length === 0 ? (
-            <li className="expCmd-empty">
+            <li className="px-4 py-10 text-center text-sm text-exp-muted">
               Sin resultados para &ldquo;{query}&rdquo;
             </li>
           ) : (
             <>
               {expedienteResults.length > 0 ? (
-                <li className="expCmd-group" aria-hidden="true">
+                <li className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.6px] text-exp-muted" aria-hidden="true">
                   Expedientes ({expedienteResults.length})
                 </li>
               ) : null}
@@ -227,19 +228,25 @@ export const CommandPalette = memo(function CommandPalette({
                 <li
                   key={item.id}
                   data-cmd-idx={idx}
-                  className={`expCmd-item ${idx === activeIndex ? "active" : ""}`}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2.5 border-l-[3px] border-l-transparent px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
+                    idx === activeIndex && "border-l-exp-brand bg-exp-brand-soft",
+                    "hover:border-l-exp-brand hover:bg-exp-brand-soft",
+                  )}
                   onMouseEnter={() => setActiveIndex(idx)}
                   onClick={item.onSelect}
                 >
                   {item.icon}
-                  <div className="expCmd-itemBody">
-                    <strong>{item.label}</strong>
-                    {item.description ? <span>{item.description}</span> : null}
+                  <div className="min-w-0 flex-1">
+                    <strong className="block truncate font-semibold">{item.label}</strong>
+                    {item.description ? (
+                      <span className="block truncate text-xs text-exp-muted">{item.description}</span>
+                    ) : null}
                   </div>
                 </li>
               ))}
               {filteredActions.length > 0 ? (
-                <li className="expCmd-group" aria-hidden="true">
+                <li className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.6px] text-exp-muted" aria-hidden="true">
                   Acciones
                 </li>
               ) : null}
@@ -249,19 +256,30 @@ export const CommandPalette = memo(function CommandPalette({
                   <li
                     key={item.id}
                     data-cmd-idx={realIdx}
-                    className={`expCmd-item ${realIdx === activeIndex ? "active" : ""}`}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 border-l-[3px] border-l-transparent px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
+                      realIdx === activeIndex && "border-l-exp-brand bg-exp-brand-soft",
+                      "hover:border-l-exp-brand hover:bg-exp-brand-soft",
+                    )}
                     onMouseEnter={() => setActiveIndex(realIdx)}
                     onClick={item.onSelect}
                   >
                     {item.icon}
-                    <div className="expCmd-itemBody">
-                      <strong>{item.label}</strong>
-                      {item.description ? <span>{item.description}</span> : null}
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate font-semibold">{item.label}</strong>
+                      {item.description ? (
+                        <span className="block truncate text-xs text-exp-muted">{item.description}</span>
+                      ) : null}
                     </div>
                     {item.shortcut ? (
-                      <span className="expCmd-shortcut">
+                      <span className="inline-flex shrink-0 gap-0.5">
                         {item.shortcut.split("+").map((k, i) => (
-                          <kbd key={i}>{k.trim()}</kbd>
+                          <kbd
+                            key={i}
+                            className="min-w-[18px] rounded border border-exp-line bg-exp-panel px-1.5 py-0.5 text-center font-mono text-[11px] font-semibold text-exp-brand"
+                          >
+                            {k.trim()}
+                          </kbd>
                         ))}
                       </span>
                     ) : null}
@@ -271,7 +289,7 @@ export const CommandPalette = memo(function CommandPalette({
             </>
           )}
         </ul>
-        <div className="expCmd-footer">
+        <div className="flex items-center gap-3.5 border-t border-exp-line bg-exp-line-soft px-4 py-2 text-[11px] text-exp-muted [&_kbd]:mr-0.5 [&_kbd]:rounded-[3px] [&_kbd]:border [&_kbd]:border-exp-line [&_kbd]:bg-exp-panel [&_kbd]:px-[5px] [&_kbd]:py-px [&_kbd]:font-mono [&_kbd]:text-[10px]">
           <span>
             <kbd>↑</kbd>
             <kbd>↓</kbd> navegar
@@ -282,7 +300,7 @@ export const CommandPalette = memo(function CommandPalette({
           <span>
             <kbd>Esc</kbd> cerrar
           </span>
-          <span className="expCmd-hint">
+          <span className="ml-auto inline-flex items-center gap-1">
             <X size={12} /> Click fuera
           </span>
         </div>
