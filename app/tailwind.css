@@ -73,6 +73,14 @@
 @source "./components/oficinas/membrete-tab.tsx";
 @source "./components/oficinas/modelos-requerimiento.tsx";
 @source "./components/oficinas/procesos-modal.tsx";
+/* Expedientes-archivo — migración a Tailwind por fases (módulo grande, con
+   un vocabulario de clases compartido entre archivos: expBtn/expStatus/
+   expCard/... viven en 5-9 componentes distintos, no aislados por archivo).
+   Fase 1: piezas sin acoplamiento entre archivos (skeleton, tarjetas,
+   paginación, undo). El resto —incluida la carpeta completa, para no volver
+   a tocar este archivo en cada fase siguiente— ya queda registrado aquí. */
+@source "./components/expedientes-archivo-workspace.tsx";
+@source "./components/expedientes-archivo";
 
 /* ── Tokens de marca ────────────────────────────────────────────────────────
    REFERENCIAN las variables CSS efectivas del sistema (el :root ganador de
@@ -130,6 +138,49 @@
   --animate-overlay-in: overlay-in 0.18s ease-out;
   --animate-content-in: content-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-fade-in: fade-in 0.15s ease-out;
+}
+
+/* Expedientes-archivo tiene su PROPIO sistema de tokens (--exp-*, definido en
+   expedientes-archivo.css), con valores deliberadamente distintos de los
+   globales de arriba (--exp-warning #d97706 vs --warning #a16207, por
+   ejemplo) y su propia variante oscura. Se mapean aparte, sin reusar
+   --color-brand/--color-danger/etc., para que la migración a Tailwind sea
+   fiel al aspecto actual del módulo en vez de adoptar la paleta global. */
+@theme {
+  --color-exp-bg: var(--exp-bg);
+  --color-exp-ink: var(--exp-ink);
+  --color-exp-ink-soft: var(--exp-ink-soft);
+  --color-exp-muted: var(--exp-muted);
+  --color-exp-line: var(--exp-line);
+  --color-exp-line-soft: var(--exp-line-soft);
+  --color-exp-panel: var(--exp-panel);
+  --color-exp-brand: var(--exp-brand);
+  --color-exp-brand-dark: var(--exp-brand-dark);
+  --color-exp-brand-soft: var(--exp-brand-soft);
+  --color-exp-success: var(--exp-success);
+  --color-exp-success-soft: var(--exp-success-soft);
+  --color-exp-warning: var(--exp-warning);
+  --color-exp-warning-soft: var(--exp-warning-soft);
+  --color-exp-danger: var(--exp-danger);
+  --color-exp-danger-soft: var(--exp-danger-soft);
+  --color-exp-info: var(--exp-info);
+  --color-exp-info-soft: var(--exp-info-soft);
+
+  --radius-exp: var(--exp-radius);
+  --radius-exp-lg: var(--exp-radius-lg);
+
+  --shadow-exp-sm: var(--exp-shadow-sm);
+  --shadow-exp: var(--exp-shadow);
+  --shadow-exp-lg: var(--exp-shadow-lg);
+
+  /* Reusan los @keyframes ya definidos en expedientes-archivo.css: no se
+     duplican aquí, solo se registran como utilidades `animate-exp-*`. */
+  --animate-exp-fade-in: expFadeIn 160ms ease;
+  --animate-exp-slide-in-right: expSlideInRight 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-exp-pop-in: expPopIn 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-exp-slide-in-up: expSlideInUp 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-exp-shimmer: expShimmer 1.5s ease-in-out infinite;
+  --animate-exp-pulse: expPulse 1.5s ease-in-out infinite;
 }
 
 @keyframes overlay-in {

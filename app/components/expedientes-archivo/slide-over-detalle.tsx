@@ -4,6 +4,18 @@ import { Download, Loader2, Pencil, RefreshCw, Save, Sparkles } from "lucide-rea
 import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, CONTENEDOR_TIPO_LABELS } from "@/lib/expedientes-archivo";
 import { ExpSlideOver } from "./slide-over-shell";
 import type { ExpedienteItem } from "./types";
+import {
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FIELD_TEXTAREA,
+  EXP_HELP_TEXT,
+  EXP_SLIDE_OVER_BODY,
+  EXP_SLIDE_OVER_FOOTER,
+  EXP_SPIN,
+  expBtnClass,
+} from "./estilos";
+import { cn } from "@/lib/utils";
 
 export type SlideOverDetalleProps = {
   openExp: ExpedienteItem;
@@ -48,16 +60,15 @@ export function ExpedienteSlideOver({
       }
       titulo={openExp.title}
     >
-        <div className="expSlideOver-body">
+        <div className={cn("tw", EXP_SLIDE_OVER_BODY)}>
           <iframe
             title="Vista previa"
             src={`/api/expedientes-archivo/${openExp.id}`}
-            style={{ width: "100%", height: "70vh", border: 0 }}
+            className="h-[70vh] w-full border-0"
           />
           {openExp.metadata?.tokenUsage ? (
             <div
-              className="expHelpText"
-              style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}
+              className={cn(EXP_HELP_TEXT, "mt-2.5 flex-wrap")}
               title="Tokens de OpenAI consumidos al procesar este expediente (OCR + análisis). Coste estimado."
             >
               <Sparkles size={12} />
@@ -76,104 +87,97 @@ export function ExpedienteSlideOver({
             </div>
           ) : null}
           {editMode ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-                marginTop: 16,
-              }}
-            >
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Título</label>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Título</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.title ?? "")}
                   onChange={(e) => onSetEditField("title", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº SGD</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº SGD</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.sgd_expediente ?? "")}
                   onChange={(e) => onSetEditField("sgd_expediente", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Serie documental</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Serie documental</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.serie_documento ?? "")}
                   onChange={(e) => onSetEditField("serie_documento", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Año</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Año</label>
                 <input
                   type="number"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.anio ?? "")}
                   onChange={(e) => onSetEditField("anio", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Tipo de documento</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de documento</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.tipo_documento ?? "")}
                   onChange={(e) => onSetEditField("tipo_documento", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Oficina</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Oficina</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.oficina ?? "")}
                   onChange={(e) => onSetEditField("oficina", e.target.value)}
                   readOnly={!isAdmin}
                   title={!isAdmin ? "Solo un administrador puede cambiar la oficina" : undefined}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Materia</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Materia</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.materia ?? "")}
                   onChange={(e) => onSetEditField("materia", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Asunto</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Asunto</label>
                 <textarea
-                  className="expField-input"
+                  className={EXP_FIELD_TEXTAREA}
                   rows={2}
                   value={String(editForm.asunto ?? "")}
                   onChange={(e) => onSetEditField("asunto", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Resumen</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Resumen</label>
                 <textarea
-                  className="expField-input"
+                  className={EXP_FIELD_TEXTAREA}
                   rows={3}
                   value={String(editForm.resumen ?? "")}
                   onChange={(e) => onSetEditField("resumen", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Observaciones</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Observaciones</label>
                 <textarea
-                  className="expField-input"
+                  className={EXP_FIELD_TEXTAREA}
                   rows={2}
                   value={String(editForm.observaciones ?? "")}
                   onChange={(e) => onSetEditField("observaciones", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Tipo de persona</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de persona</label>
                 <select
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.persona_tipo ?? "")}
                   onChange={(e) => onSetEditField("persona_tipo", e.target.value)}
                 >
@@ -182,26 +186,26 @@ export function ExpedienteSlideOver({
                   <option value="juridica">Jurídica</option>
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Documento de la persona</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Documento de la persona</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.persona_documento ?? "")}
                   onChange={(e) => onSetEditField("persona_documento", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Nombre / razón social</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Nombre / razón social</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.persona_nombre ?? "")}
                   onChange={(e) => onSetEditField("persona_nombre", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Tipo de contenedor</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de contenedor</label>
                 <select
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.tipo_almacenamiento ?? "")}
                   onChange={(e) => onSetEditField("tipo_almacenamiento", e.target.value)}
                 >
@@ -212,10 +216,10 @@ export function ExpedienteSlideOver({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Color</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Color</label>
                 <select
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.color_archivador ?? "")}
                   onChange={(e) => onSetEditField("color_archivador", e.target.value)}
                 >
@@ -227,26 +231,26 @@ export function ExpedienteSlideOver({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de archivador</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de archivador</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.nro_archivador ?? "")}
                   onChange={(e) => onSetEditField("nro_archivador", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de paquete</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de paquete</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.nro_paquete ?? "")}
                   onChange={(e) => onSetEditField("nro_paquete", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Empastado</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Empastado</label>
                 <select
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.empastado ?? "")}
                   onChange={(e) => onSetEditField("empastado", e.target.value)}
                 >
@@ -255,56 +259,56 @@ export function ExpedienteSlideOver({
                   <option value="no">No</option>
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Folio</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Folio</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.folio ?? "")}
                   onChange={(e) => onSetEditField("folio", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Estante</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Estante</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.nro_estante ?? "")}
                   onChange={(e) => onSetEditField("nro_estante", e.target.value)}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Piso</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Piso</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.nro_piso ?? "")}
                   onChange={(e) => onSetEditField("nro_piso", e.target.value)}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Local / ambiente</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Local / ambiente</label>
                 <input
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   value={String(editForm.nro_local ?? "")}
                   onChange={(e) => onSetEditField("nro_local", e.target.value)}
                 />
               </div>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+            <div className="mt-4 grid gap-3">
               {openExp.materia ? (
-                <div className="expField">
-                  <label className="expField-label">Materia</label>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Materia</label>
                   <div>{openExp.materia}</div>
                 </div>
               ) : null}
               {openExp.asunto ? (
-                <div className="expField">
-                  <label className="expField-label">Asunto</label>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Asunto</label>
                   <div>{openExp.asunto}</div>
                 </div>
               ) : null}
               {(openExp.nro_estante || openExp.nro_piso || openExp.nro_local) ? (
-                <div className="expField">
-                  <label className="expField-label">Ubicación física</label>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Ubicación física</label>
                   <div>
                     {[openExp.nro_estante && `Estante ${openExp.nro_estante}`, openExp.nro_piso && `Piso ${openExp.nro_piso}`, openExp.nro_local]
                       .filter(Boolean)
@@ -316,12 +320,12 @@ export function ExpedienteSlideOver({
           )}
         </div>
         {canManage ? (
-          <div className="expSlideOver-footer">
+          <div className={EXP_SLIDE_OVER_FOOTER}>
             {editMode ? (
               <>
                 <button
                   type="button"
-                  className="expBtn expBtn-ghost"
+                  className={expBtnClass("ghost")}
                   onClick={onCancelEdit}
                   disabled={savingEdit}
                 >
@@ -329,22 +333,22 @@ export function ExpedienteSlideOver({
                 </button>
                 <button
                   type="button"
-                  className="expBtn expBtn-primary"
+                  className={expBtnClass("primary")}
                   onClick={() => void onSaveEdits()}
                   disabled={savingEdit}
                 >
-                  {savingEdit ? <Loader2 size={14} className="expSpin" /> : <Save size={14} />}
+                  {savingEdit ? <Loader2 size={14} className={EXP_SPIN} /> : <Save size={14} />}
                   {savingEdit ? "Guardando…" : "Guardar cambios"}
                 </button>
               </>
             ) : (
               <>
-                <button type="button" className="expBtn expBtn-ghost" onClick={onStartEdit}>
+                <button type="button" className={expBtnClass("ghost")} onClick={onStartEdit}>
                   <Pencil size={14} /> Editar datos
                 </button>
                 <button
                   type="button"
-                  className="expBtn expBtn-ghost"
+                  className={expBtnClass("ghost")}
                   onClick={() => {
                     onReplace(openExp);
                     onClose();
@@ -356,13 +360,13 @@ export function ExpedienteSlideOver({
                   href={`/api/expedientes-archivo/${openExp.id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="expBtn expBtn-secondary"
+                  className={expBtnClass("secondary")}
                 >
                   <Download size={14} /> Descargar
                 </a>
                 <button
                   type="button"
-                  className="expBtn expBtn-primary"
+                  className={expBtnClass("primary")}
                   onClick={onClose}
                 >
                   Cerrar

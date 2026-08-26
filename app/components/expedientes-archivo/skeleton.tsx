@@ -1,22 +1,40 @@
 "use client";
 
+import {
+  EXP_CARD,
+  EXP_CARDS_GRID,
+  EXP_CARD_HEADER,
+  EXP_LIST,
+  EXP_LIST_ITEM,
+  EXP_LIST_ITEM_ACTIONS,
+  EXP_LIST_ITEM_BODY,
+  EXP_LIST_ITEM_ICON,
+  EXP_SKELETON,
+  EXP_STATS,
+  EXP_STAT_HEADER,
+  EXP_TABLE,
+  EXP_TABLE_WRAP,
+  expStatCardClass,
+} from "./estilos";
+import { cn } from "@/lib/utils";
+
 export function SkeletonList({ count = 5 }: { count?: number }) {
   return (
-    <div className="expList" aria-busy="true" aria-label="Cargando expedientes">
+    <div className={cn("tw", EXP_LIST)} aria-busy="true" aria-label="Cargando expedientes">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="expListItem">
-          <div className="expListItemIcon">
-            <div className="expSkeleton" style={{ width: 18, height: 18, borderRadius: 4 }} />
+        <div key={i} className={EXP_LIST_ITEM}>
+          <div className={EXP_LIST_ITEM_ICON}>
+            <div className={cn(EXP_SKELETON, "size-[18px] rounded")} />
           </div>
-          <div className="expListItemBody">
-            <div className="expSkeleton" style={{ width: "70%", height: 14, marginBottom: 8 }} />
-            <div className="expSkeleton" style={{ width: "50%", height: 11, marginBottom: 6 }} />
-            <div className="expSkeleton" style={{ width: "40%", height: 11 }} />
+          <div className={EXP_LIST_ITEM_BODY}>
+            <div className={cn(EXP_SKELETON, "mb-2 h-3.5 w-[70%]")} />
+            <div className={cn(EXP_SKELETON, "mb-1.5 h-[11px] w-1/2")} />
+            <div className={cn(EXP_SKELETON, "h-[11px] w-2/5")} />
           </div>
-          <div className="expListItemActions">
-            <div className="expSkeleton" style={{ width: 24, height: 24, borderRadius: 6 }} />
-            <div className="expSkeleton" style={{ width: 24, height: 24, borderRadius: 6 }} />
-            <div className="expSkeleton" style={{ width: 24, height: 24, borderRadius: 6 }} />
+          <div className={EXP_LIST_ITEM_ACTIONS}>
+            <div className={cn(EXP_SKELETON, "size-6 rounded-md")} />
+            <div className={cn(EXP_SKELETON, "size-6 rounded-md")} />
+            <div className={cn(EXP_SKELETON, "size-6 rounded-md")} />
           </div>
         </div>
       ))}
@@ -26,15 +44,15 @@ export function SkeletonList({ count = 5 }: { count?: number }) {
 
 export function SkeletonStats() {
   return (
-    <div className="expStats" aria-busy="true">
+    <div className={cn("tw", EXP_STATS)} aria-busy="true">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="expStatCard">
-          <div className="expStatHeader">
-            <div className="expSkeleton" style={{ width: 50, height: 10 }} />
-            <div className="expSkeleton" style={{ width: 16, height: 16, borderRadius: 4 }} />
+        <div key={i} className={expStatCardClass()}>
+          <div className={EXP_STAT_HEADER}>
+            <div className={cn(EXP_SKELETON, "h-2.5 w-[50px]")} />
+            <div className={cn(EXP_SKELETON, "size-4 rounded")} />
           </div>
-          <div className="expSkeleton" style={{ width: 60, height: 26, marginTop: 8 }} />
-          <div className="expSkeleton" style={{ width: 80, height: 10, marginTop: 6 }} />
+          <div className={cn(EXP_SKELETON, "mt-2 h-[26px] w-[60px]")} />
+          <div className={cn(EXP_SKELETON, "mt-1.5 h-2.5 w-20")} />
         </div>
       ))}
     </div>
@@ -43,16 +61,16 @@ export function SkeletonStats() {
 
 export function SkeletonCards({ count = 6 }: { count?: number }) {
   return (
-    <div className="expCardsGrid" aria-busy="true">
+    <div className={cn("tw", EXP_CARDS_GRID)} aria-busy="true">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="expCard" style={{ cursor: "default" }}>
-          <div className="expCardHeader">
-            <div className="expSkeleton" style={{ width: 32, height: 32, borderRadius: 8 }} />
-            <div className="expSkeleton" style={{ width: 60, height: 16, borderRadius: 999 }} />
+        <div key={i} className={cn(EXP_CARD, "cursor-default")}>
+          <div className={EXP_CARD_HEADER}>
+            <div className={cn(EXP_SKELETON, "size-8 rounded-lg")} />
+            <div className={cn(EXP_SKELETON, "h-4 w-[60px] rounded-full")} />
           </div>
-          <div className="expSkeleton" style={{ width: "85%", height: 14, marginTop: 8 }} />
-          <div className="expSkeleton" style={{ width: "60%", height: 11, marginTop: 8 }} />
-          <div className="expSkeleton" style={{ width: "70%", height: 11, marginTop: 4 }} />
+          <div className={cn(EXP_SKELETON, "mt-2 h-3.5 w-[85%]")} />
+          <div className={cn(EXP_SKELETON, "mt-2 h-[11px] w-3/5")} />
+          <div className={cn(EXP_SKELETON, "mt-1 h-[11px] w-[70%]")} />
         </div>
       ))}
     </div>
@@ -61,36 +79,36 @@ export function SkeletonCards({ count = 6 }: { count?: number }) {
 
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="expTableWrap" aria-busy="true">
-      <table className="expTable">
+    <div className={cn("tw", EXP_TABLE_WRAP)} aria-busy="true">
+      <table className={EXP_TABLE}>
         <thead>
           <tr>
-            <th style={{ width: 36 }}></th>
+            <th className="w-9"></th>
             <th></th>
             <th></th>
             <th></th>
             <th></th>
             <th></th>
-            <th style={{ width: 140 }}></th>
+            <th className="w-[140px]"></th>
           </tr>
         </thead>
         <tbody>
           {Array.from({ length: rows }).map((_, i) => (
             <tr key={i}>
-              <td><div className="expSkeleton" style={{ width: 16, height: 16, borderRadius: 3 }} /></td>
+              <td><div className={cn(EXP_SKELETON, "size-4 rounded-[3px]")} /></td>
               <td>
-                <div className="expSkeleton" style={{ width: "80%", height: 13, marginBottom: 6 }} />
-                <div className="expSkeleton" style={{ width: "50%", height: 10 }} />
+                <div className={cn(EXP_SKELETON, "mb-1.5 h-[13px] w-4/5")} />
+                <div className={cn(EXP_SKELETON, "h-2.5 w-1/2")} />
               </td>
-              <td><div className="expSkeleton" style={{ width: 40, height: 12 }} /></td>
-              <td><div className="expSkeleton" style={{ width: 80, height: 12 }} /></td>
-              <td><div className="expSkeleton" style={{ width: 50, height: 12 }} /></td>
-              <td><div className="expSkeleton" style={{ width: 70, height: 18, borderRadius: 999 }} /></td>
+              <td><div className={cn(EXP_SKELETON, "h-3 w-10")} /></td>
+              <td><div className={cn(EXP_SKELETON, "h-3 w-20")} /></td>
+              <td><div className={cn(EXP_SKELETON, "h-3 w-[50px]")} /></td>
+              <td><div className={cn(EXP_SKELETON, "h-[18px] w-[70px] rounded-full")} /></td>
               <td>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <div className="expSkeleton" style={{ width: 28, height: 28, borderRadius: 6 }} />
-                  <div className="expSkeleton" style={{ width: 28, height: 28, borderRadius: 6 }} />
-                  <div className="expSkeleton" style={{ width: 28, height: 28, borderRadius: 6 }} />
+                <div className="flex gap-1">
+                  <div className={cn(EXP_SKELETON, "size-7 rounded-md")} />
+                  <div className={cn(EXP_SKELETON, "size-7 rounded-md")} />
+                  <div className={cn(EXP_SKELETON, "size-7 rounded-md")} />
                 </div>
               </td>
             </tr>

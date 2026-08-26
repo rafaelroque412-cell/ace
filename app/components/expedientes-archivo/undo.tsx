@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Undo2 } from "lucide-react";
+import { EXP_TOAST, EXP_TOAST_CLOSE, EXP_TOAST_ICON, EXP_TOAST_MESSAGE } from "./estilos";
+import { cn } from "@/lib/utils";
 
 type UndoState = {
   id: number;
@@ -97,39 +99,22 @@ export function UndoToasts({
 }) {
   if (stack.length === 0) return null;
   return (
-    <div
-      aria-live="polite"
-      style={{
-        position: "fixed",
-        bottom: 80,
-        right: 20,
-        zIndex: 300,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
+    <div aria-live="polite" className="tw fixed bottom-20 right-5 z-[300] flex flex-col gap-2">
       {stack.map((item) => (
-        <div
-          key={item.id}
-          className="expToast"
-          style={{ maxWidth: 360 }}
-          role="status"
-        >
-          <Undo2 size={16} className="expToast-icon" />
-          <span className="expToast-message">{item.message}</span>
+        <div key={item.id} className={cn(EXP_TOAST, "max-w-[360px]")} role="status">
+          <Undo2 size={16} className={EXP_TOAST_ICON} />
+          <span className={EXP_TOAST_MESSAGE}>{item.message}</span>
           <button
             type="button"
-            className="expToast-close"
+            className={cn(EXP_TOAST_CLOSE, "w-auto gap-1 bg-white/30 px-2")}
             onClick={() => onExecute(item.id)}
-            style={{ background: "rgba(255,255,255,0.3)" }}
             aria-label="Deshacer"
           >
             <Undo2 size={12} /> Deshacer
           </button>
           <button
             type="button"
-            className="expToast-close"
+            className={EXP_TOAST_CLOSE}
             onClick={() => onDismiss(item.id)}
             aria-label="Cerrar"
           >

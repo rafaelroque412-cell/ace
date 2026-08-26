@@ -3,6 +3,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { X, ChevronLeft, ChevronRight, Sparkles, HelpCircle } from "lucide-react";
+import { expBtnClass } from "./estilos";
 
 export type TourStep = {
   id: string;
@@ -167,7 +168,7 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
             {!isFirst ? (
               <button
                 type="button"
-                className="expBtn expBtn-ghost expBtn-small"
+                className={expBtnClass("ghost", "small")}
                 onClick={() => setCurrentStep((s) => s - 1)}
               >
                 <ChevronLeft size={14} /> Anterior
@@ -176,7 +177,7 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
             {isLast ? (
               <button
                 type="button"
-                className="expBtn expBtn-primary expBtn-small"
+                className={expBtnClass("primary", "small")}
                 onClick={() => {
                   onComplete?.();
                   onClose();
@@ -187,7 +188,7 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
             ) : (
               <button
                 type="button"
-                className="expBtn expBtn-primary expBtn-small"
+                className={expBtnClass("primary", "small")}
                 onClick={() => setCurrentStep((s) => s + 1)}
               >
                 Siguiente <ChevronRight size={14} />

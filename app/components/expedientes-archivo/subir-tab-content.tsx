@@ -55,6 +55,8 @@ import type { UbicacionSugerida } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
 import { BatchUpload } from "./batch-upload";
 import { SkeletonList } from "./skeleton";
+import { EXP_SPIN, expBtnClass } from "./estilos";
+import { cn } from "@/lib/utils";
 
 export type SubirTabContentProps = {
   // Permissions
@@ -299,7 +301,7 @@ export function SubirTabContent({
         <button
           type="button"
           {...propsPestana(BASE_SUBIDA, "single", uploadMode)}
-          className={uploadMode === "single" ? "expBtn expBtn-primary" : "expBtn expBtn-ghost"}
+          className={expBtnClass(uploadMode === "single" ? "primary" : "ghost")}
           onClick={() => setUploadMode("single")}
         >
           <FileText size={15} /> Uno por uno
@@ -307,7 +309,7 @@ export function SubirTabContent({
         <button
           type="button"
           {...propsPestana(BASE_SUBIDA, "batch", uploadMode)}
-          className={uploadMode === "batch" ? "expBtn expBtn-primary" : "expBtn expBtn-ghost"}
+          className={expBtnClass(uploadMode === "batch" ? "primary" : "ghost")}
           onClick={() => setUploadMode("batch")}
         >
           <UploadCloud size={15} /> Por lotes
@@ -408,7 +410,7 @@ export function SubirTabContent({
                     </div>
                     <button
                       type="button"
-                      className="expBtn expBtn-ghost"
+                      className={expBtnClass("ghost")}
                       onClick={(e) => {
                         e.preventDefault();
                         setFile(null);
@@ -468,7 +470,7 @@ export function SubirTabContent({
                 <div className="expExtractSection">
                   <button
                     type="button"
-                    className="expBtn expBtn-secondary expExtractBtn"
+                    className={cn(expBtnClass("secondary"), "expExtractBtn")}
                     onClick={() => extractFromPdf()}
                     disabled={extracting}
                     aria-label="Obtener datos del PDF automaticamente"
@@ -526,7 +528,7 @@ export function SubirTabContent({
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
-                      className="expBtn expBtn-ghost expBtn-small"
+                      className={expBtnClass("ghost", "small")}
                       onClick={() => setDupsDismissed(true)}
                     >
                       Continuar de todos modos
@@ -766,14 +768,14 @@ export function SubirTabContent({
                   <div className="expExtractedActions">
                     <button
                       type="button"
-                      className="expBtn expBtn-ghost expBtn-small"
+                      className={expBtnClass("ghost", "small")}
                       onClick={dismissExtractedData}
                     >
                       <X size={14} /> Descartar todos
                     </button>
                     <button
                       type="button"
-                      className="expBtn expBtn-primary"
+                      className={expBtnClass("primary")}
                       onClick={applyExtractedData}
                     >
                       <Check size={14} /> Aplicar al formulario
@@ -1060,7 +1062,7 @@ export function SubirTabContent({
                   {hasLast ? (
                     <button
                       type="button"
-                      className="expBtn expBtn-secondary expBtn-small"
+                      className={expBtnClass("secondary", "small")}
                       onClick={() => {
                         applyUbicacionSugerida({
                           tipo_almacenamiento: last.tipoAlmacenamiento || null,
@@ -1085,7 +1087,7 @@ export function SubirTabContent({
                   {hasSugerida && ubicacionSugerida ? (
                     <button
                       type="button"
-                      className="expBtn expBtn-secondary expBtn-small"
+                      className={expBtnClass("secondary", "small")}
                       onClick={() => applyUbicacionSugerida(ubicacionSugerida)}
                     >
                       <MapPin size={13} /> Misma caja del archivo
@@ -1094,7 +1096,7 @@ export function SubirTabContent({
                   {siguientePaquete ? (
                     <button
                       type="button"
-                      className="expBtn expBtn-ghost expBtn-small"
+                      className={expBtnClass("ghost", "small")}
                       onClick={() => setField("nroPaquete", siguientePaquete)}
                       title="Siguiente número de paquete disponible"
                     >
@@ -1222,7 +1224,7 @@ export function SubirTabContent({
             {wizardStep > 0 ? (
               <button
                 type="button"
-                className="expBtn expBtn-ghost"
+                className={expBtnClass("ghost")}
                 onClick={() => setWizardStep((s) => (s - 1) as WizardStep)}
               >
                 <ChevronLeft size={16} /> Anterior
@@ -1230,7 +1232,7 @@ export function SubirTabContent({
             ) : null}
             <button
               type="button"
-              className="expBtn expBtn-ghost"
+              className={expBtnClass("ghost")}
               onClick={() => {
                 showConfirm({
                   title: "¿Cancelar subida?",
@@ -1260,11 +1262,11 @@ export function SubirTabContent({
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="expBtn expBtn-ghost"
+                  className={expBtnClass("ghost")}
                   title="Subir ya con los datos actuales (los campos vacíos los completa la IA)"
                 >
                   {uploading ? (
-                    <Loader2 size={16} className="expSpin" />
+                    <Loader2 size={16} className={EXP_SPIN} />
                   ) : (
                     <UploadCloud size={16} />
                   )}
@@ -1273,7 +1275,7 @@ export function SubirTabContent({
               ) : null}
               <button
                 type="button"
-                className="expBtn expBtn-primary"
+                className={expBtnClass("primary")}
                 onClick={() => {
                   const check = canProceedStep();
                   if (!check.ok) {
@@ -1290,10 +1292,10 @@ export function SubirTabContent({
             <button
               type="submit"
               disabled={uploading}
-              className="expBtn expBtn-primary expBtn-large"
+              className={expBtnClass("primary", "large")}
             >
               {uploading ? (
-                <Loader2 size={16} className="expSpin" />
+                <Loader2 size={16} className={EXP_SPIN} />
               ) : (
                 <UploadCloud size={16} />
               )}
@@ -1327,13 +1329,13 @@ export function SubirTabContent({
             {recentUploads.length > 0 ? (
               <button
                 type="button"
-                className="expBtn expBtn-ghost expBtn-small"
+                className={expBtnClass("ghost", "small")}
                 onClick={refreshRecentUploads}
                 disabled={loadingRecent}
                 aria-label="Actualizar lista de recientes"
               >
                 {loadingRecent ? (
-                  <Loader2 size={12} className="expSpin" />
+                  <Loader2 size={12} className={EXP_SPIN} />
                 ) : (
                   <RefreshCw size={12} />
                 )}
@@ -1413,13 +1415,13 @@ export function SubirTabContent({
                         <div style={{ marginTop: 8 }}>
                           <button
                             type="button"
-                            className="expBtn expBtn-secondary expBtn-small"
+                            className={expBtnClass("secondary", "small")}
                             onClick={() => void reindexExpediente(exp.id)}
                             disabled={reindexingId === exp.id}
                             title="Reintenta la extracción con OCR de alta calidad"
                           >
                             {reindexingId === exp.id ? (
-                              <Loader2 size={13} className="expSpin" />
+                              <Loader2 size={13} className={EXP_SPIN} />
                             ) : (
                               <RefreshCw size={13} />
                             )}
@@ -1481,7 +1483,7 @@ export function SubirTabContent({
               {recentUploads.length >= 10 ? (
                 <button
                   type="button"
-                  className="expBtn expBtn-secondary expRecentViewAll"
+                  className={cn(expBtnClass("secondary"), "expRecentViewAll")}
                   onClick={() => setTab("buscar")}
                 >
                   Ver todos los expedientes
@@ -1506,7 +1508,7 @@ export function SubirTabContent({
         </p>
         <button
           type="button"
-          className="expBtn expBtn-secondary expEmpty-action"
+          className={cn(expBtnClass("secondary"), "expEmpty-action")}
           onClick={() => setTab("buscar")}
         >
           <Search size={16} /> Ir a buscar

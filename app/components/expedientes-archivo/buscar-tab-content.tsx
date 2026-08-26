@@ -40,6 +40,8 @@ import { TablaExpedientes } from "./tabla-expedientes";
 import { TarjetasExpedientes } from "./tarjetas-expedientes";
 import { Pagination } from "./pagination";
 import { SkeletonList, SkeletonStats } from "./skeleton";
+import { EXP_SPIN, expBtnClass } from "./estilos";
+import { cn } from "@/lib/utils";
 
 const STATUS_PILLS: { id: StatusFilter; label: string }[] = [
   { id: "todos", label: "Todos" },
@@ -241,9 +243,9 @@ export function BuscarTabContent({
             ) : null}
           </button>
         ) : null}
-        <button type="submit" disabled={searching} className="expBtn expBtn-primary">
+        <button type="submit" disabled={searching} className={expBtnClass("primary")}>
           {searching ? (
-            <Loader2 size={16} className="expSpin" />
+            <Loader2 size={16} className={EXP_SPIN} />
           ) : mode === "buscar" ? (
             <Search size={16} />
           ) : (
@@ -297,7 +299,7 @@ export function BuscarTabContent({
           {activeFilterCount > 0 ? (
             <button
               type="button"
-              className="expBtn expBtn-ghost expFilterClear"
+              className={cn(expBtnClass("ghost"), "expFilterClear")}
               onClick={() => {
                 setFilterAnio("");
                 setFilterOficina("");
@@ -630,7 +632,7 @@ export function BuscarTabContent({
               ) : null}
               <button
                 type="button"
-                className="expBtn expBtn-ghost expBtn-small"
+                className={expBtnClass("ghost", "small")}
                 onClick={clearFilters}
               >
                 <X size={12} /> Limpiar todos
@@ -681,7 +683,7 @@ export function BuscarTabContent({
             </div>
             <button
               type="button"
-              className="expBtn expBtn-ghost"
+              className={expBtnClass("ghost")}
               onClick={clearFilters}
               disabled={!hasActiveFilters()}
             >
@@ -729,7 +731,7 @@ export function BuscarTabContent({
               {expedientes.length === 0 && canManage ? (
                 <button
                   type="button"
-                  className="expBtn expBtn-primary expEmpty-action"
+                  className={cn(expBtnClass("primary"), "expEmpty-action")}
                   onClick={() => setTab("subir")}
                 >
                   <Plus size={16} /> Subir primer expediente
@@ -909,7 +911,7 @@ export function BuscarTabContent({
                 {hasActiveFilters() ? (
                   <button
                     type="button"
-                    className="expBtn expBtn-ghost expBtn-small"
+                    className={expBtnClass("ghost", "small")}
                     onClick={resetPreferences}
                   >
                     <History size={12} /> Restablecer preferencias

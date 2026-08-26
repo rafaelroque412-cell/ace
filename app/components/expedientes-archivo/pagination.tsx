@@ -1,6 +1,15 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  EXP_PAGINATION,
+  EXP_PAGINATION_BTN,
+  EXP_PAGINATION_BTN_ACTIVE,
+  EXP_PAGINATION_CONTROLS,
+  EXP_PAGINATION_DOTS,
+  EXP_PAGINATION_INFO,
+} from "./estilos";
+import { cn } from "@/lib/utils";
 
 export type PaginationInfo = {
   page: number;
@@ -38,8 +47,8 @@ export function Pagination({ pagination, onPageChange }: Props) {
 
   if (totalPages <= 1) {
     return (
-      <div className="expPagination" aria-label="Paginación">
-        <span className="expPaginationInfo">
+      <div className={cn("tw", EXP_PAGINATION)} aria-label="Paginación">
+        <span className={EXP_PAGINATION_INFO}>
           {total} resultado{total === 1 ? "" : "s"}
         </span>
       </div>
@@ -52,19 +61,19 @@ export function Pagination({ pagination, onPageChange }: Props) {
 
   return (
     <nav
-      className="expPagination"
+      className={cn("tw", EXP_PAGINATION)}
       role="navigation"
       aria-label="Paginación de resultados"
     >
-      <div className="expPaginationInfo">
+      <div className={EXP_PAGINATION_INFO}>
         Mostrando <strong>{start}</strong>–<strong>{end}</strong> de{" "}
         <strong>{total}</strong>
       </div>
 
-      <div className="expPaginationControls">
+      <div className={EXP_PAGINATION_CONTROLS}>
         <button
           type="button"
-          className="expPaginationBtn"
+          className={EXP_PAGINATION_BTN}
           onClick={() => onPageChange(1)}
           disabled={page === 1}
           aria-label="Primera página"
@@ -74,7 +83,7 @@ export function Pagination({ pagination, onPageChange }: Props) {
         </button>
         <button
           type="button"
-          className="expPaginationBtn"
+          className={EXP_PAGINATION_BTN}
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
           aria-label="Página anterior"
@@ -87,7 +96,7 @@ export function Pagination({ pagination, onPageChange }: Props) {
           item === "..." ? (
             <span
               key={`dots-${idx}`}
-              className="expPaginationDots"
+              className={EXP_PAGINATION_DOTS}
               aria-hidden="true"
             >
               …
@@ -96,11 +105,7 @@ export function Pagination({ pagination, onPageChange }: Props) {
             <button
               key={item}
               type="button"
-              className={
-                item === page
-                  ? "expPaginationBtn expPaginationBtnActive"
-                  : "expPaginationBtn"
-              }
+              className={cn(EXP_PAGINATION_BTN, item === page && EXP_PAGINATION_BTN_ACTIVE)}
               onClick={() => onPageChange(item)}
               aria-label={`Página ${item}`}
               aria-current={item === page ? "page" : undefined}
@@ -112,7 +117,7 @@ export function Pagination({ pagination, onPageChange }: Props) {
 
         <button
           type="button"
-          className="expPaginationBtn"
+          className={EXP_PAGINATION_BTN}
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
           aria-label="Página siguiente"
@@ -122,7 +127,7 @@ export function Pagination({ pagination, onPageChange }: Props) {
         </button>
         <button
           type="button"
-          className="expPaginationBtn"
+          className={EXP_PAGINATION_BTN}
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages}
           aria-label="Última página"

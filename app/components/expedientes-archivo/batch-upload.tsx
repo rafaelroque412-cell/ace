@@ -24,6 +24,7 @@ import {
   uploadExpediente as uploadExpedienteAction,
 } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
+import { EXP_SPIN, expBtnClass } from "./estilos";
 
 type ToastKind = "success" | "error" | "warning" | "info";
 
@@ -555,7 +556,7 @@ export function BatchUpload({
               <div style={{ display: "flex", gap: 10 }}>
                 <button
                   type="button"
-                  className="expBtn expBtn-ghost"
+                  className={expBtnClass("ghost")}
                   onClick={() =>
                     showConfirm({
                       title: "¿Vaciar el lote?",
@@ -577,7 +578,7 @@ export function BatchUpload({
                 {items.some((it) => it.status === "done") ? (
                   <button
                     type="button"
-                    className="expBtn expBtn-ghost"
+                    className={expBtnClass("ghost")}
                     onClick={clearDone}
                     disabled={running}
                   >
@@ -587,12 +588,12 @@ export function BatchUpload({
               </div>
               <button
                 type="button"
-                className="expBtn expBtn-primary expBtn-large"
+                className={expBtnClass("primary", "large")}
                 onClick={uploadAll}
                 disabled={running || analyzing || uploadable.length === 0}
               >
                 {running ? (
-                  <Loader2 size={16} className="expSpin" />
+                  <Loader2 size={16} className={EXP_SPIN} />
                 ) : (
                   <UploadCloud size={16} />
                 )}

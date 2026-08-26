@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 import { ExpSlideOver } from "./slide-over-shell";
 import type { BulkMoveModalProps } from "./types";
+import { EXP_FIELD, EXP_FIELD_CONTROL, EXP_FIELD_LABEL, EXP_SLIDE_OVER_BODY, EXP_SLIDE_OVER_FOOTER, expBtnClass, expMessageClass } from "./estilos";
+import { cn } from "@/lib/utils";
 
 export function BulkMoveModal({ count, onClose, onApply, canChangeOficina = true }: BulkMoveModalProps) {
   const [oficina, setOficina] = useState("");
@@ -35,66 +37,66 @@ export function BulkMoveModal({ count, onClose, onApply, canChangeOficina = true
       subtitulo="Solo se aplican los campos con valor. El resto se preserva."
       titulo={`Mover / reasignar ${count} expediente${count === 1 ? "" : "s"}`}
     >
-        <div className="expSlideOver-body">
-          <div className="expMessage expMessage-info" style={{ margin: 0 }}>
-            <strong style={{ fontWeight: 700 }}>
+        <div className={cn("tw", EXP_SLIDE_OVER_BODY)}>
+          <div className={cn(expMessageClass("info"), "mt-0")}>
+            <strong className="font-bold">
               {filledCount} campo{filledCount === 1 ? "" : "s"} a modificar
             </strong>
           </div>
-          <div className="expBulkMove-grid">
+          <div className="mb-4 grid grid-cols-2 gap-2.5 [&_.expField]:m-0">
             {canChangeOficina ? (
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Oficina</label>
+              <div className={cn(EXP_FIELD, "col-span-2")}>
+                <label className={EXP_FIELD_LABEL}>Oficina</label>
                 <input
                   value={oficina}
                   onChange={(e) => setOficina(e.target.value)}
                   placeholder="Si lo dejas vacío no se cambia"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
             ) : null}
-            <div className="expField">
-              <label className="expField-label">Estante</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Estante</label>
               <input
                 value={nroEstante}
                 onChange={(e) => setNroEstante(e.target.value)}
                 placeholder="Ej. 3"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
               />
             </div>
-            <div className="expField">
-              <label className="expField-label">Piso</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Piso</label>
               <input
                 value={nroPiso}
                 onChange={(e) => setNroPiso(e.target.value)}
                 placeholder="Ej. 2"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
               />
             </div>
-            <div className="expField">
-              <label className="expField-label">Local / ambiente</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Local / ambiente</label>
               <input
                 value={nroLocal}
                 onChange={(e) => setNroLocal(e.target.value)}
                 placeholder="Ej. A-1"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
               />
             </div>
-            <div className="expField">
-              <label className="expField-label">Nº archivador</label>
+            <div className={EXP_FIELD}>
+              <label className={EXP_FIELD_LABEL}>Nº archivador</label>
               <input
                 value={nroArchivador}
                 onChange={(e) => setNroArchivador(e.target.value)}
                 placeholder="Opcional"
-                className="expField-input"
+                className={EXP_FIELD_CONTROL}
               />
             </div>
-            <div className="expField" style={{ gridColumn: "1 / -1" }}>
-              <label className="expField-label">Color</label>
+            <div className={cn(EXP_FIELD, "col-span-2")}>
+              <label className={EXP_FIELD_LABEL}>Color</label>
               <select
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="expField-select"
+                className={EXP_FIELD_CONTROL}
               >
                 <option value="">— Sin cambio —</option>
                 <option value="rojo">Rojo</option>
@@ -111,13 +113,13 @@ export function BulkMoveModal({ count, onClose, onApply, canChangeOficina = true
             </div>
           </div>
         </div>
-        <div className="expSlideOver-footer">
-          <button type="button" className="expBtn expBtn-ghost" onClick={onClose}>
+        <div className={EXP_SLIDE_OVER_FOOTER}>
+          <button type="button" className={expBtnClass("ghost")} onClick={onClose}>
             Cancelar
           </button>
           <button
             type="button"
-            className="expBtn expBtn-primary"
+            className={expBtnClass("primary")}
             onClick={apply}
             disabled={filledCount === 0}
           >

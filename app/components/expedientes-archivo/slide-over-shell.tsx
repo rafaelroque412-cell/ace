@@ -2,6 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
  * Envoltura común de los paneles deslizantes del archivo, sobre la primitiva
@@ -16,7 +17,11 @@ import { X } from "lucide-react";
  * el bloqueo del scroll, la devolución del foco al cerrar y un `aria-labelledby`
  * con id único en lugar del `aria-label` escrito a mano.
  *
- * Las clases son las de siempre, así que el aspecto no cambia.
+ * La cabecera y el overlay ya están en Tailwind. El panel exterior
+ * (`clasePanel`/`modificador`) sigue en las clases CSS de siempre a propósito:
+ * `expedientes-archivo-workspace.tsx` (el modal de ayuda, `?`) todavía no está
+ * migrado y le sigue pasando `modificador="expSlideOver-modal"` como texto —
+ * cambiar ese contrato aquí lo habría roto sin tocarlo.
  */
 export function ExpSlideOver({
   titulo,
@@ -47,19 +52,23 @@ export function ExpSlideOver({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="expSlideOverOverlay" />
+        <Dialog.Overlay className="tw fixed inset-0 z-[100] flex animate-exp-fade-in justify-end bg-[rgba(15,23,42,0.5)] backdrop-blur-[3px]" />
         <Dialog.Content
-          className={`${clasePanel} expSlideOverPortal${modificador ? ` ${modificador}` : ""}`}
+          className={cn("tw", clasePanel, "expSlideOverPortal", modificador)}
         >
-          <div className="expSlideOver-header">
+          <div className="flex items-center justify-between gap-3 border-b border-exp-line bg-exp-panel px-5 py-[18px]">
             <div>
               <Dialog.Title asChild>
-                <h3 className="expSlideOver-title">{titulo}</h3>
+                <h3 className="m-0 text-base font-bold text-exp-ink">{titulo}</h3>
               </Dialog.Title>
-              {subtitulo ? <p className="expSlideOver-subtitle">{subtitulo}</p> : null}
+              {subtitulo ? <p className="mt-0.5 text-xs text-exp-muted">{subtitulo}</p> : null}
             </div>
             <Dialog.Close asChild>
-              <button aria-label={etiquetaCerrar} className="expSlideOver-close" type="button">
+              <button
+                aria-label={etiquetaCerrar}
+                className="inline-flex size-8 items-center justify-center rounded-lg text-exp-muted transition-colors duration-[120ms] ease-linear hover:bg-exp-line-soft hover:text-exp-ink"
+                type="button"
+              >
                 <X size={18} />
               </button>
             </Dialog.Close>

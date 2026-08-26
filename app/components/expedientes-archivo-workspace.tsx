@@ -52,6 +52,7 @@ import {
   type TourStep,
 } from "./expedientes-archivo/onboarding-tour";
 import { UndoToasts, useUndoStack } from "./expedientes-archivo/undo";
+import { expBtnClass } from "./expedientes-archivo/estilos";
 import { useToasts } from "./expedientes-archivo/use-toasts";
 import { useExpedienteSearch } from "./expedientes-archivo/use-expediente-search";
 import { useExpedientesPreferences } from "./expedientes-archivo/use-preferences";
@@ -1795,14 +1796,14 @@ export function ExpedientesArchivoWorkspace({
             </AlertDialog.Description>
             <div className="expConfirmFooter">
               <AlertDialog.Cancel asChild>
-                <button type="button" className="expBtn expBtn-ghost">
+                <button type="button" className={expBtnClass("ghost")}>
                   Cancelar
                 </button>
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
                 <button
                   type="button"
-                  className={`expBtn ${confirm.variant === "danger" ? "expBtn-danger" : "expBtn-primary"}`}
+                  className={expBtnClass(confirm.variant === "danger" ? "danger" : "primary")}
                   onClick={() => {
                     // Cerrar primero para que el aviso de "deshacer" quede visible.
                     const action = confirm.onConfirm;
