@@ -16,8 +16,10 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  UserCheck,
   UserPlus,
   Users,
+  UserX,
   X,
 } from "lucide-react";
 import { EmptyState } from "./empty-state";
@@ -92,6 +94,7 @@ type Props = {
   onSaveUser: (user: UserSetting) => Promise<void>;
   onResetPassword: (user: UserSetting) => Promise<void>;
   onDeleteUser: (user: UserSetting) => Promise<void>;
+  onToggleActivo: (user: UserSetting) => Promise<void>;
   onReloadOficinas?: () => void | Promise<void>;
 };
 
@@ -128,6 +131,7 @@ export function UsuariosTab({
   onSaveUser,
   onResetPassword,
   onDeleteUser,
+  onToggleActivo,
   onReloadOficinas,
 }: Props) {
   const { success: toastSuccess, error: toastError } = useToastHelpers();
@@ -580,6 +584,15 @@ export function UsuariosTab({
                         </small>
                       ) : null}
                       <div className="mt-0.5 flex flex-wrap items-center gap-1" aria-label="Rol y alcance">
+                        {(user.activo ?? true) ? null : (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-danger-soft px-2 py-1 text-xs font-[850] leading-none text-danger"
+                            title="No puede iniciar sesión"
+                          >
+                            <UserX size={11} aria-hidden />
+                            Inactivo
+                          </span>
+                        )}
                         <span
                           className="w-fit rounded-full border px-2.5 py-[3px] text-xs font-[850] tracking-wide"
                           data-role={user.role}
@@ -1066,6 +1079,29 @@ export function UsuariosTab({
                 title="Genera una contraseña temporal nueva para este usuario"
               >
                 <KeyRound size={15} /> Restablecer contraseña
+              </button>
+              <button
+                className={btnSec}
+                disabled={savingUserId === editingUser.id || (editingUser.id === currentUserId && (editingUser.activo ?? true))}
+                onClick={() => void onToggleActivo(editingUser)}
+                type="button"
+                title={
+                  editingUser.id === currentUserId && (editingUser.activo ?? true)
+                    ? "No puedes inactivar tu propia cuenta"
+                    : (editingUser.activo ?? true)
+                      ? "Revoca el acceso sin borrar la ficha del usuario"
+                      : "Restaura el acceso de este usuario"
+                }
+              >
+                {(editingUser.activo ?? true) ? (
+                  <>
+                    <UserX size={15} /> Inactivar
+                  </>
+                ) : (
+                  <>
+                    <UserCheck size={15} /> Activar
+                  </>
+                )}
               </button>
               <button
                 className={btnSec}

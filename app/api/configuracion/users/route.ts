@@ -57,6 +57,7 @@ type ProfileRow = {
   cargo?: string | null;
   grado_academico?: string | null;
   role: string;
+  activo?: boolean | null;
 };
 
 function temporaryPassword() {
@@ -205,6 +206,8 @@ function shapeUser(profile: ProfileRow) {
   const parsedRole = userRoleSchema.safeParse(profile.role);
   return {
     createdAt: profile.created_at,
+    // Ausente en instalaciones sin la migración de la columna: true (activo).
+    activo: profile.activo ?? true,
     email: profile.email,
     // Null en las cuentas anteriores a la autenticación por usuario y en las de
     // rol del seed: la interfaz las sigue mostrando por su correo.
@@ -235,7 +238,7 @@ export async function GET(request: Request) {
     const offset = Math.max(0, parseInt(params.get("offset") ?? "0", 10) || 0);
     // Con fallback si las columnas nuevas aun no existen (SQL pendiente).
     const selectCompleto =
-      "id,email,role,entity,oficina_id,es_jefe,nombre_completo,dni,cargo,grado_academico,metadata,created_at";
+      "id,email,role,entity,oficina_id,es_jefe,nombre_completo,dni,cargo,grado_academico,activo,metadata,created_at";
     const [profileRows, totalRows] = await Promise.all([
       supabaseRest<ProfileRow[]>(
         `profiles?select=${selectCompleto}&order=created_at.desc&limit=${limit}&offset=${offset}`,

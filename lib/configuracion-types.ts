@@ -118,6 +118,10 @@ export type UserSetting = {
   gradoAcademico?: string;
   permissions?: Array<{ area: string; scope: string }>;
   role: string;
+  // Falso = acceso revocado (no puede iniciar sesión), pero la ficha se
+  // conserva. Ausente en instalaciones sin la migración de esta columna: se
+  // trata como true (activo), el valor por defecto.
+  activo?: boolean;
 };
 
 // Opción mínima de oficina para selects de asignación de usuarios.

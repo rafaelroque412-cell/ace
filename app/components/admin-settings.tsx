@@ -336,6 +336,38 @@ export function AdminSettings({
     setSavingUserId(null);
   }
 
+  /**
+   * Inactiva o reactiva la cuenta: a diferencia de eliminar, la ficha se
+   * conserva (historial, auditoría, documentos firmados a su nombre). El
+   * bloqueo del inicio de sesión lo hace Supabase Auth en el endpoint, no
+   * esta llamada por sí sola.
+   */
+  async function toggleActivo(user: UserSetting) {
+    setSavingUserId(user.id);
+    setError(null);
+
+    const activo = !(user.activo ?? true);
+    const response = await fetch(`/api/configuracion/users/${encodeURIComponent(user.id)}/estado`, {
+      body: JSON.stringify({ activo }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+    if (!response.ok) {
+      toastError(activo ? "No se pudo activar" : "No se pudo inactivar", payload.error ?? "Inténtalo de nuevo.");
+      setSavingUserId(null);
+      return;
+    }
+
+    setUsers(users.map((item) => (item.id === user.id ? { ...item, activo } : item)));
+    toastSuccess(
+      activo ? "Usuario activado" : "Usuario inactivado",
+      activo ? `${user.email} ya puede iniciar sesión` : `${user.email} ya no puede iniciar sesión`,
+    );
+    setSavingUserId(null);
+  }
+
   async function deleteUser(user: UserSetting) {
     setSavingUserId(user.id);
     setError(null);
@@ -415,6 +447,7 @@ export function AdminSettings({
           onSeedRoleUsers={() => setConfirmSeed(true)}
           onSaveUser={saveUser}
           onResetPassword={resetPassword}
+          onToggleActivo={toggleActivo}
           onDeleteUser={deleteUser}
         />
       ) : null}
