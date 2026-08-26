@@ -55,7 +55,36 @@ import type { UbicacionSugerida } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
 import { BatchUpload } from "./batch-upload";
 import { SkeletonList } from "./skeleton";
-import { EXP_SPIN, expBtnClass } from "./estilos";
+import {
+  EXP_EMPTY,
+  EXP_EMPTY_DESC,
+  EXP_EMPTY_ILLUSTRATION,
+  EXP_EMPTY_TITLE,
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FIELD_TEXTAREA,
+  EXP_FILE_PICKER_FILE,
+  EXP_FILE_PICKER_FILE_BODY,
+  EXP_FILE_PICKER_FILE_META,
+  EXP_FILE_PICKER_FILE_NAME,
+  EXP_FILE_PICKER_SUB,
+  EXP_FILE_PICKER_TITLE,
+  EXP_FORM_SECTION,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_HELP_TEXT,
+  EXP_ICON_BUTTON,
+  EXP_ICON_BUTTON_DANGER,
+  EXP_SPIN,
+  EXP_TAB_CONTENT,
+  expBtnClass,
+  expFilePickerClass,
+  expFilePickerIconClass,
+  expFormSectionCounterClass,
+  expStatusClass,
+} from "./estilos";
 import { cn } from "@/lib/utils";
 
 export type SubirTabContentProps = {
@@ -181,19 +210,19 @@ function EditableExtractedField({
   const hasValue = value.trim().length > 0;
   return (
     <div
-      className={
-        "expExtractedField" +
-        (fullWidth ? " expExtractedFieldFull" : "") +
-        (hasValue ? " expExtractedFieldHasValue" : " expExtractedFieldEmpty")
-      }
+      className={cn(
+        "group relative flex flex-col gap-1 rounded-exp border border-exp-line bg-exp-panel py-2 pl-3 pr-2.5 transition-all duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-brand-soft focus-within:border-exp-brand focus-within:bg-exp-panel focus-within:shadow-[0_0_0_3px_rgba(15,118,110,0.12)]",
+        fullWidth && "col-[1/-1]",
+        hasValue ? "border-exp-brand/30" : "opacity-60",
+      )}
     >
-      <label className="expExtractedFieldLabel">
+      <label className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.5px] text-exp-brand [&>svg]:shrink-0">
         {icon}
         <span>{label}</span>
       </label>
       {multiline ? (
         <textarea
-          className="expExtractedFieldInput expExtractedFieldTextarea"
+          className="w-full resize-y border-0 bg-transparent py-0.5 font-[inherit] text-[13px] font-medium text-exp-ink outline-none placeholder:font-normal placeholder:italic placeholder:text-exp-muted [min-height:38px] [line-height:1.4]"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -201,7 +230,7 @@ function EditableExtractedField({
         />
       ) : (
         <input
-          className="expExtractedFieldInput"
+          className="w-full border-0 bg-transparent py-0.5 font-[inherit] text-[13px] font-medium text-exp-ink outline-none placeholder:font-normal placeholder:italic placeholder:text-exp-muted"
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -210,7 +239,7 @@ function EditableExtractedField({
       )}
       <button
         type="button"
-        className="expExtractedFieldRemove"
+        className="absolute right-1.5 top-1.5 inline-flex size-5 items-center justify-center rounded bg-exp-line-soft text-exp-muted opacity-0 transition-all duration-[120ms] ease-linear hover:bg-exp-danger hover:text-white group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={onRemove}
         aria-label={`Quitar campo ${label}`}
         title={`Quitar ${label}`}
@@ -281,14 +310,14 @@ export function SubirTabContent({
   onUploaded,
 }: SubirTabContentProps) {
   return canManage ? (
-    <div className="expTabContent">
+    <div className={cn("tw", EXP_TAB_CONTENT)}>
       {/* Selector de modo: uno por uno vs por lotes */}
       {/* Estas SÍ son pestañas: cada una monta un panel completamente distinto
           (el formulario paso a paso o la carga por lotes). */}
       <div
         role="tablist"
         aria-label="Modo de subida"
-        className="expSubirModos"
+        className="mb-4 flex gap-2"
         onKeyDown={(e) => {
           const destino = siguientePestana(MODOS_SUBIDA, uploadMode, e.key);
           if (!destino) return;
@@ -328,11 +357,11 @@ export function SubirTabContent({
         />
       ) : (
       <form onSubmit={uploadExpediente}>
-        <div className="expWizard">
+        <div className="mb-6">
           {/* Indicador de pasos, no pestañas: los pasos van en orden y arrastran
               el estado del formulario. `aria-current="step"` es lo que anuncia
               "vas por aquí"; `aria-selected` anunciaba una pestaña elegida. */}
-          <div className="expWizardProgress" role="group" aria-label="Pasos del formulario">
+          <div className="mb-5 flex items-center gap-0 rounded-exp bg-exp-line-soft px-[18px] py-4" role="group" aria-label="Pasos del formulario">
             {WIZARD_STEPS.map((step, idx) => {
               const isActive = wizardStep === idx;
               const isDone = wizardStep > idx;
@@ -342,33 +371,35 @@ export function SubirTabContent({
                     type="button"
                     aria-current={isActive ? "step" : undefined}
                     onClick={() => setWizardStep(idx as WizardStep)}
-                    className={
-                      "expWizardStep" +
-                      (isActive ? " active" : "") +
-                      (isDone ? " done" : "")
-                    }
+                    className="flex min-w-0 flex-1 items-center gap-2.5 py-1 transition-opacity duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:opacity-80"
                   >
-                    <span className="expWizardStepNumber">
+                    <span
+                      className={cn(
+                        "flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-exp-line bg-exp-panel text-xs font-bold text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                        isActive && "border-exp-brand bg-exp-brand text-white shadow-[0_0_0_4px_rgba(15,118,110,0.15)]",
+                        isDone && "border-exp-success bg-exp-success text-white",
+                      )}
+                    >
                       {isDone ? <Check size={14} /> : idx + 1}
                     </span>
-                    <span className="expWizardStepLabel">{step.label}</span>
+                    <span
+                      className={cn(
+                        "overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold text-exp-muted",
+                        isActive && "text-exp-ink",
+                        isDone && "text-exp-success",
+                      )}
+                    >
+                      {step.label}
+                    </span>
                   </button>
                   {idx < WIZARD_STEPS.length - 1 ? (
-                    <div className="expWizardStepConnector" />
+                    <div className={cn("mx-2 h-0.5 flex-[0.5] bg-exp-line", isDone && "bg-exp-success")} />
                   ) : null}
                 </Fragment>
               );
             })}
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              fontSize: 12,
-              color: "var(--exp-muted)",
-            }}
-          >
+          <div className="flex items-center gap-1.5 text-xs text-exp-muted">
             <Info size={12} />
             <span>{WIZARD_STEPS[wizardStep].hint}</span>
           </div>
@@ -376,37 +407,33 @@ export function SubirTabContent({
 
         {wizardStep === 0 ? (
           <>
-            <div className="expFormSection">
-              <div className="expFormSectionHeader">
-                <h3 className="expFormSectionTitle">
+            <div className={EXP_FORM_SECTION}>
+              <div className={EXP_FORM_SECTION_HEADER}>
+                <h3 className={EXP_FORM_SECTION_TITLE}>
                   <FileUp size={16} /> 1. Carga el PDF
-                  <span className="expFormSectionHint">
+                  <span className={EXP_FORM_SECTION_HINT}>
                     Arrastra un archivo o haz clic para seleccionarlo
                   </span>
                 </h3>
                 {file ? (
-                  <span className="expFormSectionCounter complete">
+                  <span className={cn(expFormSectionCounterClass(true), "inline-flex items-center gap-1")}>
                     <Check size={12} /> Cargado
                   </span>
                 ) : null}
               </div>
 
               <label
-                className={
-                  "expFilePicker" +
-                  (isDragging ? " dragging" : "") +
-                  (file ? " hasFile" : "")
-                }
+                className={expFilePickerClass(isDragging ? "dragging" : file ? "hasFile" : undefined)}
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
               >
                 {file ? (
-                  <div className="expFilePickerFile">
+                  <div className={EXP_FILE_PICKER_FILE}>
                     <FileText size={20} />
-                    <div>
-                      <strong>{file.name}</strong>
-                      <span>{formatBytes(file.size)}</span>
+                    <div className={EXP_FILE_PICKER_FILE_BODY}>
+                      <strong className={EXP_FILE_PICKER_FILE_NAME}>{file.name}</strong>
+                      <span className={EXP_FILE_PICKER_FILE_META}>{formatBytes(file.size)}</span>
                     </div>
                     <button
                       type="button"
@@ -422,15 +449,15 @@ export function SubirTabContent({
                   </div>
                 ) : (
                   <>
-                    <div className="expFilePickerIcon">
+                    <div className={expFilePickerIconClass()}>
                       <UploadCloud size={24} />
                     </div>
-                    <p className="expFilePickerTitle">
+                    <p className={EXP_FILE_PICKER_TITLE}>
                       {isDragging
                         ? "Suelta el PDF aquí"
                         : "Arrastra un PDF o haz clic"}
                     </p>
-                    <p className="expFilePickerSub">
+                    <p className={EXP_FILE_PICKER_SUB}>
                       Tamaño máximo: {maxPdfSizeLabel}
                     </p>
                   </>
@@ -444,17 +471,7 @@ export function SubirTabContent({
 
               {/* Toggle: analizar con IA automáticamente al cargar */}
               {canManage ? (
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 13,
-                    color: "var(--exp-muted)",
-                    cursor: "pointer",
-                    marginTop: 10,
-                  }}
-                >
+                <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-[13px] text-exp-muted">
                   <input
                     type="checkbox"
                     checked={autoExtract}
@@ -467,17 +484,22 @@ export function SubirTabContent({
 
               {/* Botón para extraer datos manualmente (si el auto está apagado o quieres re-analizar) */}
               {file && canManage ? (
-                <div className="expExtractSection">
+                <div className="mt-3 flex flex-col items-start gap-2">
                   <button
                     type="button"
-                    className={cn(expBtnClass("secondary"), "expExtractBtn")}
+                    className={cn(
+                      expBtnClass("secondary"),
+                      "border-0 bg-[linear-gradient(135deg,var(--color-exp-brand)_0%,var(--color-exp-brand-dark)_100%)] text-white shadow-[0_2px_8px_rgba(15,118,110,0.18)] " +
+                        "hover:not-disabled:bg-[linear-gradient(135deg,var(--color-exp-brand-dark)_0%,#0a3d3a_100%)] hover:not-disabled:shadow-[0_4px_14px_rgba(15,118,110,0.28)] hover:not-disabled:-translate-y-px " +
+                        "disabled:cursor-wait disabled:opacity-70",
+                    )}
                     onClick={() => extractFromPdf()}
                     disabled={extracting}
                     aria-label="Obtener datos del PDF automaticamente"
                   >
                     {extracting ? (
                       <>
-                        <Loader2 size={16} className="expSpin" />
+                        <Loader2 size={16} className={EXP_SPIN} />
                         Analizando PDF con IA...
                       </>
                     ) : (
@@ -487,7 +509,7 @@ export function SubirTabContent({
                       </>
                     )}
                   </button>
-                  <span className="expHelpText" style={{ marginTop: 0 }}>
+                  <span className={cn(EXP_HELP_TEXT, "mt-0")}>
                     <Info size={12} />
                     Usa OCR + IA para extraer número, fecha, materia, asunto y resumen.
                     No modifica el archivo ni indexa nada.
@@ -499,25 +521,16 @@ export function SubirTabContent({
               {duplicates.length > 0 && !dupsDismissed ? (
                 <div
                   role="alert"
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    borderRadius: 10,
-                    border: "1px solid var(--exp-warn-line, rgba(234,179,8,0.4))",
-                    background: "var(--exp-warn-soft, rgba(234,179,8,0.08))",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
+                  className="mt-3 flex flex-col gap-2 rounded-[10px] border border-[rgba(234,179,8,0.4)] bg-[rgba(234,179,8,0.08)] p-3"
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+                  <div className="flex items-center gap-2 font-semibold">
                     <AlertCircle size={15} />
                     Posible{duplicates.length === 1 ? "" : "s"} duplicado{duplicates.length === 1 ? "" : "s"} ({duplicates.length})
                   </div>
-                  <span className="expHelpText" style={{ marginTop: 0 }}>
+                  <span className={cn(EXP_HELP_TEXT, "mt-0")}>
                     Ya hay expedientes parecidos archivados. Revisa antes de subir para no duplicar.
                   </span>
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <ul className="m-0 flex flex-col gap-0.5 pl-[18px] text-[13px]">
                     {duplicates.slice(0, 4).map((d) => (
                       <li key={d.id}>
                         {d.title}
@@ -525,7 +538,7 @@ export function SubirTabContent({
                       </li>
                     ))}
                   </ul>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div className="flex gap-2">
                     <button
                       type="button"
                       className={expBtnClass("ghost", "small")}
@@ -536,38 +549,40 @@ export function SubirTabContent({
                   </div>
                 </div>
               ) : checkingDuplicates ? (
-                <span className="expHelpText" style={{ marginTop: 10 }}>
-                  <Loader2 size={12} className="expSpin" /> Buscando posibles duplicados…
+                <span className={cn(EXP_HELP_TEXT, "mt-2.5")}>
+                  <Loader2 size={12} className={EXP_SPIN} /> Buscando posibles duplicados…
                 </span>
               ) : null}
 
               {/* Preview de datos extraídos (editables) */}
               {extractedData ? (
                 <div
-                  className="expExtractedPreview"
+                  className="mt-3.5 animate-exp-fade-in rounded-exp border border-exp-brand bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_100%)] p-3.5"
                   role="region"
                   aria-label="Datos extraídos del PDF (editables)"
                 >
-                  <div className="expExtractedHeader">
-                    <div>
-                      <strong>
+                  <div className="mb-3 flex items-start justify-between gap-3 border-b border-exp-brand/15 pb-2.5">
+                    <div className="min-w-0 flex-1">
+                      <strong className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.4px] text-exp-ink [&>svg]:text-exp-brand">
                         <Sparkles size={12} /> Datos detectados en el PDF
-                        <span className="expExtractedBadge">editables</span>
+                        <span className="ml-1.5 inline-block rounded-full bg-exp-brand px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.5px] text-white">
+                          editables
+                        </span>
                       </strong>
-                      <span className="expHelpText" style={{ marginTop: 0 }}>
+                      <span className={cn(EXP_HELP_TEXT, "mt-0")}>
                         Edita o elimina los campos antes de aplicar. Solo
                         se rellenan los campos vacíos del formulario.
                       </span>
                     </div>
                     {extractedData.extractionMethod ? (
                       <span
-                        className={`expStatus expStatus-${
+                        className={expStatusClass(
                           extractedData.extractionMethod === "ai"
                             ? "indexed"
                             : extractedData.extractionMethod === "deterministic"
                               ? "uploaded"
-                              : "processing"
-                        }`}
+                              : "processing",
+                        )}
                       >
                         {extractedData.extractionMethod === "ai"
                           ? "IA"
@@ -579,7 +594,7 @@ export function SubirTabContent({
                       </span>
                     ) : null}
                   </div>
-                  <div className="expExtractedChips">
+                  <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
                     <EditableExtractedField
                       label="SGD"
                       icon={<FileText size={11} />}
@@ -765,7 +780,7 @@ export function SubirTabContent({
                       multiline
                     />
                   </div>
-                  <div className="expExtractedActions">
+                  <div className="flex justify-end gap-2 border-t border-exp-brand/15 pt-2.5">
                     <button
                       type="button"
                       className={expBtnClass("ghost", "small")}
@@ -785,48 +800,42 @@ export function SubirTabContent({
               ) : null}
             </div>
 
-            <div className="expFormSection">
-              <div className="expFormSectionHeader">
-                <h3 className="expFormSectionTitle">
+            <div className={EXP_FORM_SECTION}>
+              <div className={EXP_FORM_SECTION_HEADER}>
+                <h3 className={EXP_FORM_SECTION_TITLE}>
                   <Info size={16} /> 2. Identifica el documento
                 </h3>
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <div className="expField">
-                  <label className="expField-label">
-                    SGD de expediente <span className="optional">(opcional)</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>
+                    SGD de expediente <span className="text-[11px] font-normal italic text-exp-muted">(opcional)</span>
                   </label>
                   <input
                     value={form.sgdExpediente}
                     onChange={(e) => setField("sgdExpediente", e.target.value)}
                     placeholder="N° del sistema de gestión documental"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                   />
-                  <span className="expHelpText">
+                  <span className={EXP_HELP_TEXT}>
                     N° de expediente del sistema documental externo. Lo asignas tú (no se autocompleta).
                   </span>
                 </div>
-                <div className="expField">
-                  <label className="expField-label">Serie documental{autoBadge("serieDocumento")}</label>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Serie documental{autoBadge("serieDocumento")}</label>
                   <input
                     value={form.serieDocumento}
                     onChange={(e) => setField("serieDocumento", e.target.value)}
                     placeholder="Ej. Resolución 004-2024-MDCH-A"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                   />
                 </div>
-                <div className="expField">
-                  <label className="expField-label">Tipo de documento{autoBadge("tipoDocumento")}</label>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Tipo de documento{autoBadge("tipoDocumento")}</label>
                   <select
                     value={form.tipoDocumento}
                     onChange={(e) => setField("tipoDocumento", e.target.value)}
-                    className="expField-select"
+                    className={EXP_FIELD_CONTROL}
                   >
                     <option value="">— Selecciona —</option>
                     <option value="Resolución">Resolución</option>
@@ -840,19 +849,19 @@ export function SubirTabContent({
                   </select>
                 </div>
                 {form.tipoDocumento === "otro" ? (
-                  <div className="expField">
-                    <label className="expField-label">Especificar tipo</label>
+                  <div className={EXP_FIELD}>
+                    <label className={EXP_FIELD_LABEL}>Especificar tipo</label>
                     <input
                       value={form.tipoDocumentoCustom}
                       onChange={(e) => setField("tipoDocumentoCustom", e.target.value)}
                       placeholder="Escribe el tipo de documento"
-                      className="expField-input"
+                      className={EXP_FIELD_CONTROL}
                     />
                   </div>
                 ) : null}
-                <div className="expField">
-                  <label className="expField-label">
-                    Año <span className="optional">(opcional)</span>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>
+                    Año <span className="text-[11px] font-normal italic text-exp-muted">(opcional)</span>
                     {autoBadge("anio")}
                   </label>
                   <input
@@ -860,28 +869,28 @@ export function SubirTabContent({
                     value={form.anio}
                     onChange={(e) => setField("anio", e.target.value)}
                     placeholder="2024"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                   />
                 </div>
-                <div className="expField">
-                  <label className="expField-label">
-                    Folios <span className="optional">(opcional)</span>
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>
+                    Folios <span className="text-[11px] font-normal italic text-exp-muted">(opcional)</span>
                     {autoBadge("folio")}
                   </label>
                   <input
                     value={form.folio}
                     onChange={(e) => setField("folio", e.target.value)}
                     placeholder="Nº de páginas del PDF"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                   />
                 </div>
-                <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                  <label className="expField-label">
+                <div className={cn(EXP_FIELD, "col-span-full")}>
+                  <label className={EXP_FIELD_LABEL}>
                     Oficina{" "}
                     {isAdmin ? (
-                      <span className="optional">(opcional)</span>
+                      <span className="text-[11px] font-normal italic text-exp-muted">(opcional)</span>
                     ) : (
-                      <span className="optional">(asignada a tu oficina)</span>
+                      <span className="text-[11px] font-normal italic text-exp-muted">(asignada a tu oficina)</span>
                     )}
                     {autoBadge("oficina")}
                   </label>
@@ -889,23 +898,23 @@ export function SubirTabContent({
                     value={form.oficina}
                     onChange={(e) => setField("oficina", e.target.value)}
                     placeholder="Subgerencia, área, dirección…"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                     readOnly={!isAdmin}
                     title={!isAdmin ? "La oficina se asigna automáticamente según tu perfil" : undefined}
                   />
                 </div>
-                <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                  <label className="expField-label">
-                    Título <span className="optional">(opcional)</span>
+                <div className={cn(EXP_FIELD, "col-span-full")}>
+                  <label className={EXP_FIELD_LABEL}>
+                    Título <span className="text-[11px] font-normal italic text-exp-muted">(opcional)</span>
                     {autoBadge("title")}
                   </label>
                   <input
                     value={form.title}
                     onChange={(e) => setField("title", e.target.value)}
                     placeholder="Si lo dejas vacío se usa el nombre del archivo"
-                    className="expField-input"
+                    className={EXP_FIELD_CONTROL}
                   />
-                  <span className="expHelpText">
+                  <span className={EXP_HELP_TEXT}>
                     <Info size={12} /> El título se mostrará en los resultados de búsqueda.
                   </span>
                 </div>
@@ -915,58 +924,52 @@ export function SubirTabContent({
         ) : null}
 
         {wizardStep === 1 ? (
-          <div className="expFormSection">
-            <div className="expFormSectionHeader">
-              <h3 className="expFormSectionTitle">
+          <div className={EXP_FORM_SECTION}>
+            <div className={EXP_FORM_SECTION_HEADER}>
+              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <FileText size={16} /> Describe el contenido
-                <span className="expFormSectionHint">
+                <span className={EXP_FORM_SECTION_HINT}>
                   Estos campos ayudan a la IA a encontrar el expediente
                 </span>
               </h3>
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <div className="expField">
-                <label className="expField-label">Materia{autoBadge("materia")}</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Materia{autoBadge("materia")}</label>
                 <input
                   value={form.materia}
                   onChange={(e) => setField("materia", e.target.value)}
                   placeholder="Contratación, personal, presupuesto…"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Asunto{autoBadge("asunto")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Asunto{autoBadge("asunto")}</label>
                 <input
                   value={form.asunto}
                   onChange={(e) => setField("asunto", e.target.value)}
                   placeholder="Asunto o sumilla del documento"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Resumen{autoBadge("resumen")}</label>
+              <div className={cn(EXP_FIELD, "col-span-full")}>
+                <label className={EXP_FIELD_LABEL}>Resumen{autoBadge("resumen")}</label>
                 <textarea
                   rows={3}
                   value={form.resumen}
                   onChange={(e) => setField("resumen", e.target.value)}
                   placeholder="Resumen ejecutivo (3-5 líneas)"
-                  className="expField-textarea"
+                  className={EXP_FIELD_TEXTAREA}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Observaciones</label>
+              <div className={cn(EXP_FIELD, "col-span-full")}>
+                <label className={EXP_FIELD_LABEL}>Observaciones</label>
                 <textarea
                   rows={2}
                   value={form.observaciones}
                   onChange={(e) => setField("observaciones", e.target.value)}
                   placeholder="Notas adicionales sobre este expediente"
-                  className="expField-textarea"
+                  className={EXP_FIELD_TEXTAREA}
                 />
               </div>
             </div>
@@ -974,52 +977,46 @@ export function SubirTabContent({
         ) : null}
 
         {wizardStep === 2 ? (
-          <div className="expFormSection">
-            <div className="expFormSectionHeader">
-              <h3 className="expFormSectionTitle">
+          <div className={EXP_FORM_SECTION}>
+            <div className={EXP_FORM_SECTION_HEADER}>
+              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <Info size={16} /> Persona
-                <span className="expFormSectionHint">
+                <span className={EXP_FORM_SECTION_HINT}>
                   Quién presenta o solicita este documento
                 </span>
               </h3>
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <div className="expField">
-                <label className="expField-label">Tipo de persona</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de persona</label>
                 <select
                   value={form.personaTipo}
                   onChange={(e) =>
                     setField("personaTipo", e.target.value as SubirForm["personaTipo"])
                   }
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin persona —</option>
                   <option value="natural">Persona natural</option>
                   <option value="juridica">Persona jurídica</option>
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Documento</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Documento</label>
                 <input
                   value={form.personaDocumento}
                   onChange={(e) => setField("personaDocumento", e.target.value)}
                   placeholder="DNI o RUC"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Nombre{autoBadge("personaNombre")}</label>
+              <div className={cn(EXP_FIELD, "col-span-full")}>
+                <label className={EXP_FIELD_LABEL}>Nombre{autoBadge("personaNombre")}</label>
                 <input
                   value={form.personaNombre}
                   onChange={(e) => setField("personaNombre", e.target.value)}
                   placeholder="Razón social o nombre completo"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
             </div>
@@ -1027,11 +1024,11 @@ export function SubirTabContent({
         ) : null}
 
         {wizardStep === 3 ? (
-          <div className="expFormSection">
-            <div className="expFormSectionHeader">
-              <h3 className="expFormSectionTitle">
+          <div className={EXP_FORM_SECTION}>
+            <div className={EXP_FORM_SECTION_HEADER}>
+              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <MapPin size={16} /> Ubicación física
-                <span className="expFormSectionHint">
+                <span className={EXP_FORM_SECTION_HINT}>
                   Dónde se encuentra el expediente en papel
                 </span>
               </h3>
@@ -1047,16 +1044,8 @@ export function SubirTabContent({
               );
               if (!hasLast && !hasSugerida && !siguientePaquete) return null;
               return (
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginBottom: 12,
-                    alignItems: "center",
-                  }}
-                >
-                  <span className="expHelpText" style={{ marginTop: 0 }}>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className={cn(EXP_HELP_TEXT, "mt-0")}>
                     <Lightbulb size={12} /> Sugerencias:
                   </span>
                   {hasLast ? (
@@ -1106,19 +1095,13 @@ export function SubirTabContent({
                 </div>
               );
             })()}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <div className="expField">
-                <label className="expField-label">Tipo de contenedor{autoBadge("tipoAlmacenamiento")}</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de contenedor{autoBadge("tipoAlmacenamiento")}</label>
                 <select
                   value={form.tipoAlmacenamiento}
                   onChange={(e) => setField("tipoAlmacenamiento", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin contenedor —</option>
                   {CONTENEDOR_TIPOS.map((tipo) => (
@@ -1128,42 +1111,42 @@ export function SubirTabContent({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de archivador{autoBadge("nroArchivador")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de archivador{autoBadge("nroArchivador")}</label>
                 <input
                   value={form.nroArchivador}
                   onChange={(e) => setField("nroArchivador", e.target.value)}
                   placeholder="Ej. 12"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de paquete{autoBadge("nroPaquete")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de paquete{autoBadge("nroPaquete")}</label>
                 <input
                   value={form.nroPaquete}
                   onChange={(e) => setField("nroPaquete", e.target.value)}
                   placeholder="Opcional"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Empastado{autoBadge("empastado")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Empastado{autoBadge("empastado")}</label>
                 <select
                   value={form.empastado}
                   onChange={(e) => setField("empastado", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin definir —</option>
                   <option value="si">Sí</option>
                   <option value="no">No</option>
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Color{autoBadge("colorArchivador")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Color{autoBadge("colorArchivador")}</label>
                 <select
                   value={form.colorArchivador}
                   onChange={(e) => setField("colorArchivador", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin color —</option>
                   {ARCHIVO_COLORES.map((color) => (
@@ -1173,30 +1156,30 @@ export function SubirTabContent({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Estante{autoBadge("nroEstante")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Estante{autoBadge("nroEstante")}</label>
                 <input
                   value={form.nroEstante}
                   onChange={(e) => setField("nroEstante", e.target.value)}
                   placeholder="Ej. 3"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Piso{autoBadge("nroPiso")}</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Piso{autoBadge("nroPiso")}</label>
                 <input
                   value={form.nroPiso}
                   onChange={(e) => setField("nroPiso", e.target.value)}
                   placeholder="Ej. 2"
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                 />
               </div>
-              <div className="expField" style={{ gridColumn: "1 / -1" }}>
-                <label className="expField-label">Local / ambiente{autoBadge("nroLocal")}</label>
+              <div className={cn(EXP_FIELD, "col-span-full")}>
+                <label className={EXP_FIELD_LABEL}>Local / ambiente{autoBadge("nroLocal")}</label>
                 <select
                   value={form.nroLocal}
                   onChange={(e) => setField("nroLocal", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin ambiente —</option>
                   {ARCHIVO_AMBIENTES.map((amb) => (
@@ -1210,17 +1193,8 @@ export function SubirTabContent({
           </div>
         ) : null}
 
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            justifyContent: "space-between",
-            marginTop: 24,
-            paddingTop: 16,
-            borderTop: "1px solid var(--exp-line)",
-          }}
-        >
-          <div style={{ display: "flex", gap: 10 }}>
+        <div className="mt-6 flex items-center justify-between gap-2.5 border-t border-exp-line pt-4">
+          <div className="flex gap-2.5">
             {wizardStep > 0 ? (
               <button
                 type="button"
@@ -1257,7 +1231,7 @@ export function SubirTabContent({
             </button>
           </div>
           {wizardStep < 3 ? (
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="flex gap-2.5">
               {file && !extracting ? (
                 <button
                   type="submit"
@@ -1305,9 +1279,9 @@ export function SubirTabContent({
         </div>
 
         {uploading && uploadProgress > 0 && uploadProgress < 100 ? (
-          <div className="expProgress" style={{ marginTop: 12 }}>
+          <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-exp-line-soft">
             <div
-              className="expProgress-bar"
+              className="relative h-full rounded-full bg-[linear-gradient(90deg,var(--color-exp-brand)_0%,var(--color-exp-brand-dark)_100%)] transition-[width] duration-[240ms] ease-linear after:absolute after:inset-0 after:animate-exp-shimmer after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent)] after:content-['']"
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
@@ -1318,11 +1292,11 @@ export function SubirTabContent({
 
       {/* Lista de expedientes subidos (recientes) */}
       {canManage ? (
-        <div className="expRecentUploads" aria-label="Expedientes subidos recientemente">
-          <div className="expFormSectionHeader" style={{ marginTop: 32 }}>
-            <h3 className="expFormSectionTitle">
+        <div className="mt-8 border-t-2 border-exp-line pt-5" aria-label="Expedientes subidos recientemente">
+          <div className={cn(EXP_FORM_SECTION_HEADER, "mt-8")}>
+            <h3 className={EXP_FORM_SECTION_TITLE}>
               <FileUp size={16} /> Expedientes subidos recientemente
-              <span className="expFormSectionHint">
+              <span className={EXP_FORM_SECTION_HINT}>
                 {recentUploads.length} de los últimos subidos
               </span>
             </h3>
@@ -1345,10 +1319,13 @@ export function SubirTabContent({
           </div>
 
           {hasRecentPending ? (
-            <div className="expIndexingBanner" role="status">
-              <Loader2 size={14} className="expSpin" />
+            <div
+              className="mb-3 flex animate-[expSlideDown_200ms_ease] items-center gap-2.5 rounded-exp border-l-[3px] border-l-exp-info bg-[linear-gradient(90deg,var(--color-exp-info-soft)_0%,transparent_100%)] px-3.5 py-2.5 text-[13px] text-exp-info [&>svg]:shrink-0"
+              role="status"
+            >
+              <Loader2 size={14} className={EXP_SPIN} />
               <span>
-                <strong>Indexando con Pinecone...</strong> Los expedientes
+                <strong className="font-bold">Indexando con Pinecone...</strong> Los expedientes
                 marcados como &quot;Procesando&quot; están siendo vectorizados y
                 fragmentados. La lista se actualiza automáticamente cada 4s.
               </span>
@@ -1358,40 +1335,39 @@ export function SubirTabContent({
           {loadingRecent && recentUploads.length === 0 ? (
             <SkeletonList count={3} />
           ) : recentUploads.length === 0 ? (
-            <div className="expRecentEmpty">
+            <div className="flex flex-col items-center gap-2 rounded-exp border border-dashed border-exp-line bg-exp-line-soft px-5 py-8 text-center text-[13px] text-exp-muted [&>svg]:text-exp-brand [&>svg]:opacity-60">
               <FileText size={20} />
-              <p>
+              <p className="m-0 max-w-[320px]">
                 Aún no has subido expedientes. Completa el wizard de arriba
                 para empezar.
               </p>
             </div>
           ) : (
-            <div className="expRecentList">
+            <div className="flex flex-col gap-2">
               {recentUploads.map((exp) => (
                 <article
                   key={exp.id}
-                  className={
-                    "expRecentItem" +
-                    (exp.status === "processing" || exp.status === "uploaded"
-                      ? " expRecentItemPending"
-                      : "") +
-                    (exp.status === "error" ? " expRecentItemError" : "")
-                  }
+                  className={cn(
+                    "grid grid-cols-[40px_1fr_auto] items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:translate-x-1 hover:border-exp-brand hover:bg-exp-line-soft hover:shadow-[0_2px_8px_rgba(15,118,110,0.08)]",
+                    (exp.status === "processing" || exp.status === "uploaded") &&
+                      "border-l-[3px] border-l-exp-warning bg-[linear-gradient(90deg,var(--color-exp-warning-soft)_0%,var(--color-exp-panel)_30%)]",
+                    exp.status === "error" &&
+                      "border-l-[3px] border-l-exp-danger bg-[linear-gradient(90deg,var(--color-exp-danger-soft)_0%,var(--color-exp-panel)_30%)]",
+                  )}
                 >
-                  <div className="expRecentItemIcon">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-exp bg-exp-brand-soft text-exp-brand">
                     <FileText size={16} />
                   </div>
-                  <div className="expRecentItemBody">
-                    <div className="expRecentItemHeader">
-                      <strong>{exp.title}</strong>
-                      <span
-                        className={`expStatus expStatus-${exp.status}`}
-                        data-status={exp.status}
-                      >
+                  <div className="min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <strong className="max-w-[360px] overflow-hidden text-ellipsis whitespace-nowrap text-sm font-bold text-exp-ink">
+                        {exp.title}
+                      </strong>
+                      <span className={expStatusClass(exp.status)} data-status={exp.status}>
                         {statusLabel(exp.status)}
                       </span>
                     </div>
-                    <div className="expRecentItemMeta">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-exp-muted [&>span]:whitespace-nowrap">
                       {exp.serie_documento ? (
                         <span>{exp.serie_documento}</span>
                       ) : (
@@ -1403,16 +1379,16 @@ export function SubirTabContent({
                       <span>· {new Date(exp.created_at).toLocaleDateString("es-PE")}</span>
                     </div>
                     {exp.metadata?.chunkCount ? (
-                      <div className="expRecentItemMeta">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-exp-muted [&>span]:whitespace-nowrap">
                         <span>
                           {exp.metadata.pageCount ?? 0} páginas · {exp.metadata.chunkCount} fragmentos
                         </span>
                       </div>
                     ) : null}
                     {exp.error_message ? (
-                      <div className="expRecentItemError">
+                      <div className="mt-1 rounded bg-exp-danger-soft px-2 py-1 text-xs text-exp-danger">
                         {exp.error_message}
-                        <div style={{ marginTop: 8 }}>
+                        <div className="mt-2">
                           <button
                             type="button"
                             className={expBtnClass("secondary", "small")}
@@ -1432,13 +1408,13 @@ export function SubirTabContent({
                     ) : null}
                   </div>
                   <div
-                    className="expRecentItemActions"
+                    className="flex items-center gap-1"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
                       onClick={() => setOpenExp(exp)}
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       aria-label="Ver detalle"
                       title="Ver detalle"
                     >
@@ -1448,20 +1424,20 @@ export function SubirTabContent({
                       type="button"
                       onClick={() => void reindexExpediente(exp.id)}
                       disabled={reindexingId === exp.id}
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       aria-label="Reindexar"
                       title="Reindexar"
                     >
                       <RefreshCw
                         size={14}
-                        className={reindexingId === exp.id ? "expSpin" : ""}
+                        className={reindexingId === exp.id ? EXP_SPIN : ""}
                       />
                     </button>
                     <a
                       href={`/api/expedientes-archivo/${exp.id}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="expIconButton"
+                      className={EXP_ICON_BUTTON}
                       aria-label="Descargar PDF"
                       title="Descargar PDF"
                     >
@@ -1471,7 +1447,7 @@ export function SubirTabContent({
                       type="button"
                       onClick={() => void deleteExpediente(exp)}
                       disabled={deletingId === exp.id}
-                      className="expIconButton danger"
+                      className={cn(EXP_ICON_BUTTON, EXP_ICON_BUTTON_DANGER)}
                       aria-label="Eliminar"
                       title="Eliminar"
                     >
@@ -1483,7 +1459,7 @@ export function SubirTabContent({
               {recentUploads.length >= 10 ? (
                 <button
                   type="button"
-                  className={cn(expBtnClass("secondary"), "expRecentViewAll")}
+                  className={cn(expBtnClass("secondary"), "mt-3 self-center")}
                   onClick={() => setTab("buscar")}
                 >
                   Ver todos los expedientes
@@ -1496,19 +1472,19 @@ export function SubirTabContent({
       ) : null}
     </div>
   ) : (
-    <div className="expTabContent">
-      <div className="expEmpty">
-        <div className="expEmptyIllustration">
+    <div className={cn("tw", EXP_TAB_CONTENT)}>
+      <div className={EXP_EMPTY}>
+        <div className={EXP_EMPTY_ILLUSTRATION}>
           <Lock size={28} />
         </div>
-        <h3 className="expEmpty-title">Acceso restringido</h3>
-        <p className="expEmpty-desc">
+        <h3 className={EXP_EMPTY_TITLE}>Acceso restringido</h3>
+        <p className={EXP_EMPTY_DESC}>
           La carga y gestión de expedientes requiere rol DEC/Editor o administrador.
           Puedes buscar y consultar todos los expedientes indexados.
         </p>
         <button
           type="button"
-          className={cn(expBtnClass("secondary"), "expEmpty-action")}
+          className={cn(expBtnClass("secondary"), "mt-2")}
           onClick={() => setTab("buscar")}
         >
           <Search size={16} /> Ir a buscar
