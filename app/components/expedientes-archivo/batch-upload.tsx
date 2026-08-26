@@ -24,7 +24,26 @@ import {
   uploadExpediente as uploadExpedienteAction,
 } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
-import { EXP_SPIN, expBtnClass } from "./estilos";
+import {
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FORM_SECTION,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_HELP_TEXT,
+  EXP_ICON_BUTTON,
+  EXP_ICON_BUTTON_DANGER,
+  EXP_SPIN,
+  expBtnClass,
+  expFilePickerClass,
+  expFilePickerIconClass,
+  EXP_FILE_PICKER_SUB,
+  EXP_FILE_PICKER_TITLE,
+  expStatusClass,
+} from "./estilos";
+import { cn } from "@/lib/utils";
 
 type ToastKind = "success" | "error" | "warning" | "info";
 
@@ -287,10 +306,10 @@ export function BatchUpload({
   };
 
   return (
-    <div className="expBatch">
+    <div className="tw">
       {/* Zona de carga múltiple */}
       <label
-        className={"expFilePicker" + (isDragging ? " dragging" : "")}
+        className={expFilePickerClass(isDragging ? "dragging" : undefined)}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -302,13 +321,13 @@ export function BatchUpload({
           addFiles(e.dataTransfer.files);
         }}
       >
-        <div className="expFilePickerIcon">
+        <div className={expFilePickerIconClass()}>
           <UploadCloud size={24} />
         </div>
-        <p className="expFilePickerTitle">
+        <p className={EXP_FILE_PICKER_TITLE}>
           {isDragging ? "Suelta los PDF aquí" : "Arrastra varios PDF o haz clic"}
         </p>
-        <p className="expFilePickerSub">
+        <p className={EXP_FILE_PICKER_SUB}>
           Se analizan con IA automáticamente. Máx {maxPdfSizeLabel} por archivo.
         </p>
         <input
@@ -326,22 +345,22 @@ export function BatchUpload({
       {items.length > 0 ? (
         <>
           {/* Ubicación física compartida */}
-          <div className="expFormSection" style={{ marginTop: 16 }}>
-            <div className="expFormSectionHeader">
-              <h3 className="expFormSectionTitle">
+          <div className={cn(EXP_FORM_SECTION, "mt-4")}>
+            <div className={EXP_FORM_SECTION_HEADER}>
+              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <MapPin size={16} /> Ubicación física del lote
-                <span className="expFormSectionHint">
+                <span className={EXP_FORM_SECTION_HINT}>
                   Se aplica a todos los expedientes del lote
                 </span>
               </h3>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <div className="expField">
-                <label className="expField-label">Tipo de contenedor</label>
+            <div className="grid grid-cols-3 gap-3">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Tipo de contenedor</label>
                 <select
                   value={loc.tipoAlmacenamiento}
                   onChange={(e) => setLocField("tipoAlmacenamiento", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin contenedor —</option>
                   {CONTENEDOR_TIPOS.map((t) => (
@@ -351,30 +370,30 @@ export function BatchUpload({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de archivador</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de archivador</label>
                 <input
                   value={loc.nroArchivador}
                   onChange={(e) => setLocField("nroArchivador", e.target.value)}
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   placeholder="Ej. 12"
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Nº de paquete</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Nº de paquete</label>
                 <input
                   value={loc.nroPaquete}
                   onChange={(e) => setLocField("nroPaquete", e.target.value)}
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   placeholder="Opcional"
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Color</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Color</label>
                 <select
                   value={loc.colorArchivador}
                   onChange={(e) => setLocField("colorArchivador", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin color —</option>
                   {ARCHIVO_COLORES.map((c) => (
@@ -384,21 +403,21 @@ export function BatchUpload({
                   ))}
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label">Estante</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Estante</label>
                 <input
                   value={loc.nroEstante}
                   onChange={(e) => setLocField("nroEstante", e.target.value)}
-                  className="expField-input"
+                  className={EXP_FIELD_CONTROL}
                   placeholder="Ej. 3"
                 />
               </div>
-              <div className="expField">
-                <label className="expField-label">Local / ambiente</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL}>Local / ambiente</label>
                 <select
                   value={loc.nroLocal}
                   onChange={(e) => setLocField("nroLocal", e.target.value)}
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                 >
                   <option value="">— Sin ambiente —</option>
                   {ARCHIVO_AMBIENTES.map((a) => (
@@ -412,110 +431,102 @@ export function BatchUpload({
           </div>
 
           {/* Tabla de revisión */}
-          <div className="expFormSection" style={{ marginTop: 16 }}>
-            <div className="expFormSectionHeader">
-              <h3 className="expFormSectionTitle">
+          <div className={cn(EXP_FORM_SECTION, "mt-4")}>
+            <div className={EXP_FORM_SECTION_HEADER}>
+              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <FileText size={16} /> Expedientes del lote ({items.length})
-                <span className="expFormSectionHint">
+                <span className={EXP_FORM_SECTION_HINT}>
                   Revisa y ajusta lo detectado por la IA antes de subir
                 </span>
               </h3>
               {analyzing ? (
-                <span className="expHelpText" style={{ marginTop: 0 }}>
-                  <Loader2 size={12} className="expSpin" /> Analizando con IA…
+                <span className={cn(EXP_HELP_TEXT, "mt-0")}>
+                  <Loader2 size={12} className={EXP_SPIN} /> Analizando con IA…
                 </span>
               ) : null}
             </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table className="expBatchTable" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[13px]">
                 <thead>
-                  <tr style={{ textAlign: "left", color: "var(--exp-muted)" }}>
-                    <th style={{ padding: "6px 8px" }}>Archivo</th>
-                    <th style={{ padding: "6px 8px" }} title="N° del sistema de gestión documental externo (manual)">
+                  <tr className="text-left text-exp-muted">
+                    <th className="px-2 py-1.5">Archivo</th>
+                    <th className="px-2 py-1.5" title="N° del sistema de gestión documental externo (manual)">
                       SGD
                     </th>
-                    <th style={{ padding: "6px 8px" }}>Serie</th>
-                    <th style={{ padding: "6px 8px" }}>Tipo</th>
-                    <th style={{ padding: "6px 8px", width: 70 }}>Año</th>
-                    <th style={{ padding: "6px 8px" }}>Asunto</th>
-                    <th style={{ padding: "6px 8px", width: 90 }}>Estado</th>
-                    <th style={{ padding: "6px 8px", width: 36 }} />
+                    <th className="px-2 py-1.5">Serie</th>
+                    <th className="px-2 py-1.5">Tipo</th>
+                    <th className="w-[70px] px-2 py-1.5">Año</th>
+                    <th className="px-2 py-1.5">Asunto</th>
+                    <th className="w-[90px] px-2 py-1.5">Estado</th>
+                    <th className="w-9 px-2 py-1.5" />
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id} style={{ borderTop: "1px solid var(--exp-line)" }}>
-                      <td style={{ padding: "6px 8px", maxWidth: 180 }}>
-                        <span
-                          title={it.file.name}
-                          style={{
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                    <tr key={it.id} className="border-t border-exp-line">
+                      <td className="max-w-[180px] px-2 py-1.5">
+                        <span title={it.file.name} className="block overflow-hidden text-ellipsis whitespace-nowrap">
                           {it.file.name}
                         </span>
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <input
-                          className="expField-input"
+                          className={EXP_FIELD_CONTROL}
                           value={it.sgdExpediente}
                           onChange={(e) => setItem(it.id, { sgdExpediente: e.target.value })}
                           placeholder="manual"
                           title="N° de expediente del sistema documental externo (lo asignas tú)"
                         />
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <input
-                          className="expField-input"
+                          className={EXP_FIELD_CONTROL}
                           value={it.serieDocumento}
                           onChange={(e) => setItem(it.id, { serieDocumento: e.target.value })}
                           placeholder="—"
                           title="Serie documental: tipo + número (autodetectada)"
                         />
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <input
-                          className="expField-input"
+                          className={EXP_FIELD_CONTROL}
                           value={it.tipoDocumento}
                           onChange={(e) => setItem(it.id, { tipoDocumento: e.target.value })}
                           placeholder="—"
                         />
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <input
-                          className="expField-input"
+                          className={EXP_FIELD_CONTROL}
                           value={it.anio}
                           onChange={(e) => setItem(it.id, { anio: e.target.value })}
                           placeholder="—"
                         />
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <input
-                          className="expField-input"
+                          className={EXP_FIELD_CONTROL}
                           value={it.asunto}
                           onChange={(e) => setItem(it.id, { asunto: e.target.value })}
                           placeholder="—"
                         />
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         <span
-                          className={`expStatus expStatus-${
+                          className={expStatusClass(
                             it.status === "done"
                               ? "indexed"
                               : it.status === "error"
                                 ? "error"
                                 : it.status === "uploading" || it.status === "analyzing"
                                   ? "processing"
-                                  : "uploaded"
-                          }`}
+                                  : "uploaded",
+                          )}
                           title={it.error}
                         >
                           {it.status === "analyzing" || it.status === "uploading" ? (
-                            <Loader2 size={11} className="expSpin" />
+                            <Loader2 size={11} className={EXP_SPIN} />
                           ) : it.status === "done" ? (
                             <Check size={11} />
                           ) : it.status === "error" ? (
@@ -524,11 +535,11 @@ export function BatchUpload({
                           {statusLabel[it.status]}
                         </span>
                       </td>
-                      <td style={{ padding: "6px 8px" }}>
+                      <td className="px-2 py-1.5">
                         {it.status !== "uploading" ? (
                           <button
                             type="button"
-                            className="expIconButton danger"
+                            className={cn(EXP_ICON_BUTTON, EXP_ICON_BUTTON_DANGER, "size-7")}
                             onClick={() => removeItem(it.id)}
                             aria-label="Quitar del lote"
                             title="Quitar"
@@ -543,17 +554,8 @@ export function BatchUpload({
               </table>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                justifyContent: "space-between",
-                marginTop: 16,
-                paddingTop: 16,
-                borderTop: "1px solid var(--exp-line)",
-              }}
-            >
-              <div style={{ display: "flex", gap: 10 }}>
+            <div className="mt-4 flex items-center justify-between gap-2.5 border-t border-exp-line pt-4">
+              <div className="flex gap-2.5">
                 <button
                   type="button"
                   className={expBtnClass("ghost")}
@@ -602,7 +604,7 @@ export function BatchUpload({
                   : `Subir ${uploadable.length} expediente${uploadable.length === 1 ? "" : "s"}`}
               </button>
             </div>
-            <span className="expHelpText">
+            <span className={EXP_HELP_TEXT}>
               <Sparkles size={12} /> Cada expediente se procesa con OCR e indexa en segundo plano tras subirse.
             </span>
           </div>

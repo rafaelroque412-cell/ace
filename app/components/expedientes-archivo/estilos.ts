@@ -216,6 +216,62 @@ export const EXP_SLIDE_OVER_BODY = "flex-1 overflow-auto p-[18px_20px]";
 export const EXP_SLIDE_OVER_FOOTER =
   "flex justify-end gap-2.5 border-t border-exp-line bg-exp-line-soft px-5 py-3.5";
 
+// ── Sección de formulario (bloques con título+línea punteada: subir, lote,
+//    búsqueda avanzada) ───────────────────────────────────────────────────────
+
+export const EXP_FORM_SECTION = "mb-5";
+
+export const EXP_FORM_SECTION_HEADER =
+  "mb-3 flex items-center justify-between gap-3 border-b border-dashed border-exp-line pb-2.5";
+
+export const EXP_FORM_SECTION_TITLE =
+  "m-0 flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.5px] text-exp-ink [&>svg]:size-4 [&>svg]:text-exp-brand";
+
+export const EXP_FORM_SECTION_HINT = "mt-0.5 text-xs font-normal normal-case tracking-normal text-exp-muted";
+
+export function expFormSectionCounterClass(complete?: boolean): string {
+  return cn(
+    "rounded-full px-2 py-[3px] font-mono text-[11px] font-bold",
+    complete ? "bg-exp-success-soft text-exp-success" : "bg-exp-line-soft text-exp-muted",
+  );
+}
+
+// ── Selector de archivo con arrastrar-y-soltar (lote, subida individual) ────
+
+export function expFilePickerClass(state?: "dragging" | "hasFile"): string {
+  const base =
+    "relative flex cursor-pointer flex-col items-center gap-2 rounded-exp-lg border-2 border-dashed border-exp-line bg-exp-line-soft p-8 text-center " +
+    "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:bg-exp-brand-soft " +
+    "[&_input[type=file]]:absolute [&_input[type=file]]:inset-0 [&_input[type=file]]:size-full [&_input[type=file]]:cursor-pointer [&_input[type=file]]:opacity-0";
+  if (state === "dragging") {
+    return cn(base, "scale-[1.01] border-exp-brand bg-exp-brand-soft shadow-[0_0_0_4px_rgba(15,118,110,0.10)]");
+  }
+  if (state === "hasFile") {
+    return cn(base, "border-solid border-exp-success bg-exp-success-soft p-5");
+  }
+  return base;
+}
+
+export function expFilePickerIconClass(hasFile?: boolean): string {
+  return cn(
+    "flex size-14 items-center justify-center rounded-full bg-exp-panel text-exp-brand shadow-exp-sm",
+    hasFile && "text-exp-success",
+  );
+}
+
+export const EXP_FILE_PICKER_TITLE = "mt-1 text-[15px] font-semibold text-exp-ink";
+
+export const EXP_FILE_PICKER_SUB = "text-xs text-exp-muted";
+
+export const EXP_FILE_PICKER_FILE =
+  "flex w-full max-w-[360px] items-center gap-2.5 rounded-exp border border-exp-line bg-exp-panel px-3.5 py-2.5 text-left [&>svg]:shrink-0 [&>svg]:text-exp-success";
+
+export const EXP_FILE_PICKER_FILE_BODY = "min-w-0 flex-1";
+
+export const EXP_FILE_PICKER_FILE_NAME = "block overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold text-exp-ink";
+
+export const EXP_FILE_PICKER_FILE_META = "text-[11px] text-exp-muted";
+
 // ── Texto de ayuda inline y spinner ──────────────────────────────────────────
 
 export const EXP_HELP_TEXT = "mt-1 inline-flex items-center gap-1 text-xs leading-snug text-exp-muted [&>svg]:shrink-0 [&>svg]:opacity-70";
