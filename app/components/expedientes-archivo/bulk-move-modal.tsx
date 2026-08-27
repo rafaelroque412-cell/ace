@@ -43,7 +43,7 @@ export function BulkMoveModal({ count, onClose, onApply, canChangeOficina = true
               {filledCount} campo{filledCount === 1 ? "" : "s"} a modificar
             </strong>
           </div>
-          <div className="mb-4 grid grid-cols-2 gap-2.5 [&_.expField]:m-0">
+          <div className="mb-4 grid grid-cols-2 gap-2.5">
             {canChangeOficina ? (
               <div className={cn(EXP_FIELD, "col-span-2")}>
                 <label className={EXP_FIELD_LABEL}>Oficina</label>

@@ -85,51 +85,8 @@
 }
 
 /* --- Tab content con padding consistente --- */
-.expTabContent {
-  padding: 20px 26px 26px;
-}
 
 /* --- Form sections con headers claros --- */
-.expFormSection {
-  margin: 0 0 20px;
-}
-
-.expFormSectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 12px;
-  padding: 0 0 10px;
-  border-bottom: 1px dashed var(--exp-line);
-}
-
-.expFormSectionTitle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--exp-ink);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.expFormSectionTitle svg {
-  color: var(--exp-brand);
-  width: 16px;
-  height: 16px;
-}
-
-.expFormSectionHint {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--exp-muted);
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
 
 .expFormSectionCounter.complete {
   background: var(--exp-success-soft);
@@ -137,94 +94,8 @@
 }
 
 /* --- Input group con label claro y validación --- */
-.expField {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.expField-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--exp-ink-soft);
-}
-
-.expField-label .required {
-  color: var(--exp-danger);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.expField-label .optional {
-  font-size: 11px;
-  color: var(--exp-muted);
-  font-weight: 400;
-  font-style: italic;
-}
-
-.expField-input,
-.expField-select {
-  border: 1px solid var(--exp-line);
-  background: var(--exp-panel);
-  border-radius: var(--exp-radius);
-  padding: 10px 12px;
-  font-size: 14px;
-  color: var(--exp-ink);
-  width: 100%;
-  font-family: inherit;
-  transition: all 120ms ease;
-}
-
-.expField-input:hover:not(:focus):not(:disabled),
-.expField-select:hover:not(:focus):not(:disabled) {
-  border-color: #cbd5e1;
-}
-
-.expField-input:focus,
-.expField-select:focus {
-  outline: none;
-  border-color: var(--exp-brand);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
-}
-
-.expField-input:disabled,
-.expField-select:disabled {
-  background: var(--exp-line-soft);
-  color: var(--exp-muted);
-  cursor: not-allowed;
-}
-
-.expField.hasError .expField-input,
-.expField.hasError .expField-select,
-.expField.hasError .expField-textarea {
-  border-color: var(--exp-danger);
-  background: #fef2f2;
-}
 
 /* --- File picker con drag & drop visual --- */
-.expFilePicker {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 32px 20px;
-  border: 2px dashed var(--exp-line);
-  border-radius: var(--exp-radius-lg);
-  background: var(--exp-line-soft);
-  text-align: center;
-  cursor: pointer;
-  transition: all var(--exp-transition);
-  position: relative;
-}
-
-.expFilePicker:hover {
-  border-color: var(--exp-brand);
-  background: var(--exp-brand-soft);
-}
 
 .expFilePicker.dragging {
   border-color: var(--exp-brand);
@@ -240,42 +111,8 @@
   padding: 20px;
 }
 
-.expFilePickerIcon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--exp-panel);
-  color: var(--exp-brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--exp-shadow-sm);
-}
-
 .expFilePicker.hasFile .expFilePickerIcon {
   color: var(--exp-success);
-}
-
-.expFilePickerTitle {
-  margin: 4px 0 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--exp-ink);
-}
-
-.expFilePickerSub {
-  margin: 0;
-  font-size: 12px;
-  color: var(--exp-muted);
-}
-
-.expFilePicker input[type="file"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
 }
 
 /* --- Extract PDF section --- */
@@ -343,25 +180,6 @@
 }
 
 /* --- Fila de checkbox (p. ej. incluir antecedentes en Responder) --- */
-.expCheckRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--exp-muted);
-  cursor: pointer;
-  line-height: 1.4;
-}
-
-.expCheckRow input[type="checkbox"] {
-  margin-top: 2px;
-  accent-color: var(--exp-brand);
-  cursor: pointer;
-}
-
-.expCheckRow strong {
-  color: var(--exp-ink);
-}
 
 /* --- Search modes: 2 opciones tipo tarjeta (Buscar / Preguntar a la IA) --- */
 
@@ -387,58 +205,6 @@
 /* --- Fila de filtros (año / oficina / materia) --- */
 
 /* --- Results / answers --- */
-
-.expResultCard {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  gap: 12px;
-  align-items: start;
-  padding: 14px 16px;
-  background: var(--exp-panel);
-  border: 1px solid var(--exp-line);
-  border-radius: var(--exp-radius);
-  transition: all var(--exp-transition);
-  cursor: pointer;
-}
-
-.expResultCard:hover {
-  border-color: var(--exp-brand);
-  box-shadow: var(--exp-shadow);
-  transform: translateY(-1px);
-}
-
-.expResultBody {
-  min-width: 0;
-}
-
-.expResultTitle {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--exp-ink);
-  line-height: 1.4;
-}
-
-.expResultMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--exp-muted);
-  margin: 0 0 6px;
-}
-
-.expResultMetaItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.expResultMetaItem svg {
-  width: 12px;
-  height: 12px;
-}
 
 .expIconButton.danger:hover {
   color: var(--exp-danger);
@@ -497,10 +263,6 @@
 }
 
 /* --- Advanced filters panel --- */
-
-.expAdvancedFilters .expField {
-  margin: 0;
-}
 
 /* --- Bulk action bar flotante --- */
 
@@ -695,45 +457,9 @@
 
 /* --- Bulk move modal --- */
 
-.expBulkMove-grid .expField {
-  margin: 0;
-}
-
-.expBulkMove-grid .expField.fullSpan {
-  grid-column: 1 / -1;
-}
-
 /* --- Toast / Snackbar --- */
 
 /* --- Inline message --- */
-.expMessage {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: var(--exp-radius);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 10px 0 0;
-  border-left: 3px solid;
-}
-
-.expMessage svg {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.expMessage-info {
-  background: var(--exp-info-soft);
-  color: #1e3a8a;
-  border-left-color: var(--exp-info);
-}
-
-.expMessage-warning {
-  background: var(--exp-warning-soft);
-  color: #78350f;
-  border-left-color: var(--exp-warning);
-}
 
 /* --- Empty state --- */
 
@@ -780,10 +506,6 @@
   to { transform: rotate(360deg); }
 }
 
-.expSpin {
-  animation: expSpin 0.9s linear infinite;
-}
-
 /* --- Progress bar --- */
 
 @keyframes expIndeterminate {
@@ -793,10 +515,6 @@
 
 /* --- Responsive --- */
 @media (max-width: 768px) {
-
-  .expTabContent {
-    padding: 16px;
-  }
 
   .expTab {
     padding: 12px 14px;
@@ -827,10 +545,6 @@
 
   .expChatPanel {
     width: 100vw;
-  }
-
-  .expResultCard {
-    grid-template-columns: 32px 1fr;
   }
 
 }
@@ -919,20 +633,6 @@
 }
 
 /* --- Helper text inline --- */
-.expHelpText {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--exp-muted);
-  margin-top: 4px;
-  line-height: 1.4;
-}
-
-.expHelpText svg {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
 
 /* --- View mode segmented control --- */
 
@@ -957,12 +657,6 @@
 /* --- Paginación --- */
 
 /* --- Density modes --- */
-
-[data-density="compact"] .expField-input,
-[data-density="compact"] .expField-select {
-  padding: 7px 10px;
-  font-size: 13px;
-}
 
 /* --- Dark mode --- */
 [data-theme="dark"] {
@@ -999,17 +693,9 @@
   border-color: var(--exp-line);
 }
 
-[data-theme="dark"] .expFilePicker,
-[data-theme="dark"] .expListHeader,
-[data-theme="dark"] .expField-input,
-[data-theme="dark"] .expField-select {
+[data-theme="dark"] .expListHeader {
   background: var(--exp-panel);
   border-color: var(--exp-line);
-}
-
-[data-theme="dark"] .expField-input:focus,
-[data-theme="dark"] .expField-select:focus {
-  background: var(--exp-panel);
 }
 
 [data-theme="dark"] .expTab.active {
@@ -1024,16 +710,6 @@
 
 [data-theme="dark"] .expSearchBar:focus-within {
   background: var(--exp-panel);
-}
-
-[data-theme="dark"] .expMessage-info {
-  background: rgba(59, 130, 246, 0.12);
-  color: #93c5fd;
-}
-
-[data-theme="dark"] .expMessage-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #fcd34d;
 }
 
 /* --- Hover refinado en lista con slide --- */
