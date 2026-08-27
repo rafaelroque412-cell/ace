@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import {
   idPestana,
   propsPanel,
@@ -361,47 +360,63 @@ export function SubirTabContent({
           {/* Indicador de pasos, no pestañas: los pasos van en orden y arrastran
               el estado del formulario. `aria-current="step"` es lo que anuncia
               "vas por aquí"; `aria-selected` anunciaba una pestaña elegida. */}
-          <div className="mb-5 flex items-center gap-0 rounded-exp bg-exp-line-soft px-[18px] py-4" role="group" aria-label="Pasos del formulario">
-            {WIZARD_STEPS.map((step, idx) => {
-              const isActive = wizardStep === idx;
-              const isDone = wizardStep > idx;
-              return (
-                <Fragment key={step.id}>
-                  <button
-                    type="button"
-                    aria-current={isActive ? "step" : undefined}
-                    onClick={() => setWizardStep(idx as WizardStep)}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 py-1 transition-opacity duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:opacity-80"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-exp-line bg-exp-panel text-xs font-bold text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                        isActive && "border-exp-brand bg-exp-brand text-white shadow-[0_0_0_4px_rgba(15,118,110,0.15)]",
-                        isDone && "border-exp-success bg-exp-success text-white",
-                      )}
+          <div className="mb-4 rounded-exp bg-exp-line-soft px-[18px] py-5" role="group" aria-label="Pasos del formulario">
+            <div className="relative">
+              {/* Rieles de progreso a la altura del centro de los círculos
+                  (size-9 = 36px → centro a 18px). Un solo tramo continuo, no
+                  uno por segmento: así el ancho se calcula una vez por el
+                  paso actual y no depende de alinear cada segmento a mano. */}
+              <div className="absolute left-[18px] right-[18px] top-[18px] h-0.5 -translate-y-1/2 rounded-full bg-exp-line" aria-hidden="true" />
+              <div
+                className="absolute left-[18px] top-[18px] h-0.5 -translate-y-1/2 rounded-full bg-exp-success transition-[width] duration-500 ease-out"
+                style={{ width: `calc((100% - 36px) * ${wizardStep / (WIZARD_STEPS.length - 1)})` }}
+                aria-hidden="true"
+              />
+              <div className="relative flex items-start justify-between">
+                {WIZARD_STEPS.map((step, idx) => {
+                  const isActive = wizardStep === idx;
+                  const isDone = wizardStep > idx;
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      aria-current={isActive ? "step" : undefined}
+                      onClick={() => setWizardStep(idx as WizardStep)}
+                      className="flex flex-col items-center gap-2 transition-opacity duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:opacity-80"
                     >
-                      {isDone ? <Check size={14} /> : idx + 1}
-                    </span>
-                    <span
-                      className={cn(
-                        "overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold text-exp-muted",
-                        isActive && "text-exp-ink",
-                        isDone && "text-exp-success",
-                      )}
-                    >
-                      {step.label}
-                    </span>
-                  </button>
-                  {idx < WIZARD_STEPS.length - 1 ? (
-                    <div className={cn("mx-2 h-0.5 flex-[0.5] bg-exp-line", isDone && "bg-exp-success")} />
-                  ) : null}
-                </Fragment>
-              );
-            })}
+                      <span
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-exp-line bg-exp-panel text-sm font-bold text-exp-muted transition-all duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                          isActive &&
+                            "scale-110 border-exp-brand bg-exp-brand text-white shadow-[0_0_0_5px_rgba(15,118,110,0.15)]",
+                          isDone && "border-exp-success bg-exp-success text-white",
+                        )}
+                      >
+                        {isDone ? <Check size={15} /> : idx + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          "max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold text-exp-muted transition-colors duration-[180ms]",
+                          isActive && "text-exp-ink",
+                          isDone && "text-exp-success",
+                        )}
+                      >
+                        {step.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-exp-muted">
-            <Info size={12} />
-            <span>{WIZARD_STEPS[wizardStep].hint}</span>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-exp-muted">
+              <Info size={12} />
+              <span>{WIZARD_STEPS[wizardStep].hint}</span>
+            </div>
+            <span className="shrink-0 rounded-full bg-exp-brand-soft px-2.5 py-1 text-[11px] font-bold text-exp-brand">
+              Paso {wizardStep + 1} de {WIZARD_STEPS.length}
+            </span>
           </div>
         </div>
 
@@ -554,47 +569,55 @@ export function SubirTabContent({
                 </span>
               ) : null}
 
-              {/* Preview de datos extraídos (editables) */}
+              {/* Preview de datos extraídos (editables) — el momento
+                  protagonista de esta pantalla: es lo único que la IA hace
+                  por ti, así que se trata distinto del resto del formulario
+                  (barra superior en degradado, ícono con halo). */}
               {extractedData ? (
                 <div
-                  className="mt-3.5 animate-exp-fade-in rounded-exp border border-exp-brand bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_100%)] p-3.5"
+                  className="relative mt-3.5 animate-exp-fade-in overflow-hidden rounded-exp border border-exp-brand/40 bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_55%)] p-3.5 shadow-[0_1px_2px_rgba(15,118,110,0.06),0_12px_28px_-10px_rgba(15,118,110,0.35)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(90deg,var(--color-exp-brand)_0%,#5eead4_50%,var(--color-exp-brand)_100%)] before:content-['']"
                   role="region"
                   aria-label="Datos extraídos del PDF (editables)"
                 >
-                  <div className="mb-3 flex items-start justify-between gap-3 border-b border-exp-brand/15 pb-2.5">
+                  <div className="mb-3 flex items-start gap-3 border-b border-exp-brand/15 pb-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-exp-brand text-white shadow-[0_0_0_4px_rgba(15,118,110,0.12)]">
+                      <Sparkles size={14} className="animate-exp-pulse" />
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <strong className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.4px] text-exp-ink [&>svg]:text-exp-brand">
-                        <Sparkles size={12} /> Datos detectados en el PDF
-                        <span className="ml-1.5 inline-block rounded-full bg-exp-brand px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.5px] text-white">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <strong className="text-[13px] font-bold uppercase tracking-[0.4px] text-exp-ink">
+                          Datos detectados en el PDF
+                        </strong>
+                        <span className="inline-block rounded-full bg-exp-brand px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.5px] text-white">
                           editables
                         </span>
-                      </strong>
-                      <span className={cn(EXP_HELP_TEXT, "mt-0")}>
+                        {extractedData.extractionMethod ? (
+                          <span
+                            className={expStatusClass(
+                              extractedData.extractionMethod === "ai"
+                                ? "indexed"
+                                : extractedData.extractionMethod === "deterministic"
+                                  ? "uploaded"
+                                  : "processing",
+                            )}
+                          >
+                            {extractedData.extractionMethod === "ai"
+                              ? "IA"
+                              : extractedData.extractionMethod === "deterministic"
+                                ? "Automático"
+                                : extractedData.extractionMethod === "hybrid"
+                                  ? "Híbrido"
+                                  : "Sin datos"}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className={cn(EXP_HELP_TEXT, "mt-0.5")}>
                         Edita o elimina los campos antes de aplicar. Solo
                         se rellenan los campos vacíos del formulario.
                       </span>
                     </div>
-                    {extractedData.extractionMethod ? (
-                      <span
-                        className={expStatusClass(
-                          extractedData.extractionMethod === "ai"
-                            ? "indexed"
-                            : extractedData.extractionMethod === "deterministic"
-                              ? "uploaded"
-                              : "processing",
-                        )}
-                      >
-                        {extractedData.extractionMethod === "ai"
-                          ? "IA"
-                          : extractedData.extractionMethod === "deterministic"
-                            ? "Automático"
-                            : extractedData.extractionMethod === "hybrid"
-                              ? "Híbrido"
-                              : "Sin datos"}
-                      </span>
-                    ) : null}
                   </div>
-                  <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
+                  <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5">
                     <EditableExtractedField
                       label="SGD"
                       icon={<FileText size={11} />}

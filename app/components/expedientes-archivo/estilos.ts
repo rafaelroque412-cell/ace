@@ -250,7 +250,7 @@ export function expFormSectionCounterClass(complete?: boolean): string {
 
 export function expFilePickerClass(state?: "dragging" | "hasFile"): string {
   const base =
-    "relative flex cursor-pointer flex-col items-center gap-2 rounded-exp-lg border-2 border-dashed border-exp-line bg-exp-line-soft p-8 text-center " +
+    "group relative flex cursor-pointer flex-col items-center gap-2.5 rounded-exp-lg border-2 border-dashed border-exp-line bg-exp-line-soft p-8 text-center " +
     "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:bg-exp-brand-soft " +
     "[&_input[type=file]]:absolute [&_input[type=file]]:inset-0 [&_input[type=file]]:size-full [&_input[type=file]]:cursor-pointer [&_input[type=file]]:opacity-0";
   if (state === "dragging") {
@@ -262,14 +262,18 @@ export function expFilePickerClass(state?: "dragging" | "hasFile"): string {
   return base;
 }
 
+// `group-hover` porque expFilePickerClass ya marca la zona como `group`: el
+// ícono reacciona al pasar el cursor sobre CUALQUIER punto del recuadro, no
+// solo sobre sí mismo, para que la zona entera se sienta interactiva.
 export function expFilePickerIconClass(hasFile?: boolean): string {
   return cn(
-    "flex size-14 items-center justify-center rounded-full bg-exp-panel text-exp-brand shadow-exp-sm",
+    "flex size-16 items-center justify-center rounded-full bg-exp-panel text-exp-brand shadow-exp-sm ring-1 ring-exp-line " +
+      "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] group-hover:scale-105 group-hover:shadow-exp group-hover:ring-exp-brand/30",
     hasFile && "text-exp-success",
   );
 }
 
-export const EXP_FILE_PICKER_TITLE = "mt-1 text-[15px] font-semibold text-exp-ink";
+export const EXP_FILE_PICKER_TITLE = "mt-1 text-base font-semibold text-exp-ink";
 
 export const EXP_FILE_PICKER_SUB = "text-xs text-exp-muted";
 
