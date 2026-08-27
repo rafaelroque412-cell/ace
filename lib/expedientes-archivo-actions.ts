@@ -14,7 +14,7 @@
 import * as z from "zod/mini";
 import { TIPOS_DOCUMENTO, type TipoDocumento } from "./document-number";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "./upload-limits";
-import type { ChatAnswer, DuplicateMatch, PdfInventory, SearchResult } from "@/app/components/expedientes-archivo/types";
+import type { ChatAnswer, DuplicateMatch, ExpedienteLegajoItem, PdfInventory, SearchResult } from "@/app/components/expedientes-archivo/types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
@@ -110,6 +110,30 @@ export async function detectDuplicates(params: {
     duplicates: data.duplicates ?? [],
     matchType: data.matchType ?? "none",
   };
+}
+
+/** Busca legajos existentes (para el selector "añadir documento a legajo
+ *  existente" del wizard de Subir). Query vacía = los más recientes. */
+export async function searchLegajos(
+  query: string,
+  limit: number = 10,
+): Promise<{ legajos: ExpedienteLegajoItem[] }> {
+  const empty = { legajos: [] as ExpedienteLegajoItem[] };
+  const q = query.trim();
+  if (q.length > 0 && q.length < 2) return empty;
+  try {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    qs.set("limit", String(limit));
+    const res = await fetch(`/api/expedientes-archivo/legajos?${qs.toString()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return empty;
+    const data = (await res.json().catch(() => ({}))) as { legajos?: ExpedienteLegajoItem[] };
+    return { legajos: data.legajos ?? [] };
+  } catch {
+    return empty;
+  }
 }
 
 /** Llama al endpoint /extract para extraer metadata de un PDF */
