@@ -82,7 +82,8 @@ async function extractPdfTextCached(
 }
 
 type ExpedienteChunkInsert = {
-  expediente_id: string;
+  documento_id: string;
+  expediente_id: string | null;
   chunk_index: number;
   page_start: number | null;
   page_end: number | null;
@@ -335,7 +336,8 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     const chunkRows: ExpedienteChunkInsert[] = chunks.map((chunk) => ({
       chunk_index: chunk.index,
       content: chunk.content,
-      expediente_id: expediente.id,
+      documento_id: expediente.id,
+      expediente_id: expediente.expediente_id,
       metadata: {
         serieDocumento,
         anio: Number.isFinite(anio) ? anio : null,
@@ -445,7 +447,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Error procesando expediente";
     await deleteRecords(insertedVectorIds, namespace).catch(() => undefined);
-    await supabaseRest(`expedientes_archivo_chunks?expediente_id=eq.${expediente.id}`, {
+    await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${expediente.id}`, {
       method: "DELETE",
     }).catch(() => undefined);
     await supabaseRest(`expedientes_archivo?id=eq.${expediente.id}`, {

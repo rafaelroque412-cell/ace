@@ -35,7 +35,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const SELECT =
-  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,oficina_id,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,oficina_id,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at,expediente_id,numero_folio";
 
 // Columnas editables vía PATCH (whitelist; nunca status/storage/uploaded_by).
 const PATCHABLE_COLUMNS = new Set<string>([
@@ -67,7 +67,7 @@ type ChunkVector = { pinecone_vector_id: string | null };
 
 async function getVectorIds(expedienteId: string) {
   const chunks = await supabaseRest<ChunkVector[]>(
-    `expedientes_archivo_chunks?expediente_id=eq.${expedienteId}&select=pinecone_vector_id`,
+    `expedientes_archivo_chunks?documento_id=eq.${expedienteId}&select=pinecone_vector_id`,
   );
   return chunks
     .map((chunk) => chunk.pinecone_vector_id)
@@ -152,7 +152,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
         const namespace = getExpedientesNamespace();
         const vectorIds = await getVectorIds(id);
         await deleteRecords(vectorIds, namespace);
-        await supabaseRest(`expedientes_archivo_chunks?expediente_id=eq.${id}`, { method: "DELETE" });
+        await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${id}`, { method: "DELETE" });
 
         const blob = await downloadStorageObject(expediente.storage_bucket, expediente.storage_path);
         const file = new File([blob], expediente.file_name, {
@@ -367,7 +367,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         const namespace = getExpedientesNamespace();
         const vectorIds = await getVectorIds(id);
         await deleteRecords(vectorIds, namespace).catch(() => undefined);
-        await supabaseRest(`expedientes_archivo_chunks?expediente_id=eq.${id}`, { method: "DELETE" });
+        await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${id}`, { method: "DELETE" });
         if (oldPath && oldPath !== newPath) {
           await deleteStorageObjects(storageBucket, [oldPath]).catch(() => undefined);
         }
