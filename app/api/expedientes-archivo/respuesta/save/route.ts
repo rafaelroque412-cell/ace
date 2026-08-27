@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDec } from "@/lib/auth";
+import { requireDecOrAreaUsuaria } from "@/lib/auth";
 import { isTipoDocumento } from "@/lib/document-number";
 import { entitiesMatch } from "@/lib/entity-utils";
 import { supabaseRest, writeAuditLog } from "@/lib/supabase-server";
@@ -15,7 +15,7 @@ function text(value: unknown, max = 4000): string | null {
 // Guarda/archiva una respuesta generada. Si assignNumber, asigna el correlativo
 // de la oficina de forma atomica (funcion SQL rpc/expedientes_next_doc_number).
 export async function POST(request: Request) {
-  const auth = await requireDec();
+  const auth = await requireDecOrAreaUsuaria();
   if ("error" in auth) return auth.error;
 
   try {

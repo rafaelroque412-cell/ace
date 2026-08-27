@@ -230,6 +230,30 @@ export async function requireDec(): Promise<AuthResult> {
 // Alias historico de requireDec (rutas de gestion de corpus ya existentes).
 export const requireEditor = requireDec;
 
+// Exige rol DEC, admin o area_usuaria; 403 en otro caso. Solo para
+// /api/expedientes-archivo/**: ahi el area usuaria tambien administra (sube,
+// reindexa, elimina, edita en lote y responde sus propios expedientes
+// archivados), a diferencia del resto de rutas de gestion de corpus que
+// siguen exigiendo requireDec puro.
+export async function requireDecOrAreaUsuaria(): Promise<AuthResult> {
+  const result = await requireUser();
+
+  if ("error" in result) {
+    return result;
+  }
+
+  if (!result.user.isDec && result.user.role !== "area_usuaria") {
+    return {
+      error: NextResponse.json(
+        { error: "Requiere rol DEC, administrador o área usuaria" },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return result;
+}
+
 // Exige rol Legal o admin (revision de informes legales).
 export async function requireLegal(): Promise<AuthResult> {
   const result = await requireUser();

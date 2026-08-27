@@ -67,12 +67,21 @@ export async function PATCH(
   }
   try {
     const data = payload.data;
+    // Se lee antes para saber si el DNI REALMENTE cambia: hay perfiles
+    // institucionales (p. ej. "alcaldia") que comparten un DNI placeholder
+    // como "00000000", y con eso el chequeo de unicidad de abajo bloqueaba
+    // guardar CUALQUIER otro campo (oficina, jefe...) de esos usuarios aunque
+    // no tocaran el DNI, porque encontraba la fila de otro perfil con el
+    // mismo valor.
+    const currentProfile = await supabaseRest<{ role: string; dni: string | null }[]>(
+      `profiles?id=eq.${encodeURIComponent(id)}&select=role,dni`,
+    ).catch(() => [] as { role: string; dni: string | null }[]);
     // Si se cambia el DNI, verificar que no pertenezca ya a otro perfil.
-    if (data.dni) {
+    if (data.dni && data.dni !== currentProfile?.[0]?.dni) {
       const existing = await supabaseRest<{ id: string }[]>(
-        `profiles?dni=eq.${encodeURIComponent(data.dni)}&select=id&limit=1`,
+        `profiles?dni=eq.${encodeURIComponent(data.dni)}&id=neq.${encodeURIComponent(id)}&select=id&limit=1`,
       ).catch(() => []);
-      if (existing.length > 0 && existing[0].id !== id) {
+      if (existing.length > 0) {
         return NextResponse.json(
           { error: `El DNI "${data.dni}" ya está registrado para otro usuario` },
           { status: 409 },
@@ -88,9 +97,6 @@ export async function PATCH(
     }
     // Validar ultimo admin: si el objetivo es admin y se cambia a no-admin,
     // debe quedar al menos otro admin.
-    const currentProfile = await supabaseRest<{ role: string }[]>(
-      `profiles?id=eq.${encodeURIComponent(id)}&select=role`,
-    ).catch(() => [] as { role: string }[]);
     if (currentProfile?.[0]?.role === "admin" && data.role !== "admin") {
       const admins = await supabaseRest<{ id: string }[]>(
         `profiles?role=eq.admin&select=id`,

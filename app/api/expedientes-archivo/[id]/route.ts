@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { canAccessArchivoRow, requireDec, requireUser } from "@/lib/auth";
+import { canAccessArchivoRow, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
   type ExpedienteArchivo,
@@ -116,7 +116,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }
@@ -183,7 +183,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }
@@ -226,7 +226,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 // PATCH: edita metadata del expediente (whitelist). No toca el PDF ni reindexa.
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }
@@ -302,7 +302,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 // reprocesa el nuevo en segundo plano (status -> processing -> indexed/error).
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }

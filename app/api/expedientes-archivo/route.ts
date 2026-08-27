@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { getArchivoScopeLevel, requireDec, requireUser } from "@/lib/auth";
+import { getArchivoScopeLevel, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
 import { entitiesMatch } from "@/lib/entity-utils";
 import {
   ARCHIVO_COLORES,
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }

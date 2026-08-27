@@ -4,7 +4,10 @@ import { getSessionUser } from "@/lib/auth";
 
 export default async function ExpedientesArchivoPage() {
   const user = await getSessionUser();
-  const canManage = Boolean(user?.isEditor);
+  // A diferencia de /archivo y /documentos (que usan isEditor = dec/admin tal
+  // cual), aqui el area usuaria tambien administra: sube y responde sus
+  // propios expedientes archivados, no solo busca.
+  const canManage = Boolean(user?.isEditor || user?.role === "area_usuaria");
   const isAdmin = Boolean(user?.isAdmin);
   const userEntity = user?.entity ?? null;
 

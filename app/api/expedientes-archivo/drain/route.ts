@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireDec } from "@/lib/auth";
+import { requireDecOrAreaUsuaria } from "@/lib/auth";
 import { drainStuckExpedientes } from "@/lib/expedientes-archivo-queue";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +13,14 @@ export const maxDuration = 60;
 const batchSize = Number.parseInt(process.env.EXPEDIENTES_DRAIN_BATCH ?? "1", 10);
 
 // Autoriza al scheduled function / cron (Authorization: Bearer CRON_SECRET) o a un
-// editor/admin que dispare el drenado manualmente.
+// editor/admin/area_usuaria que dispare el drenado manualmente.
 async function authorize(request: Request): Promise<NextResponse | null> {
   const cronSecret = process.env.CRON_SECRET;
   const header = request.headers.get("authorization");
   if (cronSecret && header === `Bearer ${cronSecret}`) {
     return null;
   }
-  const auth = await requireDec();
+  const auth = await requireDecOrAreaUsuaria();
   if ("error" in auth) {
     return auth.error;
   }

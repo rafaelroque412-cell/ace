@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessArchivoRow, getArchivoScopeLevel, requireDec } from "@/lib/auth";
+import { canAccessArchivoRow, getArchivoScopeLevel, requireDecOrAreaUsuaria } from "@/lib/auth";
 import {
   ARCHIVO_COLORES,
   normalizeCatalogValue,
@@ -25,7 +25,7 @@ function asString(body: Record<string, unknown>, key: string, max = 500): string
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireDec();
+    const auth = await requireDecOrAreaUsuaria();
     if ("error" in auth) {
       return auth.error;
     }
