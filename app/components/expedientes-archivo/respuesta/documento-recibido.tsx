@@ -4,6 +4,7 @@ import {
   BookOpen,
   FileCheck2,
   Lightbulb,
+  Loader2,
   ScrollText,
   UploadCloud,
   X,
@@ -12,6 +13,22 @@ import { useState } from "react";
 import type { AnalisisTecnico } from "@/lib/expedientes-archivo-actions";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
+import {
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FORM_SECTION,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_SPIN,
+  expBtnClass,
+  expFilePickerClass,
+  expFilePickerIconClass,
+  EXP_FILE_PICKER_SUB,
+  EXP_FILE_PICKER_TITLE,
+} from "../estilos";
+import { cn } from "@/lib/utils";
 
 type Props = {
   antecedenteId: string | null;
@@ -67,18 +84,18 @@ export function DocumentoRecibido({
   }
 
   return (
-    <div className="expFormSection">
-      <div className="expFormSectionHeader">
-        <h3 className="expFormSectionTitle">
+    <div className={cn("tw", EXP_FORM_SECTION)}>
+      <div className={EXP_FORM_SECTION_HEADER}>
+        <h3 className={EXP_FORM_SECTION_TITLE}>
           <ScrollText size={16} /> Documento recibido (antecedente)
-          <span className="expFormSectionHint">
+          <span className={EXP_FORM_SECTION_HINT}>
             Sube el PDF: se persiste en Storage + Pinecone. La IA lo usa como referencia.
           </span>
         </h3>
       </div>
 
       <label
-        className={"expFilePicker" + (isDragging ? " dragging" : "")}
+        className={cn(expFilePickerClass(isDragging ? "dragging" : undefined), "mb-3")}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -89,23 +106,18 @@ export function DocumentoRecibido({
           setIsDragging(false);
           onFile(e.dataTransfer.files?.[0]);
         }}
-        style={{ marginBottom: 12 }}
       >
-        <div className="expFilePickerIcon">
-          {reading ? (
-            <span style={{ display: "inline-block", width: 22, height: 22 }} className="expSpin" />
-          ) : (
-            <UploadCloud size={22} />
-          )}
+        <div className={expFilePickerIconClass()}>
+          {reading ? <Loader2 size={22} className={EXP_SPIN} /> : <UploadCloud size={22} />}
         </div>
-        <p className="expFilePickerTitle">
+        <p className={EXP_FILE_PICKER_TITLE}>
           {reading
             ? "Procesando el PDF..."
             : isDragging
               ? "Suelta el PDF aqui"
               : "Arrastra el PDF recibido o haz clic"}
         </p>
-        <p className="expFilePickerSub">
+        <p className={EXP_FILE_PICKER_SUB}>
           Se lee con OCR como antecedente. Max {maxPdfSizeLabel}.
         </p>
         <input
@@ -116,39 +128,18 @@ export function DocumentoRecibido({
             onFile(e.target.files?.[0]);
             if (inputRef.current) inputRef.current.value = "";
           }}
-          style={{ display: "none" }}
+          className="hidden"
         />
       </label>
 
       {documentoTexto ? (
-        <div className="expField">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-              marginBottom: 4,
-            }}
-          >
-            <label className="expField-label" htmlFor="resp-doc" style={{ margin: 0 }}>
+        <div className={EXP_FIELD}>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <label className={cn(EXP_FIELD_LABEL, "m-0")} htmlFor="resp-doc">
               Texto del documento recibido
             </label>
             {antecedenteId ? (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  background: "#ecfeff",
-                  color: "#155e75",
-                  border: "1px solid #67e8f9",
-                  borderRadius: 999,
-                  padding: "2px 10px",
-                  fontSize: 11,
-                  fontWeight: 500,
-                }}
-              >
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#67e8f9] bg-[#ecfeff] px-2.5 py-0.5 text-[11px] font-medium text-[#155e75]">
                 <FileCheck2 size={11} /> Persistido
                 {antecedenteMeta ? (
                   <>
@@ -163,9 +154,8 @@ export function DocumentoRecibido({
             {antecedenteId ? (
               <button
                 type="button"
-                className="secondaryButton"
+                className={cn(expBtnClass("ghost", "small"), "ml-auto")}
                 onClick={() => setShowConfirm(true)}
-                style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11 }}
               >
                 <X size={11} /> Quitar antecedente
               </button>
@@ -173,19 +163,12 @@ export function DocumentoRecibido({
           </div>
           <textarea
             id="resp-doc"
-            className="expField-input"
+            className={EXP_FIELD_CONTROL}
             value={documentoTexto}
             onChange={(e) => setDocumentoTexto(e.target.value)}
             rows={5}
           />
-          <small
-            style={{
-              color: "var(--muted, #667)",
-              fontSize: 11,
-              marginTop: 2,
-              display: "block",
-            }}
-          >
+          <small className="mt-0.5 block text-[11px] text-exp-muted">
             {documentoTexto.length.toLocaleString("es-PE")} caracteres.
             {antecedenteId
               ? " Puedes editar el texto y la version editada se usara en la generacion."
@@ -195,39 +178,22 @@ export function DocumentoRecibido({
       ) : null}
 
       {analisis && (analisis.materia || analisis.puntosClave || analisis.tipoDocumento) ? (
-        <div
-          className="expField"
-          style={{
-            background: "#f0f9ff",
-            border: "1px solid #bae6fd",
-            borderRadius: 8,
-            padding: 12,
-            marginTop: 8,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              marginBottom: 8,
-            }}
-          >
-            <BookOpen size={15} style={{ color: "#0c4a6e" }} />
-            <strong style={{ fontSize: 13, color: "#0c4a6e" }}>
+        <div className={cn(EXP_FIELD, "mt-2 rounded-lg border border-[#bae6fd] bg-[#f0f9ff] p-3")}>
+          <div className="mb-2 flex items-center gap-1.5">
+            <BookOpen size={15} className="text-[#0c4a6e]" />
+            <strong className="text-[13px] text-[#0c4a6e]">
               Resumen tecnico del documento
             </strong>
             <button
               type="button"
               onClick={() => setShowAnalisis((v) => !v)}
-              className="secondaryButton"
-              style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11 }}
+              className={cn(expBtnClass("ghost", "small"), "ml-auto")}
             >
               {showAnalisis ? "Ocultar" : "Mostrar"}
             </button>
           </div>
           {showAnalisis ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="flex flex-col gap-2">
               <AnalisisRow label="Tipo" value={analisis.tipoDocumento} />
               <AnalisisRow label="Materia" value={analisis.materia} />
               {analisis.partes ? <AnalisisRow label="Partes" value={analisis.partes} /> : null}
@@ -239,50 +205,18 @@ export function DocumentoRecibido({
                 />
               ) : null}
               {analisis.consultasSugeridas && analisis.consultasSugeridas.length > 0 ? (
-                <div
-                  style={{
-                    background: "#fffbeb",
-                    border: "1px solid #fde68a",
-                    borderRadius: 6,
-                    padding: "8px 10px",
-                    marginTop: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: 12,
-                      color: "#92400e",
-                      fontWeight: 600,
-                      marginBottom: 4,
-                    }}
-                  >
+                <div className="mt-1 rounded-md border border-[#fde68a] bg-[#fffbeb] px-2.5 py-2">
+                  <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[#92400e]">
                     <Lightbulb size={13} /> Consultas sugeridas para la biblioteca:
                   </div>
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: 18,
-                      fontSize: 12,
-                      color: "#78350f",
-                    }}
-                  >
+                  <ul className="m-0 pl-[18px] text-xs text-[#78350f]">
                     {analisis.consultasSugeridas.map((q, i) => (
-                      <li key={i} style={{ marginBottom: 2 }}>
+                      <li key={i} className="mb-0.5">
                         {q}
                       </li>
                     ))}
                   </ul>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#92400e",
-                      marginTop: 6,
-                      fontStyle: "italic",
-                    }}
-                  >
+                  <div className="mt-1.5 text-[11px] italic text-[#92400e]">
                     Pega estas consultas en la biblioteca de normativa para encontrar
                     la ley aplicable. Si no aparece, marca “Buscar en internet” en
                     la generacion.
@@ -290,13 +224,7 @@ export function DocumentoRecibido({
                 </div>
               ) : null}
               {analisis.tokenUsage ? (
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "var(--muted, #64748b)",
-                    marginTop: 4,
-                  }}
-                >
+                <div className="mt-1 text-[10px] text-exp-muted">
                   Analisis IA: {analisis.tokenUsage.inputTokens} tokens entrada
                   + {analisis.tokenUsage.outputTokens} salida
                   {analisis.tokenUsage.estimatedCostUsd > 0
@@ -330,9 +258,9 @@ export function DocumentoRecibido({
 function AnalisisRow({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
-    <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-      <strong style={{ color: "#0c4a6e", fontWeight: 600 }}>{label}:</strong>{" "}
-      <span style={{ color: "#0f172a" }}>{value}</span>
+    <div className="text-xs leading-relaxed">
+      <strong className="font-semibold text-[#0c4a6e]">{label}:</strong>{" "}
+      <span className="text-exp-ink">{value}</span>
     </div>
   );
 }

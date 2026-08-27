@@ -20,6 +20,8 @@ import { ConfiguracionRespuesta } from "./respuesta/configuracion-respuesta";
 import { BorradorEditor } from "./respuesta/borrador-editor";
 import { DatosDocumento } from "./respuesta/datos-documento";
 import { HistorialRespuestas } from "./respuesta/historial-respuestas";
+import { EXP_TAB_CONTENT } from "./estilos";
+import { cn } from "@/lib/utils";
 
 type ToastKind = "success" | "error" | "warning" | "info";
 
@@ -399,22 +401,11 @@ export function RespuestaPanel({
   }
 
   return (
-    <div className="expTabContent">
+    <div className={cn("tw", EXP_TAB_CONTENT)}>
       <div
         role="list"
         aria-label="Progreso de la respuesta"
-        style={{
-          display: "flex",
-          gap: 6,
-          flexWrap: "wrap",
-          alignItems: "center",
-          marginBottom: 12,
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          background: "var(--bg, #fff)",
-          padding: "8px 0",
-        }}
+        className="sticky top-0 z-20 mb-3 flex flex-wrap items-center gap-1.5 bg-exp-panel py-2"
       >
         {pasos.map((p, i) => {
           const isCurrent = i === pasoActual;
@@ -425,26 +416,17 @@ export function RespuestaPanel({
               role="listitem"
               onClick={() => goToPaso(p)}
               title={p.ready ? `Ir a: ${p.label}` : "Disponible cuando generes el borrador"}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                fontWeight: isCurrent ? 700 : 500,
-                borderRadius: 999,
-                padding: "4px 12px",
-                cursor: p.ready ? "pointer" : "not-allowed",
-                opacity: p.ready ? 1 : 0.55,
-                background: p.done
-                  ? "#d1fae5"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border border-transparent px-3 py-1 text-xs font-medium transition-colors duration-[120ms] ease-linear",
+                p.ready ? "cursor-pointer" : "cursor-not-allowed opacity-55",
+                p.done
+                  ? "bg-exp-success-soft text-[#065f46]"
                   : isCurrent
-                    ? "rgba(15,118,110,0.1)"
-                    : "#f1f5f9",
-                color: p.done ? "#065f46" : isCurrent ? "var(--brand, #0f766e)" : "#64748b",
-                border: isCurrent ? "1.5px solid var(--brand, #0f766e)" : "1px solid transparent",
-              }}
+                    ? "border-exp-brand bg-exp-brand-soft font-bold text-exp-brand"
+                    : "bg-exp-line-soft text-exp-muted",
+              )}
             >
-              {p.done ? <CheckCircle2 size={13} /> : <span style={{ fontWeight: 700 }}>{i + 1}.</span>}
+              {p.done ? <CheckCircle2 size={13} /> : <span className="font-bold">{i + 1}.</span>}
               {p.label}
             </button>
           );
@@ -456,7 +438,7 @@ export function RespuestaPanel({
         onDismiss={() => state.setAnalisis(null)}
       />
 
-      <div id="paso-documento" style={{ scrollMarginTop: 56 }}>
+      <div id="paso-documento" className="scroll-mt-14">
         <DocumentoRecibido
           antecedenteId={state.antecedenteId}
           antecedenteMeta={state.antecedenteMeta}
@@ -473,7 +455,7 @@ export function RespuestaPanel({
         />
       </div>
 
-      <div id="paso-respuesta" style={{ scrollMarginTop: 56 }} />
+      <div id="paso-respuesta" className="scroll-mt-14" />
       <ConfiguracionRespuesta
         adjuntos={state.adjuntos}
         asunto={state.asunto}
@@ -508,7 +490,7 @@ export function RespuestaPanel({
         generating={state.generating}
       />
 
-      <div id="paso-borrador" style={{ scrollMarginTop: 56 }} />
+      <div id="paso-borrador" className="scroll-mt-14" />
       {/* Se muestra tambien cuando el cuerpo viene del borrador restaurado
           de localStorage (sin `result` en memoria). */}
       {result || state.cuerpo.trim() ? (
@@ -530,7 +512,7 @@ export function RespuestaPanel({
         />
       ) : null}
 
-      <div id="paso-emitir" style={{ scrollMarginTop: 56 }} />
+      <div id="paso-emitir" className="scroll-mt-14" />
       {result || state.cuerpo.trim() ? (
         <DatosDocumento
           asunto={state.asunto}

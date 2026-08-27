@@ -14,6 +14,8 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { AnalisisTecnico } from "@/lib/expedientes-archivo-actions";
+import { EXP_ICON_BUTTON } from "../estilos";
+import { cn } from "@/lib/utils";
 
 type Props = {
   analisis: AnalisisTecnico | null;
@@ -39,82 +41,31 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
     <section
       role="region"
       aria-label="Resumen tecnico del documento PDF"
-      style={{
-        background: "linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%)",
-        border: "1px solid #7dd3fc",
-        borderLeft: "4px solid #0ea5e9",
-        borderRadius: 10,
-        padding: "14px 16px",
-        marginBottom: 16,
-        boxShadow: "0 1px 2px rgba(14, 165, 233, 0.05)",
-      }}
+      className="tw mb-4 rounded-[10px] border border-[#7dd3fc] border-l-4 border-l-[#0ea5e9] bg-[linear-gradient(180deg,#f0f9ff_0%,#e0f2fe_100%)] p-3.5 shadow-[0_1px_2px_rgba(14,165,233,0.05)]"
     >
       {/* Cabecera: tipo + materia + boton colapsar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 10,
-          marginBottom: collapsed ? 0 : 12,
-        }}
-      >
-        <div
-          style={{
-            background: "#0ea5e9",
-            color: "#fff",
-            borderRadius: 8,
-            width: 36,
-            height: 36,
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-          }}
-        >
+      <div className={cn("flex items-start gap-2.5", collapsed ? "mb-0" : "mb-3")}>
+        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#0ea5e9] text-white">
           <BookOpen size={18} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#0c4a6e",
-              textTransform: "uppercase",
-              letterSpacing: 0.4,
-              marginBottom: 2,
-            }}
-          >
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.4px] text-[#0c4a6e]">
             Resumen tecnico del PDF
           </div>
           {analisis.tipoDocumento ? (
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: "#0c4a6e",
-                lineHeight: 1.3,
-                marginBottom: 2,
-              }}
-            >
+            <div className="mb-0.5 text-[15px] font-bold leading-[1.3] text-[#0c4a6e]">
               {analisis.tipoDocumento}
             </div>
           ) : null}
           {analisis.materia ? (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#0f172a",
-                lineHeight: 1.4,
-              }}
-            >
-              {analisis.materia}
-            </div>
+            <div className="text-[13px] leading-snug text-exp-ink">{analisis.materia}</div>
           ) : null}
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div className="flex gap-1">
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
-            className="iconButton"
+            className={EXP_ICON_BUTTON}
             aria-label={collapsed ? "Expandir resumen" : "Colapsar resumen"}
             title={collapsed ? "Expandir resumen" : "Colapsar resumen"}
           >
@@ -124,7 +75,7 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
             <button
               type="button"
               onClick={onDismiss}
-              className="iconButton"
+              className={EXP_ICON_BUTTON}
               aria-label="Cerrar resumen"
               title="Cerrar resumen"
             >
@@ -135,16 +86,7 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
       </div>
 
       {!collapsed ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            fontSize: 12,
-            lineHeight: 1.5,
-            color: "#0f172a",
-          }}
-        >
+        <div className="grid grid-cols-2 gap-2.5 text-xs leading-relaxed text-exp-ink">
           {analisis.partes ? (
             <ResumenItem icon={<FileText size={13} />} label="Partes" value={analisis.partes} />
           ) : null}
@@ -159,38 +101,11 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
       ) : null}
 
       {!collapsed && analisis.puntosClave ? (
-        <div
-          style={{
-            marginTop: 10,
-            background: "#fff",
-            border: "1px solid #bae6fd",
-            borderRadius: 8,
-            padding: "10px 12px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#0c4a6e",
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 6,
-            }}
-          >
+        <div className="mt-2.5 rounded-lg border border-[#bae6fd] bg-white p-2.5">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.3px] text-[#0c4a6e]">
             <CheckCircle2 size={13} /> Puntos clave a responder
           </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "#0f172a",
-              lineHeight: 1.55,
-              whiteSpace: "pre-wrap",
-            }}
-          >
+          <div className="whitespace-pre-wrap text-[13px] leading-[1.55] text-exp-ink">
             {analisis.puntosClave}
           </div>
         </div>
@@ -199,59 +114,19 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
       {!collapsed &&
       analisis.consultasSugeridas &&
       analisis.consultasSugeridas.length > 0 ? (
-        <div
-          style={{
-            marginTop: 10,
-            background: "#fffbeb",
-            border: "1px solid #fde68a",
-            borderRadius: 8,
-            padding: "10px 12px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#92400e",
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-              marginBottom: 6,
-            }}
-          >
+        <div className="mt-2.5 rounded-lg border border-[#fde68a] bg-[#fffbeb] p-2.5">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.3px] text-[#92400e]">
             <Lightbulb size={13} /> Consultas sugeridas para la biblioteca
           </div>
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: 18,
-              fontSize: 12,
-              color: "#78350f",
-              lineHeight: 1.5,
-            }}
-          >
+          <ul className="m-0 pl-[18px] text-xs leading-relaxed text-[#78350f]">
             {analisis.consultasSugeridas.map((q, i) => (
-              <li key={i} style={{ marginBottom: 2 }}>
+              <li key={i} className="mb-0.5">
                 {q}
               </li>
             ))}
           </ul>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              color: "#92400e",
-              marginTop: 8,
-              padding: "6px 8px",
-              background: "#fef3c7",
-              borderRadius: 6,
-            }}
-          >
-            <AlertCircle size={12} style={{ flexShrink: 0 }} />
+          <div className="mt-2 flex items-center gap-1.5 rounded-md bg-[#fef3c7] px-2 py-1.5 text-[11px] text-[#92400e]">
+            <AlertCircle size={12} className="shrink-0" />
             <span>
               Pega estas consultas en la <strong>Biblioteca de normativa</strong>{" "}
               (boton “Biblioteca” abajo). Si no aparece, puedes activar la
@@ -262,29 +137,9 @@ export function ResumenTecnicoBanner({ analisis, onDismiss }: Props) {
       ) : null}
 
       {!collapsed && analisis.tipoRespuestaEsperada ? (
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-            background: "rgba(255,255,255,0.6)",
-            borderRadius: 6,
-            fontSize: 11,
-            color: "#0c4a6e",
-          }}
-        >
-          <span style={{ fontWeight: 600 }}>Tipo de respuesta sugerido:</span>
-          <span
-            style={{
-              background: "#0ea5e9",
-              color: "#fff",
-              padding: "2px 8px",
-              borderRadius: 4,
-              fontWeight: 700,
-            }}
-          >
+        <div className="mt-2.5 flex items-center gap-2 rounded-md bg-white/60 px-2.5 py-1.5 text-[11px] text-[#0c4a6e]">
+          <span className="font-semibold">Tipo de respuesta sugerido:</span>
+          <span className="rounded bg-[#0ea5e9] px-2 py-0.5 font-bold text-white">
             {analisis.tipoRespuestaEsperada}
           </span>
         </div>
@@ -304,23 +159,11 @@ function ResumenItem({
 }) {
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#0c4a6e",
-          textTransform: "uppercase",
-          letterSpacing: 0.3,
-          marginBottom: 2,
-        }}
-      >
+      <div className="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.3px] text-[#0c4a6e]">
         {icon}
         {label}
       </div>
-      <div style={{ color: "#0f172a" }}>{value}</div>
+      <div className="text-exp-ink">{value}</div>
     </div>
   );
 }

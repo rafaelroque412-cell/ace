@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, ChevronDown, ChevronRight, FileSignature, Hash, Library, Mic, MicOff, Settings, Sparkles } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, FileSignature, Hash, Library, Loader2, Mic, MicOff, Settings, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { BibliotecaSelector } from "./biblioteca-selector";
@@ -8,6 +8,20 @@ import type { AdjuntoResult, OficinaOption } from "@/lib/expedientes-archivo-act
 import { DOC_TIPOS, type DocTipo } from "@/lib/expedientes-archivo-actions";
 import { tipoDocumentoLabel } from "@/lib/document-number";
 import { PLANTILLAS_RESPUESTA } from "@/lib/respuesta-plantillas";
+import {
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FORM_SECTION,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_HELP_TEXT,
+  EXP_SPIN,
+  expBtnClass,
+  expMessageClass,
+} from "../estilos";
+import { cn } from "@/lib/utils";
 
 type Props = {
   adjuntos: AdjuntoResult[];
@@ -116,18 +130,18 @@ export function ConfiguracionRespuesta({
   }
 
   return (
-    <div className="expFormSection" style={{ marginTop: 16 }}>
-      <div className="expFormSectionHeader">
-        <h3 className="expFormSectionTitle">
+    <div className={cn("tw", EXP_FORM_SECTION, "mt-4")}>
+      <div className={EXP_FORM_SECTION_HEADER}>
+        <h3 className={EXP_FORM_SECTION_TITLE}>
           <FileSignature size={16} /> Tu respuesta
-          <span className="expFormSectionHint">
+          <span className={EXP_FORM_SECTION_HINT}>
             Oficina emisora, tipo y que quieres responder
           </span>
         </h3>
       </div>
 
       {oficinas.length === 0 ? (
-        <div className="expMessage expMessage-info" role="status" style={{ marginBottom: 12 }}>
+        <div className={cn(expMessageClass("info"), "mb-3 mt-0")} role="status">
           <Building2 size={16} />
           {isAdminOficinas ? (
             <span>
@@ -146,7 +160,7 @@ export function ConfiguracionRespuesta({
           )}
         </div>
       ) : isAdminOficinas && totalActivas > oficinas.length ? (
-        <div className="expMessage expMessage-info" role="status" style={{ marginBottom: 12 }}>
+        <div className={cn(expMessageClass("info"), "mb-3 mt-0")} role="status">
           <Building2 size={16} />
           <span>
             Eres administrador: ves <strong>{oficinas.length}</strong> oficina(s)
@@ -159,14 +173,14 @@ export function ConfiguracionRespuesta({
         titulo="¿Quién emite el documento?"
         hint="Oficina, tipo de documento y número que le tocará"
       >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <div className="expField">
-          <label className="expField-label" htmlFor="resp-oficina">
+      <div className="grid grid-cols-3 gap-3">
+        <div className={EXP_FIELD}>
+          <label className={cn(EXP_FIELD_LABEL, "flex items-center gap-1.5")} htmlFor="resp-oficina">
             <Building2 size={12} /> Oficina emisora
           </label>
           <select
             id="resp-oficina"
-            className="expField-select"
+            className={EXP_FIELD_CONTROL}
             value={oficinaId}
             onChange={(e) => handleSelectOficina(e.target.value)}
           >
@@ -178,11 +192,11 @@ export function ConfiguracionRespuesta({
             ))}
           </select>
         </div>
-        <div className="expField">
-          <label className="expField-label" htmlFor="resp-tipo">Tipo de documento</label>
+        <div className={EXP_FIELD}>
+          <label className={EXP_FIELD_LABEL} htmlFor="resp-tipo">Tipo de documento</label>
           <select
             id="resp-tipo"
-            className="expField-select"
+            className={EXP_FIELD_CONTROL}
             value={tipoDocumento}
             onChange={(e) => setTipoDocumento(e.target.value as DocTipo)}
           >
@@ -192,18 +206,18 @@ export function ConfiguracionRespuesta({
               </option>
             ))}
           </select>
-          <small style={{ color: "var(--muted, #667)", fontSize: 11 }}>
+          <small className="text-[11px] text-exp-muted">
             Solo los tipos que emite esta oficina (Configuración → Numeración).
           </small>
         </div>
-        <div className="expField">
-          <label className="expField-label">Nº a asignar</label>
+        <div className={EXP_FIELD}>
+          <label className={EXP_FIELD_LABEL}>Nº a asignar</label>
           <input
-            className="expField-input"
+            className={EXP_FIELD_CONTROL}
             value={destinoNumero || "Configura la numeracion (admin)"}
             readOnly
           />
-          <small style={{ color: "var(--brand, #0f766e)", fontSize: 11, fontWeight: 500 }}>
+          <small className="text-[11px] font-medium text-exp-brand">
             {destinoNumero ? `Preview: ${destinoNumero}` : "Configura en Configuracion → Numeracion"}
           </small>
         </div>
@@ -211,14 +225,14 @@ export function ConfiguracionRespuesta({
 
       {oficina ? (
         <>
-          <span className="expHelpText" style={{ marginTop: 4 }}>
+          <span className={cn(EXP_HELP_TEXT, "mt-1")}>
             Responsable: <strong>{oficina.responsableNombre || "—"}</strong>
             {oficina.responsableCargo ? ` · ${oficina.responsableCargo}` : ""}
             {oficina.tieneMembrete ? " · ✓ hoja membretada" : " · sin hoja membretada"}
             {" "}(no se imprime: el documento queda con espacio para firma y sello)
           </span>
           {!oficina.tieneMembrete || !destinoNumero ? (
-            <div className="expMessage expMessage-warning" role="status" style={{ marginTop: 6, marginBottom: 0 }}>
+            <div className={cn(expMessageClass("warning"), "mb-0 mt-1.5")} role="status">
               <Settings size={14} />
               <span>
                 {!oficina.tieneMembrete && !destinoNumero
@@ -239,13 +253,13 @@ export function ConfiguracionRespuesta({
         hint="Elige un caso típico o cuéntale a la IA con tus palabras"
       >
       {/* Plantillas de casos frecuentes: 1 clic pre-llena la intencion */}
-      <div className="expField" style={{ marginTop: 8 }}>
-        <label className="expField-label" htmlFor="resp-plantilla">
-          Caso frecuente <span style={{ fontWeight: 400, color: "var(--muted, #667)" }}>(opcional, pre-llena lo demás)</span>
+      <div className={cn(EXP_FIELD, "mt-2")}>
+        <label className={EXP_FIELD_LABEL} htmlFor="resp-plantilla">
+          Caso frecuente <span className="font-normal text-exp-muted">(opcional, pre-llena lo demás)</span>
         </label>
         <select
           id="resp-plantilla"
-          className="expField-select"
+          className={EXP_FIELD_CONTROL}
           value=""
           onChange={(e) => {
             const p = PLANTILLAS_RESPUESTA.find((x) => x.id === e.target.value);
@@ -269,8 +283,8 @@ export function ConfiguracionRespuesta({
         </select>
       </div>
 
-      <div className="expField" style={{ marginTop: 8 }}>
-        <label className="expField-label" htmlFor="resp-intencion" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className={cn(EXP_FIELD, "mt-2")}>
+        <label className={cn(EXP_FIELD_LABEL, "flex items-center gap-2")} htmlFor="resp-intencion">
           ¿Que quieres responder?
           <DictadoButton
             onTexto={(t) => setIntencion(intencion ? `${intencion.trim()} ${t}` : t)}
@@ -279,7 +293,7 @@ export function ConfiguracionRespuesta({
         </label>
         <textarea
           id="resp-intencion"
-          className="expField-input"
+          className={EXP_FIELD_CONTROL}
           value={intencion}
           onChange={(e) => setIntencion(e.target.value)}
           rows={5}
@@ -287,22 +301,22 @@ export function ConfiguracionRespuesta({
         />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div className="expField">
-          <label className="expField-label" htmlFor="resp-rem">Dirigido a</label>
+      <div className="grid grid-cols-2 gap-3">
+        <div className={EXP_FIELD}>
+          <label className={EXP_FIELD_LABEL} htmlFor="resp-rem">Dirigido a</label>
           <input
             id="resp-rem"
-            className="expField-input"
+            className={EXP_FIELD_CONTROL}
             value={remitenteDoc}
             onChange={(e) => setRemitenteDoc(e.target.value)}
             placeholder="Destinatario de la respuesta"
           />
         </div>
-        <div className="expField">
-          <label className="expField-label" htmlFor="resp-asunto">Asunto</label>
+        <div className={EXP_FIELD}>
+          <label className={EXP_FIELD_LABEL} htmlFor="resp-asunto">Asunto</label>
           <input
             id="resp-asunto"
-            className="expField-input"
+            className={EXP_FIELD_CONTROL}
             value={asunto}
             onChange={(e) => setAsunto(e.target.value)}
             placeholder="Sumilla"
@@ -313,36 +327,16 @@ export function ConfiguracionRespuesta({
 
       {/* Opciones avanzadas plegadas: normativa de apoyo, estilo y archivo.
           El usuario no técnico puede generar sin abrirlas nunca. */}
-      <div
-        style={{
-          border: "1px solid var(--line, #e2e4ea)",
-          borderRadius: 10,
-          marginTop: 12,
-          overflow: "hidden",
-        }}
-      >
+      <div className="mt-3 overflow-hidden rounded-exp border border-exp-line">
         <button
           type="button"
           onClick={() => setMostrarApoyos((v) => !v)}
           aria-expanded={mostrarApoyos}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "transparent",
-            border: 0,
-            cursor: "pointer",
-            padding: "10px 12px",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "inherit",
-            textAlign: "left",
-          }}
+          className="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-2.5 text-left text-[13px] font-semibold text-inherit"
         >
           {mostrarApoyos ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
           Normativa de apoyo y estilo
-          <span style={{ fontWeight: 400, color: "var(--muted, #667)", fontSize: 12 }}>
+          <span className="text-xs font-normal text-exp-muted">
             (opcional) —{" "}
             {[
               normativaIds.length > 0 ? `${normativaIds.length} norma(s)` : null,
@@ -357,7 +351,7 @@ export function ConfiguracionRespuesta({
         </button>
 
         {mostrarApoyos ? (
-          <div style={{ padding: "0 12px 12px" }}>
+          <div className="px-3 pb-3">
             <BibliotecaSelector
               normativaIds={normativaIds}
               adjuntosIds={adjuntos.map((a) => a.documentId)}
@@ -365,12 +359,12 @@ export function ConfiguracionRespuesta({
               onAdjuntosChange={setAdjuntos}
             />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div className="expField">
-                <label className="expField-label" htmlFor="resp-tone">Tono</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL} htmlFor="resp-tone">Tono</label>
                 <select
                   id="resp-tone"
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={tone}
                   onChange={(e) => setTone(e.target.value as "cercano" | "formal" | "tecnico")}
                 >
@@ -379,11 +373,11 @@ export function ConfiguracionRespuesta({
                   <option value="tecnico">Tecnico-juridico</option>
                 </select>
               </div>
-              <div className="expField">
-                <label className="expField-label" htmlFor="resp-length">Extension</label>
+              <div className={EXP_FIELD}>
+                <label className={EXP_FIELD_LABEL} htmlFor="resp-length">Extension</label>
                 <select
                   id="resp-length"
-                  className="expField-select"
+                  className={EXP_FIELD_CONTROL}
                   value={length}
                   onChange={(e) => setLength(e.target.value as "concisa" | "media" | "detallada")}
                 >
@@ -394,11 +388,12 @@ export function ConfiguracionRespuesta({
               </div>
             </div>
 
-            <label className="expCheckRow" style={{ marginTop: 12 }}>
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px] leading-snug text-exp-muted [&_strong]:text-exp-ink">
               <input
                 type="checkbox"
                 checked={includeAntecedentes}
                 onChange={(e) => setIncludeAntecedentes(e.target.checked)}
+                className="mt-0.5 accent-exp-brand"
               />
               <span>
                 <Library size={13} /> Buscar además <strong>expedientes relacionados</strong> en la
@@ -412,19 +407,14 @@ export function ConfiguracionRespuesta({
 
       <button
         type="button"
-        className="primaryButton"
+        className={cn(expBtnClass("primary"), "mt-3")}
         onClick={onGenerate}
         disabled={generating}
-        style={{ marginTop: 12 }}
       >
-        {generating ? (
-          <span style={{ display: "inline-block", width: 16, height: 16 }} className="expSpin" />
-        ) : (
-          <Sparkles size={16} />
-        )}{" "}
+        {generating ? <Loader2 size={16} className={EXP_SPIN} /> : <Sparkles size={16} />}{" "}
         {generating ? "Generando cuerpo..." : "Generar cuerpo del documento"}
       </button>
-      <span className="expHelpText">
+      <span className={EXP_HELP_TEXT}>
         <Hash size={12} /> La IA redacta el cuerpo a partir de tu intencion, fundamentado en normativa
         {includeAntecedentes ? " y antecedentes" : ""}.
       </span>
@@ -456,18 +446,11 @@ function Grupo({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      style={{
-        border: "1px solid var(--line, #e2e4ea)",
-        borderRadius: 10,
-        padding: "10px 12px 12px",
-        marginTop: 12,
-      }}
-    >
-      <div style={{ marginBottom: 8 }}>
-        <strong style={{ fontSize: 13 }}>{titulo}</strong>
+    <div className="mt-3 rounded-exp border border-exp-line px-3 pb-3 pt-2.5">
+      <div className="mb-2">
+        <strong className="text-[13px]">{titulo}</strong>
         {hint ? (
-          <span style={{ fontSize: 12, color: "var(--muted, #667)", marginLeft: 8 }}>{hint}</span>
+          <span className="ml-2 text-xs text-exp-muted">{hint}</span>
         ) : null}
       </div>
       {children}
@@ -549,18 +532,13 @@ function DictadoButton({
   return (
     <button
       type="button"
-      className="secondaryButton"
+      className={cn(
+        expBtnClass("secondary", "small"),
+        listening && "border-[#fecaca] bg-exp-danger-soft text-[#991b1b]",
+      )}
       onClick={() => (listening ? stop() : start())}
       title={listening ? "Detener dictado" : "Dictar con el micrófono"}
       aria-pressed={listening}
-      style={{
-        fontSize: 11.5,
-        padding: "2px 10px",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        ...(listening ? { background: "#fee2e2", color: "#991b1b", borderColor: "#fecaca" } : {}),
-      }}
     >
       {listening ? <MicOff size={13} /> : <Mic size={13} />}
       {listening ? "Detener" : "Dictar"}

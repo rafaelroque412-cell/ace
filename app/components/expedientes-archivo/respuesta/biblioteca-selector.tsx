@@ -17,6 +17,8 @@ import {
   type NormativaEntry,
 } from "@/lib/expedientes-archivo-actions";
 import { ModalShell } from "../../modal-shell";
+import { EXP_FIELD, EXP_FIELD_LABEL, EXP_SPIN, expBtnClass } from "../estilos";
+import { cn } from "@/lib/utils";
 
 // Selector de normativa para la pestaña Responder.
 // - Permite buscar en la biblioteca de leyes/normas indexadas en Pinecone
@@ -107,103 +109,57 @@ export function BibliotecaSelector({
   const totalSelected = normativaIds.length + adjuntos.length;
 
   return (
-    <div className="expField">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
-        <label
-          className="expField-label"
-          style={{ display: "flex", alignItems: "center", gap: 6 }}
-        >
+    <div className={cn("tw", EXP_FIELD)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className={cn(EXP_FIELD_LABEL, "flex items-center gap-1.5")}>
           <Scale size={13} /> Normativa aplicable
         </label>
         <button
           type="button"
-          className="secondaryButton"
+          className={expBtnClass("secondary", "small")}
           onClick={() => setOpen(true)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
           <Library size={14} /> Biblioteca ({normativaIds.length})
         </button>
         <button
           type="button"
-          className="secondaryButton"
+          className={expBtnClass("secondary", "small")}
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
-          {uploading ? <Loader2 size={14} className="expSpin" /> : <FileUp size={14} />}{" "}
+          {uploading ? <Loader2 size={14} className={EXP_SPIN} /> : <FileUp size={14} />}{" "}
           {uploading ? "Subiendo..." : "Adjuntar PDF"}
         </button>
         <input
           ref={fileRef}
           type="file"
           accept="application/pdf"
-          style={{ display: "none" }}
+          className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void handleUpload(file);
           }}
         />
         {totalSelected > 0 ? (
-          <span
-            style={{
-              fontSize: 12,
-              color: "var(--brand, #0f766e)",
-              fontWeight: 500,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-exp-brand">
             <CheckCircle2 size={14} /> {totalSelected} documento(s) adjunto(s)
           </span>
         ) : null}
       </div>
 
       {adjuntos.length > 0 ? (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 6,
-            marginTop: 8,
-          }}
-        >
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {adjuntos.map((a) => (
             <span
               key={a.documentId}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                background: "#ecfeff",
-                color: "#155e75",
-                border: "1px solid #67e8f9",
-                borderRadius: 999,
-                padding: "3px 10px",
-                fontSize: 11,
-                fontWeight: 500,
-              }}
+              className="inline-flex items-center gap-1 rounded-full border border-[#67e8f9] bg-[#ecfeff] px-2.5 py-1 text-[11px] font-medium text-[#155e75]"
             >
               <FileUp size={11} /> {a.title} ({a.chunkCount} frag.)
               <button
                 type="button"
                 aria-label="Quitar adjunto"
                 onClick={() => removeAdjunto(a.documentId)}
-                style={{
-                  background: "transparent",
-                  border: 0,
-                  padding: 0,
-                  marginLeft: 4,
-                  cursor: "pointer",
-                  color: "inherit",
-                }}
+                className="ml-1 border-0 bg-transparent p-0 text-inherit"
               >
                 <X size={11} />
               </button>
@@ -213,64 +169,40 @@ export function BibliotecaSelector({
       ) : null}
 
       {open ? <BibliotecaModal onClose={() => setOpen(false)}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Search size={16} style={{ color: "var(--muted, #667)" }} />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Search size={16} className="text-exp-muted" />
             <input
               ref={searchRef}
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por titulo, numero o fuente..."
-              style={{
-                flex: 1,
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid var(--line, #e2e4ea)",
-                fontSize: 13,
-              }}
+              className="flex-1 rounded-lg border border-exp-line px-2.5 py-2 text-[13px]"
             />
             <button
               type="button"
-              className="primaryButton"
+              className={expBtnClass("primary")}
               onClick={() => setOpen(false)}
             >
               Listo ({normativaIds.length})
             </button>
           </div>
           {error ? (
-            <p
-              role="alert"
-              style={{
-                background: "#fee2e2",
-                color: "#991b1b",
-                padding: 8,
-                borderRadius: 6,
-                fontSize: 12,
-                margin: 0,
-              }}
-            >
+            <p role="alert" className="m-0 rounded-md bg-exp-danger-soft px-2 py-2 text-xs text-[#991b1b]">
               {error}
             </p>
           ) : null}
           {loading ? (
-            <p style={{ color: "var(--muted, #667)", fontSize: 13, margin: 0 }}>
-              <Loader2 size={14} className="expSpin" /> Buscando en la biblioteca...
+            <p className="m-0 text-sm text-exp-muted">
+              <Loader2 size={14} className={EXP_SPIN} /> Buscando en la biblioteca...
             </p>
           ) : entries.length === 0 ? (
-            <p style={{ color: "var(--muted, #667)", fontSize: 13, margin: 0 }}>
+            <p className="m-0 text-sm text-exp-muted">
               No hay documentos que coincidan con la busqueda.
             </p>
           ) : (
-            <div
-              style={{
-                maxHeight: 380,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-              }}
-            >
+            <div className="flex max-h-[380px] flex-col gap-1 overflow-y-auto">
               {entries.map((entry) => {
                 const isSelected = selected.has(entry.documentId);
                 return (
@@ -279,42 +211,23 @@ export function BibliotecaSelector({
                     type="button"
                     onClick={() => toggle(entry.documentId)}
                     aria-pressed={isSelected}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 10,
-                      padding: "10px 12px",
-                      background: isSelected ? "#ecfeff" : "var(--panel, #fff)",
-                      border: isSelected
-                        ? "1px solid #67e8f9"
-                        : "1px solid var(--line, #e2e4ea)",
-                      borderRadius: 8,
-                      textAlign: "left",
-                      cursor: "pointer",
-                      color: "inherit",
-                    }}
+                    className={cn(
+                      "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left text-inherit",
+                      isSelected ? "border-[#67e8f9] bg-[#ecfeff]" : "border-exp-line bg-exp-panel",
+                    )}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggle(entry.documentId)}
                       onClick={(e) => e.stopPropagation()}
-                      style={{ marginTop: 2 }}
+                      className="mt-0.5"
                     />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold">
                         {entry.title}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "var(--muted, #667)",
-                          marginTop: 2,
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
+                      <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-exp-muted">
                         {entry.documentNumber ? (
                           <span>N° {entry.documentNumber}</span>
                         ) : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { EXP_FIELD_CONTROL } from "../estilos";
 
 type Source = {
   citation?: string;
@@ -29,28 +30,21 @@ export function CuerpoConMarcas({ body, sources, onChange, rows = 14 }: Props) {
   const segments = useMemo(() => parsearMarcas(body), [body]);
 
   return (
-    <div>
+    <div className="tw">
       <textarea
-        className="expField-input"
+        className={EXP_FIELD_CONTROL}
         value={body}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         placeholder="Aqui aparecera el cuerpo generado por la IA. Podras editarlo antes de guardar."
       />
-      <small
-        style={{
-          color: "var(--muted, #667)",
-          fontSize: 11,
-          marginTop: 2,
-          display: "block",
-        }}
-      >
+      <small className="mt-0.5 block text-[11px] text-exp-muted">
         {body.length.toLocaleString("es-PE")} caracteres.
         {segments.marcadas > 0 ? (
           <>
             {" "}· {segments.marcadas} marca(s) de cita encontrada(s).
             {segments.marcadas > sources.length ? (
-              <span style={{ color: "#dc2626" }}>
+              <span className="text-exp-danger">
                 {" "}⚠ Hay {segments.marcadas - sources.length} marca(s) sin fuente.
               </span>
             ) : null}

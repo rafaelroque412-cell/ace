@@ -8,6 +8,19 @@ import {
   type SavedRespuesta,
 } from "@/lib/expedientes-archivo-actions";
 import { Pagination } from "../pagination";
+import {
+  EXP_FIELD,
+  EXP_FIELD_CONTROL,
+  EXP_FIELD_LABEL,
+  EXP_FORM_SECTION,
+  EXP_FORM_SECTION_HEADER,
+  EXP_FORM_SECTION_HINT,
+  EXP_FORM_SECTION_TITLE,
+  EXP_ICON_BUTTON,
+  EXP_SPIN,
+  expBtnClass,
+} from "../estilos";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 8;
 
@@ -74,14 +87,14 @@ export function HistorialRespuestas({
 
   if (loading) {
     return (
-      <div className="expFormSection" style={{ marginTop: 16 }}>
-        <div className="expFormSectionHeader">
-          <h3 className="expFormSectionTitle">
+      <div className={cn("tw", EXP_FORM_SECTION, "mt-4")}>
+        <div className={EXP_FORM_SECTION_HEADER}>
+          <h3 className={EXP_FORM_SECTION_TITLE}>
             <History size={16} /> Respuestas archivadas
           </h3>
         </div>
-        <p style={{ color: "var(--muted, #667)" }}>
-          <Loader2 size={14} className="expSpin" /> Cargando historial...
+        <p className="text-exp-muted">
+          <Loader2 size={14} className={EXP_SPIN} /> Cargando historial...
         </p>
       </div>
     );
@@ -92,23 +105,23 @@ export function HistorialRespuestas({
   }
 
   return (
-    <div className="expFormSection" style={{ marginTop: 16 }}>
-      <div className="expFormSectionHeader">
-        <h3 className="expFormSectionTitle">
+    <div className={cn("tw", EXP_FORM_SECTION, "mt-4")}>
+      <div className={EXP_FORM_SECTION_HEADER}>
+        <h3 className={EXP_FORM_SECTION_TITLE}>
           <History size={16} /> Respuestas archivadas
-          <span className="expFormSectionHint">
+          <span className={EXP_FORM_SECTION_HINT}>
             {total} de {saved.length} — click para reabrir
           </span>
         </h3>
       </div>
 
-      <div className="expField" style={{ marginBottom: 8 }}>
-        <label className="expField-label" htmlFor="historial-search">
+      <div className={cn(EXP_FIELD, "mb-2")}>
+        <label className={EXP_FIELD_LABEL} htmlFor="historial-search">
           <Search size={12} /> Buscar
         </label>
         <input
           id="historial-search"
-          className="expField-input"
+          className={EXP_FIELD_CONTROL}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -118,89 +131,52 @@ export function HistorialRespuestas({
         />
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="flex flex-col gap-2">
         {pageItems.length === 0 ? (
-          <p style={{ color: "var(--muted, #667)", fontSize: 13, margin: 0 }}>
+          <p className="m-0 text-sm text-exp-muted">
             Ninguna respuesta coincide con la busqueda.
           </p>
         ) : (
           pageItems.map((r) => (
             <div
               key={r.id}
-              className="expResultCard"
-              style={{
-                gridTemplateColumns: "1fr auto auto",
-                textAlign: "left",
-                alignItems: "center",
-                gap: 8,
-              }}
+              className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-exp border border-exp-line bg-exp-panel p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-px hover:border-exp-brand hover:shadow-exp"
             >
               <button
                 type="button"
                 onClick={() => onOpen(r)}
-                style={{
-                  background: "transparent",
-                  border: 0,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  padding: 0,
-                  color: "inherit",
-                }}
+                className="border-0 bg-transparent p-0 text-left text-inherit"
               >
-                <div className="expResultBody">
-                  <h4 className="expResultTitle">
+                <div className="min-w-0">
+                  <h4 className="m-0 mb-1 text-sm font-bold leading-snug text-exp-ink">
                     {r.nro_oficio || r.asunto || "Respuesta"}
                     {r.version && r.version > 1 ? (
-                      <span
-                        style={{
-                          marginLeft: 8,
-                          background: "#fef3c7",
-                          color: "#92400e",
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: "1px 6px",
-                          borderRadius: 4,
-                          verticalAlign: "middle",
-                        }}
-                      >
+                      <span className="ml-2 inline-block rounded bg-[#fef3c7] px-1.5 py-px align-middle text-[10px] font-bold text-[#92400e]">
                         v{r.version}
                       </span>
                     ) : null}
                     {r.parent_version_id ? (
                       <span
-                        style={{
-                          marginLeft: 4,
-                          fontSize: 10,
-                          color: "var(--muted, #667)",
-                        }}
+                        className="ml-1 text-[10px] text-exp-muted"
                         title="Es una revision de otra respuesta"
                       >
                         (revision)
                       </span>
                     ) : null}
                   </h4>
-                  <div className="expResultMeta">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-exp-muted">
                     {r.tipo_documento ? (
-                      <span className="expResultMetaItem">{r.tipo_documento}</span>
+                      <span className="inline-flex items-center gap-1">{r.tipo_documento}</span>
                     ) : null}
-                    {r.asunto ? (
-                      <span className="expResultMetaItem">{r.asunto}</span>
-                    ) : null}
+                    {r.asunto ? <span className="inline-flex items-center gap-1">{r.asunto}</span> : null}
                     {r.destinatario ? (
-                      <span className="expResultMetaItem">→ {r.destinatario}</span>
+                      <span className="inline-flex items-center gap-1">→ {r.destinatario}</span>
                     ) : null}
-                    <span className="expResultMetaItem">
+                    <span className="inline-flex items-center gap-1">
                       {new Date(r.created_at).toLocaleDateString("es-PE")}
                     </span>
                     {r.antecedente_id ? (
-                      <span
-                        className="expResultMetaItem"
-                        style={{
-                          background: "#ecfeff",
-                          color: "#155e75",
-                          fontWeight: 600,
-                        }}
-                      >
+                      <span className="inline-flex items-center gap-1 font-semibold text-[#155e75]">
                         <FileText size={11} /> PDF
                       </span>
                     ) : null}
@@ -210,26 +186,24 @@ export function HistorialRespuestas({
               {r.parent_version_id && saved.some((s) => s.id === r.parent_version_id) ? (
                 <button
                   type="button"
-                  className="iconButton"
+                  className={EXP_ICON_BUTTON}
                   aria-label="Comparar con la version anterior"
                   title="Comparar con la version anterior"
                   onClick={() => setCompare(r)}
-                  style={{ color: "var(--muted, #667)" }}
                 >
                   <GitCompare size={15} />
                 </button>
               ) : null}
               <button
                 type="button"
-                className="iconButton"
+                className={cn(EXP_ICON_BUTTON, "text-exp-brand")}
                 aria-label="Nueva version"
                 title="Crear nueva version (revisar)"
                 onClick={() => handleNewVersion(r)}
                 disabled={creatingVersionFor === r.id}
-                style={{ color: "var(--brand, #0f766e)" }}
               >
                 {creatingVersionFor === r.id ? (
-                  <Loader2 size={15} className="expSpin" />
+                  <Loader2 size={15} className={EXP_SPIN} />
                 ) : (
                   <Copy size={15} />
                 )}
@@ -252,7 +226,7 @@ export function HistorialRespuestas({
       ) : null}
 
       {totalPages > 1 ? (
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+        <div className="mt-3 flex justify-center">
           <Pagination
             pagination={{ limit: PAGE_SIZE, page, total, totalPages }}
             onPageChange={setPage}
@@ -286,31 +260,17 @@ function CompareModal({
   const setAnterior = new Set(pAnterior);
   const setActual = new Set(pActual);
 
-  const columna = (titulo: string, items: string[], otros: Set<string>, highlight: string) => (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-      <strong style={{ fontSize: 13 }}>{titulo}</strong>
-      <div
-        style={{
-          border: "1px solid var(--line, #e2e4ea)",
-          borderRadius: 8,
-          padding: 10,
-          fontSize: 12.5,
-          lineHeight: 1.55,
-          overflowY: "auto",
-          flex: 1,
-        }}
-      >
+  const columna = (titulo: string, items: string[], otros: Set<string>, highlightClass: string) => (
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <strong className="text-[13px]">{titulo}</strong>
+      <div className="flex-1 overflow-y-auto rounded-lg border border-exp-line p-2.5 text-[12.5px] leading-[1.55]">
         {items.length === 0 ? (
-          <em style={{ color: "var(--muted, #667)" }}>Sin contenido.</em>
+          <em className="text-exp-muted">Sin contenido.</em>
         ) : (
           items.map((p, i) => (
             <p
               key={i}
-              style={{
-                margin: "0 0 8px",
-                textAlign: "justify",
-                ...(otros.has(p) ? {} : { background: highlight, borderRadius: 4, padding: "2px 4px" }),
-              }}
+              className={cn("mb-2 text-justify", !otros.has(p) && cn("rounded px-1 py-0.5", highlightClass))}
             >
               {p}
             </p>
@@ -330,7 +290,7 @@ function CompareModal({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="visorModalFondo" />
-        <Dialog.Content className="diffVersiones">
+        <Dialog.Content className="tw diffVersiones">
           <div className="diffVersionesHead">
             <Dialog.Title asChild>
               <h3 className="diffVersionesTitulo">
@@ -352,17 +312,17 @@ function CompareModal({
               anterior ? `Versión anterior (v${anterior.version ?? 1})` : "Versión anterior",
               pAnterior,
               setActual,
-              "#fee2e2",
+              "bg-exp-danger-soft",
             )}
-            {columna(`Esta versión (v${actual.version ?? 2})`, pActual, setAnterior, "#d1fae5")}
+            {columna(`Esta versión (v${actual.version ?? 2})`, pActual, setAnterior, "bg-exp-success-soft")}
           </div>
           <div className="diffVersionesPie">
             {anterior ? (
-              <button type="button" className="secondaryButton" onClick={() => onOpen(anterior)}>
+              <button type="button" className={expBtnClass("secondary")} onClick={() => onOpen(anterior)}>
                 Restaurar la anterior en el editor
               </button>
             ) : null}
-            <button type="button" className="primaryButton" onClick={() => onOpen(actual)}>
+            <button type="button" className={expBtnClass("primary")} onClick={() => onOpen(actual)}>
               Abrir esta versión
             </button>
           </div>
