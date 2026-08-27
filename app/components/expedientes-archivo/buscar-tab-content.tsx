@@ -217,15 +217,19 @@ export function BuscarTabContent({
           type="button"
           aria-pressed={mode === "buscar"}
           className={cn(
-            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
-            mode === "buscar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]",
+            "flex items-center gap-3 rounded-exp border p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
+            mode === "buscar"
+              ? "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]"
+              : "border-exp-line bg-exp-panel",
           )}
           onClick={() => changeMode("buscar")}
         >
           <span
             className={cn(
-              "grid size-11 shrink-0 place-items-center rounded-xl bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              mode === "buscar" && "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]",
+              "grid size-11 shrink-0 place-items-center rounded-xl transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "buscar"
+                ? "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]"
+                : "bg-exp-line-soft text-exp-muted",
             )}
           >
             <Search size={19} />
@@ -239,15 +243,19 @@ export function BuscarTabContent({
           type="button"
           aria-pressed={mode === "preguntar"}
           className={cn(
-            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
-            mode === "preguntar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]",
+            "flex items-center gap-3 rounded-exp border p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
+            mode === "preguntar"
+              ? "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]"
+              : "border-exp-line bg-exp-panel",
           )}
           onClick={() => changeMode("preguntar")}
         >
           <span
             className={cn(
-              "grid size-11 shrink-0 place-items-center rounded-xl bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              mode === "preguntar" && "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]",
+              "grid size-11 shrink-0 place-items-center rounded-xl transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "preguntar"
+                ? "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]"
+                : "bg-exp-line-soft text-exp-muted",
             )}
           >
             <Bot size={19} />
@@ -281,8 +289,10 @@ export function BuscarTabContent({
           <button
             type="button"
             className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-exp-line bg-exp-panel px-3 py-2 text-[13px] font-semibold text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:text-exp-ink",
-              showFilters && "border-exp-brand bg-exp-brand/[0.06] text-exp-brand",
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2 text-[13px] font-semibold transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:text-exp-ink",
+              showFilters
+                ? "border-exp-brand bg-exp-brand/[0.06] text-exp-brand"
+                : "border-exp-line bg-exp-panel text-exp-muted",
             )}
             onClick={() => setShowFilters((v) => !v)}
             aria-expanded={showFilters}
@@ -599,8 +609,10 @@ export function BuscarTabContent({
                 type="button"
                 aria-pressed={viewMode === "lista"}
                 className={cn(
-                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
-                  viewMode === "lista" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "lista"
+                    ? "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand"
+                    : "text-exp-muted",
                 )}
                 onClick={() => setViewMode("lista")}
                 title="Vista lista"
@@ -612,8 +624,10 @@ export function BuscarTabContent({
                 type="button"
                 aria-pressed={viewMode === "tabla"}
                 className={cn(
-                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
-                  viewMode === "tabla" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "tabla"
+                    ? "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand"
+                    : "text-exp-muted",
                 )}
                 onClick={() => setViewMode("tabla")}
                 title="Vista tabla"
@@ -625,8 +639,10 @@ export function BuscarTabContent({
                 type="button"
                 aria-pressed={viewMode === "tarjetas"}
                 className={cn(
-                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
-                  viewMode === "tarjetas" && "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand",
+                  "relative z-[1] inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[13px] font-semibold transition-colors duration-[120ms] ease-linear hover:text-exp-ink",
+                  viewMode === "tarjetas"
+                    ? "bg-exp-panel text-exp-brand shadow-exp-sm hover:text-exp-brand"
+                    : "text-exp-muted",
                 )}
                 onClick={() => setViewMode("tarjetas")}
                 title="Vista tarjetas"
@@ -642,16 +658,20 @@ export function BuscarTabContent({
                   type="button"
                   aria-pressed={statusFilter === s.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border border-exp-line bg-exp-panel px-2.5 py-1.5 text-xs font-semibold text-exp-muted transition-colors duration-[120ms] ease-linear hover:border-exp-line hover:text-exp-ink",
-                    statusFilter === s.id && "border-exp-brand bg-exp-brand text-white hover:text-white",
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors duration-[120ms] ease-linear hover:border-exp-line hover:text-exp-ink",
+                    statusFilter === s.id
+                      ? "border-exp-brand bg-exp-brand text-white hover:text-white"
+                      : "border-exp-line bg-exp-panel text-exp-muted",
                   )}
                   onClick={() => setStatusFilter(s.id)}
                 >
                   {s.label}
                   <span
                     className={cn(
-                      "min-w-4 rounded-full bg-exp-line-soft px-1.5 py-px text-center text-[10px] font-bold text-exp-muted",
-                      statusFilter === s.id && "bg-white/20 text-white",
+                      "min-w-4 rounded-full px-1.5 py-px text-center text-[10px] font-bold",
+                      statusFilter === s.id
+                        ? "bg-white/20 text-white"
+                        : "bg-exp-line-soft text-exp-muted",
                     )}
                   >
                     {displayStatusCounts[s.id]}

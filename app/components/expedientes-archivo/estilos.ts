@@ -180,8 +180,11 @@ export const EXP_PAGINATION_BTN =
   "inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-exp-line bg-exp-panel px-2 text-[13px] font-semibold text-exp-ink-soft " +
   "transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-line-soft hover:text-exp-brand disabled:cursor-not-allowed disabled:opacity-40";
 
+// `!` porque se combina con EXP_PAGINATION_BTN, que ya declara borde/fondo/texto
+// sin condición (lo usan también los botones prev/next/puntos, sin estado
+// activo) — ver el mismo comentario en borrador-editor.tsx.
 export const EXP_PAGINATION_BTN_ACTIVE =
-  "border-exp-brand bg-exp-brand text-white hover:bg-exp-brand-dark hover:text-white";
+  "!border-exp-brand !bg-exp-brand !text-white hover:!bg-exp-brand-dark hover:!text-white";
 
 export const EXP_PAGINATION_DOTS = "min-w-6 text-center font-semibold text-exp-muted";
 
@@ -249,17 +252,28 @@ export function expFormSectionCounterClass(complete?: boolean): string {
 // ── Selector de archivo con arrastrar-y-soltar (lote, subida individual) ────
 
 export function expFilePickerClass(state?: "dragging" | "hasFile"): string {
+  // El borde/fondo de reposo NO va en la base incondicional: Tailwind v4
+  // genera las utilidades en el orden en que las descubre al escanear (no en
+  // un orden fijo), así que `border-exp-line`/`bg-exp-line-soft` podían ganar
+  // la cascada sobre `border-exp-brand`/`bg-exp-brand-soft` del estado
+  // "dragging" aunque tuvieran la misma especificidad — arrastrar un PDF no
+  // se veía. Con el color condicionado a CADA estado (nunca dos clases del
+  // mismo tipo a la vez en el mismo elemento) el orden de generación deja de
+  // importar.
   const base =
-    "group relative flex cursor-pointer flex-col items-center gap-2.5 rounded-exp-lg border-2 border-dashed border-exp-line bg-exp-line-soft p-8 text-center " +
-    "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:bg-exp-brand-soft " +
+    "group relative flex cursor-pointer flex-col items-center gap-2.5 rounded-exp-lg border-2 p-8 text-center " +
+    "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] " +
     "[&_input[type=file]]:absolute [&_input[type=file]]:inset-0 [&_input[type=file]]:size-full [&_input[type=file]]:cursor-pointer [&_input[type=file]]:opacity-0";
   if (state === "dragging") {
-    return cn(base, "scale-[1.01] border-exp-brand bg-exp-brand-soft shadow-[0_0_0_4px_rgba(15,118,110,0.10)]");
+    return cn(
+      base,
+      "scale-[1.01] border-dashed border-exp-brand bg-exp-brand-soft shadow-[0_0_0_4px_rgba(15,118,110,0.10)]",
+    );
   }
   if (state === "hasFile") {
     return cn(base, "border-solid border-exp-success bg-exp-success-soft p-5");
   }
-  return base;
+  return cn(base, "border-dashed border-exp-line bg-exp-line-soft hover:border-exp-brand hover:bg-exp-brand-soft");
 }
 
 // `group-hover` porque expFilePickerClass ya marca la zona como `group`: el
@@ -267,9 +281,9 @@ export function expFilePickerClass(state?: "dragging" | "hasFile"): string {
 // solo sobre sí mismo, para que la zona entera se sienta interactiva.
 export function expFilePickerIconClass(hasFile?: boolean): string {
   return cn(
-    "flex size-16 items-center justify-center rounded-full bg-exp-panel text-exp-brand shadow-exp-sm ring-1 ring-exp-line " +
+    "flex size-16 items-center justify-center rounded-full bg-exp-panel shadow-exp-sm ring-1 ring-exp-line " +
       "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] group-hover:scale-105 group-hover:shadow-exp group-hover:ring-exp-brand/30",
-    hasFile && "text-exp-success",
+    hasFile ? "text-exp-success" : "text-exp-brand",
   );
 }
 
@@ -298,22 +312,30 @@ export const EXP_SPIN = "animate-[expSpin_0.9s_linear_infinite]";
 // variante + tamaño (p. ej. "ghost small", "primary large") y algunos
 // llamadores deciden la variante en runtime (confirmar borrado vs. avisar).
 
+// Sin `bg-transparent`/`border-transparent` aquí a propósito: Tailwind v4
+// emite las utilidades en el orden en que las descubre al escanear (no en
+// un orden fijo), así que una utilidad NUCLEO como `bg-transparent` puede
+// terminar generada DESPUES de una utilidad de nuestro tema (`bg-exp-brand`)
+// y ganarle la cascada aunque ambas tengan la misma especificidad — el botón
+// "primary" salia con fondo transparente y texto blanco invisible. Cada
+// variante ya declara su propio fondo/borde (ghost incluido), así que la
+// base no necesita un valor por defecto que compita con ellos.
 const EXP_BTN_BASE =
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-exp border border-transparent bg-transparent px-[18px] py-2.5 text-sm font-semibold no-underline " +
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-exp px-[18px] py-2.5 text-sm font-semibold no-underline " +
   "transition-[background,box-shadow,transform,border-color,color] duration-[120ms] ease-linear " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 const EXP_BTN_VARIANT = {
   primary:
-    "bg-exp-brand text-white shadow-[0_2px_6px_rgba(15,118,110,0.20)] " +
+    "border border-exp-brand bg-exp-brand text-white shadow-[0_2px_6px_rgba(15,118,110,0.20)] " +
     "hover:not-disabled:bg-exp-brand-dark hover:not-disabled:shadow-[0_4px_12px_rgba(15,118,110,0.30)] hover:not-disabled:-translate-y-px " +
     "active:not-disabled:translate-y-0 active:not-disabled:shadow-[0_1px_3px_rgba(15,118,110,0.20)]",
   secondary:
-    "border-exp-line bg-exp-panel text-exp-ink " +
+    "border border-exp-line bg-exp-panel text-exp-ink " +
     "hover:not-disabled:border-exp-brand hover:not-disabled:bg-exp-line-soft hover:not-disabled:text-exp-brand",
-  ghost: "bg-transparent text-exp-muted hover:not-disabled:bg-exp-line-soft hover:not-disabled:text-exp-ink",
+  ghost: "border border-transparent bg-transparent text-exp-muted hover:not-disabled:bg-exp-line-soft hover:not-disabled:text-exp-ink",
   danger:
-    "border-[#fecaca] bg-exp-danger-soft text-exp-danger " +
+    "border border-[#fecaca] bg-exp-danger-soft text-exp-danger " +
     "hover:not-disabled:border-exp-danger hover:not-disabled:bg-exp-danger hover:not-disabled:text-white",
 } as const;
 

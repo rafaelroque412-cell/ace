@@ -386,19 +386,20 @@ export function SubirTabContent({
                     >
                       <span
                         className={cn(
-                          "flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-exp-line bg-exp-panel text-sm font-bold text-exp-muted transition-all duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                          isActive &&
-                            "scale-110 border-exp-brand bg-exp-brand text-white shadow-[0_0_0_5px_rgba(15,118,110,0.15)]",
-                          isDone && "border-exp-success bg-exp-success text-white",
+                          "flex size-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-all duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                          isDone
+                            ? "border-exp-success bg-exp-success text-white"
+                            : isActive
+                              ? "scale-110 border-exp-brand bg-exp-brand text-white shadow-[0_0_0_5px_rgba(15,118,110,0.15)]"
+                              : "border-exp-line bg-exp-panel text-exp-muted",
                         )}
                       >
                         {isDone ? <Check size={15} /> : idx + 1}
                       </span>
                       <span
                         className={cn(
-                          "max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold text-exp-muted transition-colors duration-[180ms]",
-                          isActive && "text-exp-ink",
-                          isDone && "text-exp-success",
+                          "max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold transition-colors duration-[180ms]",
+                          isDone ? "text-exp-success" : isActive ? "text-exp-ink" : "text-exp-muted",
                         )}
                       >
                         {step.label}

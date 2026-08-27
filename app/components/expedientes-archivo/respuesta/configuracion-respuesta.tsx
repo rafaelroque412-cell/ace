@@ -532,9 +532,11 @@ function DictadoButton({
   return (
     <button
       type="button"
+      // `!` porque la sobrescritura vive en el call site, por encima de
+      // expBtnClass("secondary") — ver el mismo comentario en borrador-editor.tsx.
       className={cn(
         expBtnClass("secondary", "small"),
-        listening && "border-[#fecaca] bg-exp-danger-soft text-[#991b1b]",
+        listening && "!border-[#fecaca] !bg-exp-danger-soft !text-[#991b1b]",
       )}
       onClick={() => (listening ? stop() : start())}
       title={listening ? "Detener dictado" : "Dictar con el micrófono"}

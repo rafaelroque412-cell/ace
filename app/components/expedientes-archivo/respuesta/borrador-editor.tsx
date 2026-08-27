@@ -189,11 +189,17 @@ export function BorradorEditor({
             <span className="text-xs text-exp-muted">
               ¿La redacción está bien? Tu evaluación enseña a la IA de tu oficina:
             </span>
+            {/* `!` (important) porque la sobrescritura vive en el call site, por
+                encima de expBtnClass("ghost") — no hay una lista base local
+                donde separar "activo" de "inactivo" en ramas mutuamente
+                excluyentes. Sin el `!`, Tailwind v4 podría generar el
+                border/bg transparente del ghost DESPUÉS del color de estado
+                (orden de descubrimiento, no fijo) y ganarle la cascada. */}
             <button
               type="button"
               className={cn(
                 expBtnClass("ghost", "small"),
-                rated === "like" && "border-exp-success bg-exp-success-soft text-[#065f46]",
+                rated === "like" && "!border-exp-success !bg-exp-success-soft !text-[#065f46]",
               )}
               disabled={sendingRating || rated === "like"}
               onClick={() => void sendFeedback("like")}
@@ -205,7 +211,7 @@ export function BorradorEditor({
               type="button"
               className={cn(
                 expBtnClass("ghost", "small"),
-                rated === "dislike" && "border-exp-danger bg-exp-danger-soft text-[#991b1b]",
+                rated === "dislike" && "!border-exp-danger !bg-exp-danger-soft !text-[#991b1b]",
               )}
               disabled={sendingRating || rated === "dislike"}
               onClick={() => setAskComment((v) => !v)}

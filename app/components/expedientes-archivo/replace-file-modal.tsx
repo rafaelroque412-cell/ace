@@ -62,10 +62,10 @@ export function ReplaceFileModal({ exp, onClose, onApply }: ReplaceFileModalProp
           </div>
           <label
             className={cn(
-              "relative mb-3 block cursor-pointer rounded-exp border-2 border-dashed border-exp-line bg-exp-line-soft p-5 text-center transition-colors duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              "relative mb-3 block cursor-pointer rounded-exp border-2 border-dashed p-5 text-center transition-colors duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
               "hover:border-exp-brand hover:bg-exp-brand-soft",
               "[&_input[type=file]]:absolute [&_input[type=file]]:inset-0 [&_input[type=file]]:size-full [&_input[type=file]]:cursor-pointer [&_input[type=file]]:opacity-0",
-              isDragging && "border-exp-brand bg-exp-brand-soft",
+              isDragging ? "border-exp-brand bg-exp-brand-soft" : "border-exp-line bg-exp-line-soft",
             )}
             onDragOver={(e) => {
               e.preventDefault();

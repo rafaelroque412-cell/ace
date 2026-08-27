@@ -166,8 +166,8 @@ export function OnboardingTour({ steps, open, onClose, onComplete }: Props) {
               <span
                 key={i}
                 className={cn(
-                  "h-1.5 w-1.5 rounded-full bg-exp-line transition-all duration-[120ms] ease-linear",
-                  i <= currentStep && "w-[18px] rounded-full bg-exp-brand",
+                  "h-1.5 rounded-full transition-all duration-[120ms] ease-linear",
+                  i <= currentStep ? "w-[18px] bg-exp-brand" : "w-1.5 bg-exp-line",
                 )}
               />
             ))}

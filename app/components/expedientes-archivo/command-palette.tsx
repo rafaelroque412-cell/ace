@@ -229,8 +229,8 @@ export const CommandPalette = memo(function CommandPalette({
                   key={item.id}
                   data-cmd-idx={idx}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2.5 border-l-[3px] border-l-transparent px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
-                    idx === activeIndex && "border-l-exp-brand bg-exp-brand-soft",
+                    "flex cursor-pointer items-center gap-2.5 border-l-[3px] px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
+                    idx === activeIndex ? "border-l-exp-brand bg-exp-brand-soft" : "border-l-transparent",
                     "hover:border-l-exp-brand hover:bg-exp-brand-soft",
                   )}
                   onMouseEnter={() => setActiveIndex(idx)}
@@ -257,8 +257,8 @@ export const CommandPalette = memo(function CommandPalette({
                     key={item.id}
                     data-cmd-idx={realIdx}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 border-l-[3px] border-l-transparent px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
-                      realIdx === activeIndex && "border-l-exp-brand bg-exp-brand-soft",
+                      "flex cursor-pointer items-center gap-2.5 border-l-[3px] px-4 py-2.5 text-sm text-exp-ink transition-colors duration-75 ease-linear [&>svg]:shrink-0 [&>svg]:text-exp-brand",
+                      realIdx === activeIndex ? "border-l-exp-brand bg-exp-brand-soft" : "border-l-transparent",
                       "hover:border-l-exp-brand hover:bg-exp-brand-soft",
                     )}
                     onMouseEnter={() => setActiveIndex(realIdx)}

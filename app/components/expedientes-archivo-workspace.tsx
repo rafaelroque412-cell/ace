@@ -178,9 +178,19 @@ const BASE_PESTANAS = "archivo";
 // "expTab"/"active" se conservan como marcadores literales (no aportan CSS
 // propio) porque el tour guiado (onboarding-tour.tsx) las busca por
 // `document.querySelector(".expTab:first-of-type")`.
+//
+// El color de fondo/texto NO va incondicional en la base: Tailwind v4 genera
+// las utilidades en el orden en que las descubre al escanear (no en un orden
+// fijo), así que una utilidad nucleo como `bg-transparent` puede terminar
+// generada DESPUES de una utilidad de nuestro tema (`bg-exp-brand-soft`) y
+// ganarle la cascada aunque tengan la misma especificidad — la pestaña
+// activa se quedaba sin resaltar. Con el color condicionado en cada llamada
+// (nunca las dos clases del mismo tipo en el mismo elemento) el orden de
+// generación deja de importar.
 const EXP_TAB =
-  "expTab relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-exp border-0 bg-transparent px-[18px] py-3.5 text-sm font-semibold text-exp-muted " +
-  "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-exp-line-soft hover:text-exp-ink";
+  "expTab relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-exp border-0 px-[18px] py-3.5 text-sm font-semibold " +
+  "transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]";
+const EXP_TAB_INACTIVE = "bg-transparent text-exp-muted hover:bg-exp-line-soft hover:text-exp-ink";
 const EXP_TAB_ACTIVE = "active bg-exp-brand-soft text-exp-brand";
 
 const TOUR_STEPS: TourStep[] = [
@@ -1470,7 +1480,7 @@ export function ExpedientesArchivoWorkspace({
           <button
             type="button"
             {...propsPestana(BASE_PESTANAS, "buscar", tab)}
-            className={cn(EXP_TAB, tab === "buscar" && EXP_TAB_ACTIVE)}
+            className={cn(EXP_TAB, tab === "buscar" ? EXP_TAB_ACTIVE : EXP_TAB_INACTIVE)}
             onClick={() => setTab("buscar")}
           >
             <Search size={15} /> Buscar
@@ -1479,7 +1489,7 @@ export function ExpedientesArchivoWorkspace({
             <button
               type="button"
               {...propsPestana(BASE_PESTANAS, "subir", tab)}
-              className={cn(EXP_TAB, tab === "subir" && EXP_TAB_ACTIVE)}
+              className={cn(EXP_TAB, tab === "subir" ? EXP_TAB_ACTIVE : EXP_TAB_INACTIVE)}
               onClick={() => setTab("subir")}
               onMouseEnter={() => void importarSubir()}
               onFocus={() => void importarSubir()}
@@ -1500,7 +1510,7 @@ export function ExpedientesArchivoWorkspace({
             <button
               type="button"
               {...propsPestana(BASE_PESTANAS, "responder", tab)}
-              className={cn(EXP_TAB, tab === "responder" && EXP_TAB_ACTIVE)}
+              className={cn(EXP_TAB, tab === "responder" ? EXP_TAB_ACTIVE : EXP_TAB_INACTIVE)}
               onClick={() => setTab("responder")}
               onMouseEnter={() => void importarRespuesta()}
               onFocus={() => void importarRespuesta()}
@@ -1893,12 +1903,15 @@ export function ExpedientesArchivoWorkspace({
           return (
             <div
               key={toast.id}
+              // `!` porque se combina con EXP_TOAST, que ya trae `bg-exp-ink`
+              // sin condición (lo usan también los UndoToasts, sin variante de
+              // color) — ver el mismo comentario en borrador-editor.tsx.
               className={cn(
                 EXP_TOAST,
                 "max-w-[400px]",
-                toast.kind === "success" && "bg-exp-success",
-                toast.kind === "error" && "bg-exp-danger",
-                toast.kind === "warning" && "bg-exp-warning",
+                toast.kind === "success" && "!bg-exp-success",
+                toast.kind === "error" && "!bg-exp-danger",
+                toast.kind === "warning" && "!bg-exp-warning",
               )}
               role="status"
             >
