@@ -34,6 +34,7 @@ import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import type {
   DuplicateMatch,
   ExpedienteItem,
+  ExpedienteLegajoItem,
   PdfInventory,
   SortBy,
   SortDir,
@@ -353,6 +354,9 @@ export function ExpedientesArchivoWorkspace({
   const [siguientePaquete, setSiguientePaquete] = useState<string | null>(null);
   // Modo de subida: uno por uno (wizard) o por lotes (varios PDF a la vez).
   const [uploadMode, setUploadMode] = useState<"single" | "batch">("single");
+  // Expediente (legajo) elegido para adjuntar el documento, o null para crear
+  // uno nuevo. Ver docs/superpowers/plans/2026-08-27-legajo-ui-wizard-slideover.md.
+  const [selectedLegajo, setSelectedLegajo] = useState<ExpedienteLegajoItem | null>(null);
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [replaceExp, setReplaceExp] = useState<ExpedienteItem | null>(null);
@@ -879,6 +883,9 @@ export function ExpedientesArchivoWorkspace({
 
     const formData = new FormData();
     formData.append("file", file);
+    if (selectedLegajo) {
+      formData.append("expedienteId", selectedLegajo.id);
+    }
     for (const [key, value] of Object.entries(form)) {
       if (value !== "" && value !== null && value !== undefined) {
         formData.append(key, String(value));
@@ -936,6 +943,7 @@ export function ExpedientesArchivoWorkspace({
       setAutoFilledFields(new Set());
       setDuplicates([]);
       setDupsDismissed(false);
+      setSelectedLegajo(null);
       lastDupSignatureRef.current = "";
       setWizardStep(0);
       setUploadProgress(0);
@@ -1617,6 +1625,8 @@ export function ExpedientesArchivoWorkspace({
           wizardStep={wizardStep}
           setWizardStep={setWizardStep}
           canProceedStep={canProceedStep}
+          selectedLegajo={selectedLegajo}
+          setSelectedLegajo={setSelectedLegajo}
           uploading={uploading}
           uploadProgress={uploadProgress}
           uploadExpediente={uploadExpediente}
