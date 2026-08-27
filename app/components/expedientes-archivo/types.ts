@@ -22,6 +22,10 @@ export type ExpedienteItem = {
   nro_piso: string | null;
   nro_local: string | null;
   folio: string | null;
+  // Legajo al que pertenece este documento + folio correlativo dentro de él
+  // (ver lib/expedientes-archivo.ts -> ExpedienteArchivo para el porqué).
+  expediente_id: string | null;
+  numero_folio: number | null;
   observaciones: string | null;
   persona_tipo: string | null;
   persona_documento: string | null;
@@ -153,6 +157,28 @@ export type DuplicateMatch = {
   title: string;
   anio: number | null;
   status: string;
+};
+
+/** Legajo (expedientes_archivo_legajos): agrupa uno o más documentos. Para el
+ *  selector "añadir documento a legajo existente" (fase de UI, fuera de este plan). */
+export type ExpedienteLegajoItem = {
+  id: string;
+  sgd_expediente: string | null;
+  serie_documento: string | null;
+  anio: number | null;
+  asunto: string | null;
+  materia: string | null;
+  oficina: string | null;
+  tipo_almacenamiento: string | null;
+  nro_archivador: string | null;
+  nro_paquete: string | null;
+  nro_estante: string | null;
+  nro_piso: string | null;
+  nro_local: string | null;
+  documentos_count: number;
+  documentos_error_count: number;
+  documentos_pending_count: number;
+  created_at: string;
 };
 
 /** Resultado de autocompletar PDF con IA / extractores deterministas */

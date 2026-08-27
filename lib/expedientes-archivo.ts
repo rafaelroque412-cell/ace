@@ -100,6 +100,13 @@ export type ExpedienteArchivo = {
   oficina: string | null;
   // Oficina emisora resuelta (FK a expedientes_oficinas), poblada por trigger.
   oficina_id: string | null;
+  // Legajo al que pertenece este documento (ver ExpedienteLegajo más abajo).
+  // Null solo si el backfill de docs/supabase/expediente-legajo.sql no corrió
+  // aún — no debería pasar en producción tras aplicar esa migración.
+  expediente_id: string | null;
+  // Folio correlativo DENTRO del legajo (1, 2, 3...), lo asigna un trigger al
+  // insertar. No confundir con el campo `folio` (nº de páginas del PDF).
+  numero_folio: number | null;
   // Almacenamiento físico
   tipo_almacenamiento: ContenedorTipo | null;
   nro_archivador: string | null;
@@ -126,6 +133,39 @@ export type ExpedienteArchivo = {
   error_message: string | null;
   body_text?: string | null;
   metadata: Record<string, unknown>;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// El legajo (expedientes_archivo_legajos): la carpeta física que agrupa uno o
+// más documentos. Ver docs/supabase/expediente-legajo.sql para el porqué está
+// separado de ExpedienteArchivo (el documento individual).
+export type ExpedienteLegajo = {
+  id: string;
+  sgd_expediente: string | null;
+  serie_documento: string | null;
+  anio: number | null;
+  asunto: string | null;
+  materia: string | null;
+  oficina: string | null;
+  oficina_id: string | null;
+  persona_tipo: PersonaTipo | null;
+  persona_documento: string | null;
+  persona_nombre: string | null;
+  tipo_almacenamiento: ContenedorTipo | null;
+  nro_archivador: string | null;
+  nro_paquete: string | null;
+  empastado: boolean | null;
+  color_archivador: string | null;
+  nro_estante: string | null;
+  nro_piso: string | null;
+  nro_local: string | null;
+  observaciones: string | null;
+  documentos_count: number;
+  documentos_error_count: number;
+  documentos_pending_count: number;
+  next_folio: number;
   uploaded_by: string | null;
   created_at: string;
   updated_at: string;
