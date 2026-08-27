@@ -181,6 +181,27 @@ export type ExpedienteLegajoItem = {
   created_at: string;
 };
 
+/** Un documento (folio) dentro de un legajo — resumen para el slide-over. */
+export type LegajoDocumentoResumen = {
+  id: string;
+  numero_folio: number | null;
+  tipo_documento: string | null;
+  title: string;
+  anio: number | null;
+  status: "uploaded" | "processing" | "indexed" | "error";
+  error_message: string | null;
+  file_name: string;
+  file_size: number;
+  created_at: string;
+};
+
+/** Detalle de un legajo + sus documentos, tal como lo devuelve
+ *  GET /api/expedientes-archivo/legajos/[id]. */
+export type LegajoDetalle = {
+  legajo: ExpedienteLegajoItem;
+  documentos: LegajoDocumentoResumen[];
+};
+
 /** Resultado de autocompletar PDF con IA / extractores deterministas */
 export type PdfInventory = {
   numeroExpediente?: string | null;

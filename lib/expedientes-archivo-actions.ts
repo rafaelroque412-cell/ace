@@ -14,7 +14,7 @@
 import * as z from "zod/mini";
 import { TIPOS_DOCUMENTO, type TipoDocumento } from "./document-number";
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "./upload-limits";
-import type { ChatAnswer, DuplicateMatch, ExpedienteLegajoItem, PdfInventory, SearchResult } from "@/app/components/expedientes-archivo/types";
+import type { ChatAnswer, DuplicateMatch, ExpedienteLegajoItem, LegajoDetalle, PdfInventory, SearchResult } from "@/app/components/expedientes-archivo/types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
@@ -133,6 +133,20 @@ export async function searchLegajos(
     return { legajos: data.legajos ?? [] };
   } catch {
     return empty;
+  }
+}
+
+/** Trae un legajo y sus documentos (folios), para la sección "Otros
+ *  documentos de este expediente" del slide-over. */
+export async function fetchLegajoDetalle(id: string): Promise<LegajoDetalle | null> {
+  try {
+    const res = await fetch(`/api/expedientes-archivo/legajos/${id}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as Partial<LegajoDetalle>;
+    if (!data.legajo) return null;
+    return { legajo: data.legajo, documentos: data.documentos ?? [] };
+  } catch {
+    return null;
   }
 }
 
