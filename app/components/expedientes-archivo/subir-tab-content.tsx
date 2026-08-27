@@ -45,6 +45,7 @@ import { maxPdfSizeLabel } from "@/lib/upload-limits";
 import type {
   DuplicateMatch,
   ExpedienteItem,
+  ExpedienteLegajoItem,
   PdfInventory,
   SubirForm,
   WizardStep,
@@ -53,6 +54,7 @@ import type {
 import type { UbicacionSugerida } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
 import { BatchUpload } from "./batch-upload";
+import { LegajoPicker } from "./legajo-picker";
 import { SkeletonList } from "./skeleton";
 import {
   EXP_EMPTY,
@@ -117,6 +119,10 @@ export type SubirTabContentProps = {
   wizardStep: WizardStep;
   setWizardStep: React.Dispatch<React.SetStateAction<WizardStep>>;
   canProceedStep: () => { ok: boolean; reason?: string };
+  // Expediente (legajo) elegido para adjuntar el documento, o null para crear
+  // uno nuevo (Fase 2 del legajo multidocumento).
+  selectedLegajo: ExpedienteLegajoItem | null;
+  setSelectedLegajo: (l: ExpedienteLegajoItem | null) => void;
 
   // Upload
   uploading: boolean;
@@ -271,6 +277,8 @@ export function SubirTabContent({
   wizardStep,
   setWizardStep,
   canProceedStep,
+  selectedLegajo,
+  setSelectedLegajo,
   uploading,
   uploadProgress,
   uploadExpediente,
@@ -423,6 +431,9 @@ export function SubirTabContent({
 
         {wizardStep === 0 ? (
           <>
+            <div className={EXP_FORM_SECTION}>
+              <LegajoPicker selected={selectedLegajo} onSelect={setSelectedLegajo} />
+            </div>
             <div className={EXP_FORM_SECTION}>
               <div className={EXP_FORM_SECTION_HEADER}>
                 <h3 className={EXP_FORM_SECTION_TITLE}>
@@ -1244,6 +1255,7 @@ export function SubirTabContent({
                     setAutoFilledFields(new Set());
                     setDuplicates([]);
                     setDupsDismissed(false);
+                    setSelectedLegajo(null);
                     lastDupSignatureRef.current = "";
                     setWizardStep(0);
                     showToast("Subida cancelada", "info");
