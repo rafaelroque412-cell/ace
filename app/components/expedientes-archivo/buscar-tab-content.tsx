@@ -217,18 +217,18 @@ export function BuscarTabContent({
           type="button"
           aria-pressed={mode === "buscar"}
           className={cn(
-            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand",
-            mode === "buscar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1px_var(--color-exp-brand)]",
+            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
+            mode === "buscar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]",
           )}
           onClick={() => changeMode("buscar")}
         >
           <span
             className={cn(
-              "grid size-[38px] shrink-0 place-items-center rounded-[10px] bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              mode === "buscar" && "bg-exp-brand text-white",
+              "grid size-11 shrink-0 place-items-center rounded-xl bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "buscar" && "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]",
             )}
           >
-            <Search size={18} />
+            <Search size={19} />
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="text-sm font-bold text-exp-ink">Buscar</span>
@@ -239,18 +239,18 @@ export function BuscarTabContent({
           type="button"
           aria-pressed={mode === "preguntar"}
           className={cn(
-            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand",
-            mode === "preguntar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1px_var(--color-exp-brand)]",
+            "flex items-center gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 text-left transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-exp-brand hover:shadow-exp-sm",
+            mode === "preguntar" && "border-exp-brand bg-exp-brand/[0.06] shadow-[inset_0_0_0_1.5px_var(--color-exp-brand)]",
           )}
           onClick={() => changeMode("preguntar")}
         >
           <span
             className={cn(
-              "grid size-[38px] shrink-0 place-items-center rounded-[10px] bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              mode === "preguntar" && "bg-exp-brand text-white",
+              "grid size-11 shrink-0 place-items-center rounded-xl bg-exp-line-soft text-exp-muted transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+              mode === "preguntar" && "bg-exp-brand text-white shadow-[0_4px_10px_-2px_rgba(15,118,110,0.4)]",
             )}
           >
-            <Bot size={18} />
+            <Bot size={19} />
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="text-sm font-bold text-exp-ink">Preguntar a la IA</span>
@@ -412,11 +412,17 @@ export function BuscarTabContent({
         </div>
       ) : null}
 
+      {/* Respuesta de la IA — el momento protagonista de esta pestaña: es la
+          única vez que el sistema le da al usuario una respuesta lista en vez
+          de una lista de coincidencias para revisar. Mismo lenguaje visual
+          que el preview de extracción de la pestaña Subir (barra superior en
+          degradado, insignia con pulso), a propósito, para que "esto es la
+          IA trabajando por ti" se lea igual en todo el módulo. */}
       {answer ? (
-        <div className="my-4 rounded-exp border border-exp-brand bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_100%)] p-5">
+        <div className="relative my-4 animate-exp-fade-in overflow-hidden rounded-exp border border-exp-brand/40 bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_60%)] p-5 shadow-[0_1px_2px_rgba(15,118,110,0.06),0_16px_36px_-14px_rgba(15,118,110,0.35)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(90deg,var(--color-exp-brand)_0%,#5eead4_50%,var(--color-exp-brand)_100%)] before:content-['']">
           <div className="mb-3 flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-full bg-exp-brand text-white">
-              <Sparkles size={16} />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-exp-brand text-white shadow-[0_0_0_4px_rgba(15,118,110,0.12)]">
+              <Sparkles size={16} className="animate-exp-pulse" />
             </div>
             <div>
               <h3 className="m-0 text-sm font-bold text-exp-ink">Respuesta de la IA</h3>
@@ -435,7 +441,7 @@ export function BuscarTabContent({
                 <button
                   key={`${source.expedienteId}-${index}`}
                   type="button"
-                  className="flex w-full items-center gap-1.5 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-1.5 text-left text-xs transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:bg-exp-brand-soft"
+                  className="flex w-full items-center gap-1.5 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-1.5 text-left text-xs transition-all duration-[120ms] ease-linear hover:-translate-y-px hover:border-exp-brand hover:bg-exp-brand-soft hover:shadow-exp-sm"
                   onClick={() => void openExpedienteById(source.expedienteId)}
                 >
                   <span className="shrink-0 rounded bg-exp-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
@@ -520,41 +526,51 @@ export function BuscarTabContent({
           <div className={expStatCardClass("statBrand")}>
             <div className={EXP_STAT_HEADER}>
               <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Total</span>
-              <FileText className="size-5 text-exp-muted opacity-60" size={16} />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-exp-brand-soft text-exp-brand">
+                <FileText size={14} />
+              </span>
             </div>
-            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.total}</span>
+            <span className="font-mono text-[28px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.total}</span>
             <span className="mt-0.5 text-[11px] text-exp-muted">expedientes en el archivo</span>
           </div>
           <div className={expStatCardClass("statSuccess")}>
             <div className={EXP_STAT_HEADER}>
               <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Indexados</span>
-              <CheckCircle2 className="size-5 text-exp-muted opacity-60" size={16} />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-exp-success-soft text-exp-success">
+                <CheckCircle2 size={14} />
+              </span>
             </div>
-            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.indexed}</span>
+            <span className="font-mono text-[28px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.indexed}</span>
             <span className="mt-0.5 text-[11px] text-exp-muted">listos para buscar</span>
           </div>
           <div className={expStatCardClass("statWarning")}>
             <div className={EXP_STAT_HEADER}>
               <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Pendientes</span>
-              <Loader2 className="size-5 text-exp-muted opacity-60" size={16} />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-exp-warning-soft text-exp-warning">
+                <Loader2 size={14} className={displayStats.pending > 0 ? EXP_SPIN : ""} />
+              </span>
             </div>
-            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.pending}</span>
+            <span className="font-mono text-[28px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.pending}</span>
             <span className="mt-0.5 text-[11px] text-exp-muted">procesándose ahora</span>
           </div>
           <div className={expStatCardClass("statDanger")}>
             <div className={EXP_STAT_HEADER}>
               <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Con error</span>
-              <AlertCircle className="size-5 text-exp-muted opacity-60" size={16} />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-exp-danger-soft text-exp-danger">
+                <AlertCircle size={14} />
+              </span>
             </div>
-            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.error}</span>
+            <span className="font-mono text-[28px] font-extrabold leading-[1.1] text-exp-ink">{displayStats.error}</span>
             <span className="mt-0.5 text-[11px] text-exp-muted">requieren atención</span>
           </div>
           <div className={expStatCardClass("statInfo")}>
             <div className={EXP_STAT_HEADER}>
               <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">Tamaño</span>
-              <FileUp className="size-5 text-exp-muted opacity-60" size={16} />
+              <span className="flex size-7 items-center justify-center rounded-lg bg-exp-info-soft text-exp-info">
+                <FileUp size={14} />
+              </span>
             </div>
-            <span className="font-mono text-[26px] font-extrabold leading-[1.1] text-exp-ink">
+            <span className="font-mono text-[28px] font-extrabold leading-[1.1] text-exp-ink">
               {formatBytes(displayStats.totalBytes)}
             </span>
             <span className="mt-0.5 text-[11px] text-exp-muted">en Supabase Storage</span>
