@@ -1,19 +1,28 @@
 "use client";
 
-import { Download, Loader2, Pencil, RefreshCw, Save, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, FileText, Loader2, Pencil, RefreshCw, Save, Sparkles } from "lucide-react";
 import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, CONTENEDOR_TIPO_LABELS } from "@/lib/expedientes-archivo";
+import { fetchLegajoDetalle } from "@/lib/expedientes-archivo-actions";
 import { ExpSlideOver } from "./slide-over-shell";
-import type { ExpedienteItem } from "./types";
+import type { ExpedienteItem, LegajoDetalle, LegajoDocumentoResumen } from "./types";
 import {
   EXP_FIELD,
   EXP_FIELD_CONTROL,
   EXP_FIELD_LABEL,
   EXP_FIELD_TEXTAREA,
   EXP_HELP_TEXT,
+  EXP_LIST,
+  EXP_LIST_ITEM,
+  EXP_LIST_ITEM_BODY,
+  EXP_LIST_ITEM_ICON,
+  EXP_LIST_ITEM_META,
+  EXP_LIST_ITEM_TITLE,
   EXP_SLIDE_OVER_BODY,
   EXP_SLIDE_OVER_FOOTER,
   EXP_SPIN,
   expBtnClass,
+  expStatusClass,
 } from "./estilos";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +40,10 @@ export type SlideOverDetalleProps = {
   onSetEditField: (key: string, value: unknown) => void;
   onSaveEdits: () => void;
   onReplace: (exp: ExpedienteItem) => void;
+  // Abre OTRO documento del mismo expediente sin cerrar el slide-over (Fase 2
+  // del legajo multidocumento).
+  onOpenDocumentoId: (id: string) => void;
+  statusLabel: (s: LegajoDocumentoResumen["status"]) => string;
 };
 
 export function ExpedienteSlideOver({
@@ -47,7 +60,35 @@ export function ExpedienteSlideOver({
   onSetEditField,
   onSaveEdits,
   onReplace,
+  onOpenDocumentoId,
+  statusLabel,
 }: SlideOverDetalleProps) {
+  // Otros documentos del mismo legajo: se recarga cada vez que se abre un
+  // expediente distinto (openExp.id cambia también al saltar entre folios).
+  const [legajoDetalle, setLegajoDetalle] = useState<LegajoDetalle | null>(null);
+  const [loadingLegajo, setLoadingLegajo] = useState(false);
+
+  useEffect(() => {
+    if (!openExp.expediente_id) {
+      setLegajoDetalle(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingLegajo(true);
+    void fetchLegajoDetalle(openExp.expediente_id)
+      .then((data) => {
+        if (!cancelled) setLegajoDetalle(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLegajo(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openExp.expediente_id, openExp.id]);
+
+  const otrosDocumentos = (legajoDetalle?.documentos ?? []).filter((d) => d.id !== openExp.id);
+
   // Escape, foco atrapado y bloqueo de scroll los aporta ExpSlideOver (Radix).
   return (
     <ExpSlideOver
@@ -84,6 +125,46 @@ export function ExpedienteSlideOver({
               {openExp.metadata.tokenUsage.analysis
                 ? ` · análisis ${openExp.metadata.tokenUsage.analysis.model}`
                 : ""}
+            </div>
+          ) : null}
+          {otrosDocumentos.length > 0 || loadingLegajo ? (
+            <div className="mt-4">
+              <label className={EXP_FIELD_LABEL}>
+                Otros documentos de este expediente
+                {legajoDetalle ? ` (${legajoDetalle.documentos.length})` : ""}
+              </label>
+              {loadingLegajo ? (
+                <span className={cn(EXP_HELP_TEXT, "mt-1")}>
+                  <Loader2 size={12} className={EXP_SPIN} /> Cargando…
+                </span>
+              ) : (
+                <ul className={cn(EXP_LIST, "mt-1.5 list-none p-0")}>
+                  {otrosDocumentos.map((doc) => (
+                    <li key={doc.id}>
+                      <button
+                        type="button"
+                        className={cn(EXP_LIST_ITEM, "w-full text-left")}
+                        onClick={() => onOpenDocumentoId(doc.id)}
+                      >
+                        <div className={EXP_LIST_ITEM_ICON}>
+                          <FileText size={16} />
+                        </div>
+                        <div className={EXP_LIST_ITEM_BODY}>
+                          <p className={EXP_LIST_ITEM_TITLE}>
+                            {doc.numero_folio ? `Folio ${doc.numero_folio} · ` : ""}
+                            {doc.title}
+                          </p>
+                          <div className={EXP_LIST_ITEM_META}>
+                            {doc.tipo_documento ? <span>{doc.tipo_documento}</span> : null}
+                            {doc.anio ? <span>· {doc.anio}</span> : null}
+                            <span className={expStatusClass(doc.status)}>{statusLabel(doc.status)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : null}
           {editMode ? (
