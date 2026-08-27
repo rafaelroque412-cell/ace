@@ -14,6 +14,7 @@ import {
   type ExpedienteArchivo,
   extractExpedienteNumber,
   extractFecha,
+  extractSerieDocumental,
   getExpedientesNamespace,
 } from "./expedientes-archivo";
 
@@ -311,18 +312,23 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       return { analysis, estimatedCostUsd: roundCostUsd(estimatedCostUsd), ocr, totalTokens };
     })();
 
-    // El dato del usuario manda; si no lo dio, se usa lo detectado/IA.
-    // sgd_expediente es MANUAL (N° del sistema documental externo): nunca se
-    // autocompleta, solo se persiste lo que el usuario haya escrito.
+    // El dato del usuario manda; si no lo dio, se usa lo detectado (regex de
+    // la cabecera) o la IA. sgd_expediente es MANUAL (N° del sistema
+    // documental externo): nunca se autocompleta, solo se persiste lo que el
+    // usuario haya escrito.
     const sgdExpediente = asText(expediente.sgd_expediente);
-    const tipoDocumento = asText(expediente.tipo_documento) ?? insights.tipoDocumento;
     // Serie documental = denominación oficial literal del documento (ej.
     // "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A"). Prioridad: lo que puso el
-    // usuario > lo que la IA leyó LITERAL del encabezado > fallback compuesto
-    // tipo + número detectado por regex.
+    // usuario > la cabecera detectada por regex (fiable, mismo criterio que
+    // extractExpedienteInventory) > lo que la IA leyó LITERAL > fallback
+    // compuesto tipo + número detectado por regex.
+    const serieDetectada = extractSerieDocumental(text);
+    const tipoDocumento =
+      asText(expediente.tipo_documento) ?? serieDetectada?.tipoDocumento ?? insights.tipoDocumento;
     const numeroDetectado = extractExpedienteNumber(expediente.title, text);
     const serieDocumento =
       asText(expediente.serie_documento) ??
+      serieDetectada?.serie ??
       insights.serieDocumental ??
       (numeroDetectado ? [tipoDocumento, numeroDetectado].filter(Boolean).join(" ") : null);
     const oficina = asText(expediente.oficina) ?? insights.oficina;
@@ -331,7 +337,9 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     const materia = asText(expediente.materia) ?? insights.materia;
     const resumen = asText(expediente.resumen) ?? insights.resumen;
     const anio =
-      expediente.anio ?? (fecha ? Number.parseInt(fecha.slice(0, 4), 10) : undefined);
+      expediente.anio ??
+      serieDetectada?.anio ??
+      (fecha ? Number.parseInt(fecha.slice(0, 4), 10) : undefined);
 
     const chunkRows: ExpedienteChunkInsert[] = chunks.map((chunk) => ({
       chunk_index: chunk.index,
@@ -542,13 +550,26 @@ export async function extractExpedienteInventory(
     }
     inventory.extractionMethod = "deterministic";
   }
+  // Serie documental: la denominación oficial de la cabecera ("RESOLUCIÓN N°
+  // 004-2024-...", "INFORME N° 1555-2026-...") sigue un patrón fijo del
+  // formato municipal, así que se detecta con regex ANTES de preguntarle a la
+  // IA — más fiable que el modelo (nunca falla por límite de tokens ni
+  // alucina el número) y de paso da gratis el tipo de documento y el año
+  // (el número de la cabecera trae su propio año: "004-2024").
+  const serieDetectada = extractSerieDocumental(text);
+  if (serieDetectada) {
+    inventory.serieDocumental = serieDetectada.serie;
+    inventory.tipoDocumento = serieDetectada.tipoDocumento;
+    if (serieDetectada.anio) inventory.anio = serieDetectada.anio;
+    inventory.extractionMethod = "deterministic";
+  }
 
   // IA para campos semanticos
   const { insights } = await analyzeExpedienteWithAi(text);
   if (insights.asunto) inventory.asunto = insights.asunto;
   if (insights.materia) inventory.materia = insights.materia;
-  if (insights.tipoDocumento) inventory.tipoDocumento = insights.tipoDocumento;
-  if (insights.serieDocumental) inventory.serieDocumental = insights.serieDocumental;
+  if (!inventory.tipoDocumento && insights.tipoDocumento) inventory.tipoDocumento = insights.tipoDocumento;
+  if (!inventory.serieDocumental && insights.serieDocumental) inventory.serieDocumental = insights.serieDocumental;
   if (insights.oficina) inventory.oficina = insights.oficina;
   if (insights.personaNombre) inventory.personaNombre = insights.personaNombre;
   if (insights.personaTipo) inventory.personaTipo = insights.personaTipo;

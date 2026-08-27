@@ -266,18 +266,27 @@ export type SerieDocumentalDetectada = {
 // Mapea el tipo de la cabecera al catálogo del formulario de subida.
 const SERIE_TIPO_LABEL: Record<string, string> = {
   CARTA: "Carta",
+  DECRETO: "Decreto",
   INFORME: "Informe",
   MEMORANDO: "Memorando",
   MEMORANDUM: "Memorando",
   OFICIO: "Oficio",
+  ORDENANZA: "Ordenanza",
+  RESOLUCION: "Resolución",
 };
 
 // "N°", "Nº", "Nª", "N.", "NRO", "Nro." (variantes reales + ruido de OCR).
 // Case-sensitive a propósito: la cabecera va en MAYÚSCULAS; así no captura
 // menciones del cuerpo ("mediante informe administrativo...").
+//
+// El segundo grupo (modificador entre el tipo y "N°") NO estaba pensado para
+// resoluciones/decretos: "RESOLUCIÓN DE ALCALDÍA", "RESOLUCIÓN GERENCIAL",
+// "DECRETO DE ALCALDÍA" llevan 1-3 palabras variables, no una lista fija como
+// los modificadores de OFICIO. Se generaliza a "hasta 5 palabras en
+// mayúsculas" (cubre también MÚLTIPLE/CIRCULAR/TÉCNICO/LEGAL sin listarlas).
 const seriePattern = new RegExp(
-  "\\b(INFORME|MEMOR[ÁA]NDUM|MEMORANDO|OFICIO|CARTA)" +
-    "(\\s+(?:M[ÚU]LTIPLE|CIRCULAR|T[ÉE]CNICO|LEGAL))?" +
+  "\\b(RESOLUCI[ÓO]N|DECRETO|ORDENANZA|INFORME|MEMOR[ÁA]NDUM|MEMORANDO|OFICIO|CARTA)" +
+    "((?:\\s+[A-ZÁÉÍÓÚÑ]{2,}){0,5})" +
     "\\s*N(?:RO|ro)?\\.?\\s*[°ºª]?\\s*" +
     "(\\d{1,6})\\s*[-–]\\s*(\\d{4})" +
     "((?:\\s*[-/.]\\s*[A-ZÑ][A-ZÑ0-9]*(?:[-/.][A-ZÑ0-9]+)*)*)",

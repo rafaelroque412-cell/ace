@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, contenedorTipoLabel, extractExpedienteNumber, extractFecha, getExpedientesNamespace, normalizeCatalogValue, normalizeContenedorTipo } from "@/lib/expedientes-archivo";
+import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, contenedorTipoLabel, extractExpedienteNumber, extractFecha, extractSerieDocumental, getExpedientesNamespace, normalizeCatalogValue, normalizeContenedorTipo } from "@/lib/expedientes-archivo";
 import { expedienteSearchSchema } from "@/lib/expedientes-archivo-schema";
 
 describe("extractExpedienteNumber", () => {
@@ -17,6 +17,62 @@ describe("extractExpedienteNumber", () => {
 
   it("devuelve null cuando no hay numero", () => {
     expect(extractExpedienteNumber("documento", "texto sin numeracion alguna")).toBeNull();
+  });
+});
+
+describe("extractSerieDocumental", () => {
+  it("detecta RESOLUCION con modificador variable (DE ALCALDIA)", () => {
+    const detectado = extractSerieDocumental(
+      "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A\n\nVISTOS: el informe...",
+    );
+    expect(detectado).toEqual({
+      serie: "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A",
+      tipoDocumento: "Resolución",
+      numero: "004",
+      anio: 2024,
+    });
+  });
+
+  it("detecta DECRETO y ORDENANZA (antes ausentes del catalogo, causaban null)", () => {
+    expect(extractSerieDocumental("DECRETO DE ALCALDÍA N° 002-2024-MDCH")?.tipoDocumento).toBe(
+      "Decreto",
+    );
+    expect(extractSerieDocumental("ORDENANZA MUNICIPAL N° 005-2024-MDCH")?.tipoDocumento).toBe(
+      "Ordenanza",
+    );
+  });
+
+  it("detecta INFORME, OFICIO MULTIPLE y MEMORANDO sin regresion", () => {
+    expect(extractSerieDocumental("INFORME N°1555-2026-MDCH/SGEIM-OAD-RTC")?.serie).toBe(
+      "INFORME N°1555-2026-MDCH/SGEIM-OAD-RTC",
+    );
+    expect(extractSerieDocumental("OFICIO MÚLTIPLE N° 012-2024-MDCH-A")?.tipoDocumento).toBe(
+      "Oficio",
+    );
+    expect(extractSerieDocumental("MEMORANDO NRO 22-2026-MDCH/OL")?.tipoDocumento).toBe(
+      "Memorando",
+    );
+  });
+
+  it("el tipo de documento sale de la primera palabra de la cabecera", () => {
+    expect(extractSerieDocumental("CARTA N° 8-2025-MDCH")?.tipoDocumento).toBe("Carta");
+  });
+
+  it("el anio sale del numero de la cabecera, no de una mencion en el cuerpo", () => {
+    const detectado = extractSerieDocumental(
+      "OFICIO N° 010-2025-MDCH\n\nSe adjunta copia del año 2019 anterior.",
+    );
+    expect(detectado?.anio).toBe(2025);
+  });
+
+  it("no confunde una mencion en minusculas del cuerpo con la cabecera", () => {
+    expect(
+      extractSerieDocumental("mediante el informe tecnico se determina lo siguiente"),
+    ).toBeNull();
+  });
+
+  it("devuelve null sin cabecera reconocible", () => {
+    expect(extractSerieDocumental("documento sin numeracion")).toBeNull();
   });
 });
 
