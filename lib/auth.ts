@@ -283,8 +283,20 @@ export function getOfficeFilter(user: SessionUser): string | null {
 // contratación. Necesidades queda FUERA a propósito: la crea y gestiona el
 // área usuaria que pide algo, de cualquier oficina. Admin ve todo, igual que
 // el resto del scope por oficina (getOfficeFilter, getArchivoScopeLevel).
-export function puedeUsarProcesos(user: SessionUser): boolean {
-  return user.isAdmin || esOficinaAbastecimiento(user.entity);
+//
+// `user.entity` es la municipalidad entera, no la oficina del usuario dentro
+// de ella — revisar solo `entity` deja fuera a un DEC cuya entidad no dice
+// "abastecimiento" aunque su OFICINA sí lo sea. `oficinaNombre` (resuelto por
+// el caller desde `user.oficinaId`, ver AppShell) es opcional para no romper
+// el resto de llamadas existentes, pero SIEMPRE debe pasarse cuando se tenga
+// a mano (mismo criterio ya reforzado en lib/supabase/middleware.ts, el gate
+// real de estas rutas).
+export function puedeUsarProcesos(user: SessionUser, oficinaNombre?: string | null): boolean {
+  return (
+    user.isAdmin ||
+    esOficinaAbastecimiento(user.entity) ||
+    esOficinaAbastecimiento(oficinaNombre)
+  );
 }
 
 // ── Scope del archivo de expedientes (buscar / subir / responder) ───────────

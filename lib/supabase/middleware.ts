@@ -85,11 +85,28 @@ export async function updateSession(request: NextRequest) {
   if (user && esRutaDeProcesos(pathname)) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, entity")
+      .select("role, entity, oficina_id")
       .eq("id", user.id)
       .maybeSingle();
     const esAdmin = profile?.role === "admin";
-    const autorizado = esAdmin || esOficinaAbastecimiento(profile?.entity as string | null | undefined);
+    // `entity` es la municipalidad entera, no la oficina del usuario dentro de
+    // ella (esa vive en `oficina_id` → expedientes_oficinas.nombre) — revisar
+    // solo `entity` bloqueaba a DEC de oficinas cuyo nombre de entidad no dice
+    // "abastecimiento" aunque su OFICINA sí lo sea (ver el mismo bug ya
+    // corregido en app/expedientes-archivo/page.tsx). Se comprueban ambos.
+    let oficinaNombre: string | null = null;
+    if (profile?.oficina_id) {
+      const { data: oficina } = await supabase
+        .from("expedientes_oficinas")
+        .select("nombre")
+        .eq("id", profile.oficina_id)
+        .maybeSingle();
+      oficinaNombre = (oficina?.nombre as string | null | undefined) ?? null;
+    }
+    const autorizado =
+      esAdmin ||
+      esOficinaAbastecimiento(profile?.entity as string | null | undefined) ||
+      esOficinaAbastecimiento(oficinaNombre);
 
     if (!autorizado) {
       if (pathname.startsWith("/api/")) {

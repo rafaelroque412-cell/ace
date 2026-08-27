@@ -62,7 +62,7 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
   const scopeText = user ? scopePhrase(user) : "";
   // Expedientes/Contratos son exclusivos de la oficina de Abastecimiento
   // (ver lib/auth.ts): sin sesión, no se muestran.
-  const puedeProcesos = user ? puedeUsarProcesos(user) : false;
+  const puedeProcesos = user ? puedeUsarProcesos(user, officeName) : false;
 
   // El menu se adapta al rol: los usuarios no administradores no ven las
   // opciones exclusivas de administracion (menos ruido, mas facil de usar).
