@@ -257,11 +257,13 @@ const TOUR_STEPS: TourStep[] = [
 export function ExpedientesArchivoWorkspace({
   canManage,
   isAdmin = false,
-  userEntity = null,
+  userOficina = null,
 }: {
   canManage: boolean;
   isAdmin?: boolean;
-  userEntity?: string | null;
+  // Nombre de la OFICINA del usuario (no de la entidad/municipalidad entera) —
+  // ver el comentario en app/expedientes-archivo/page.tsx.
+  userOficina?: string | null;
 }) {
   const prefs = useExpedientesPreferences();
   const { stack: undoStack, push: pushUndo, execute: executeUndo, dismiss: dismissUndo } =
@@ -318,8 +320,8 @@ export function ExpedientesArchivoWorkspace({
   // Para usuarios no-admin la oficina viene fija de su perfil (aislamiento por
   // oficina): se pre-llena y el servidor la fuerza de todos modos.
   const baseForm = useMemo<SubirForm>(
-    () => (isAdmin ? EMPTY_FORM : { ...EMPTY_FORM, oficina: userEntity ?? "" }),
-    [isAdmin, userEntity],
+    () => (isAdmin ? EMPTY_FORM : { ...EMPTY_FORM, oficina: userOficina ?? "" }),
+    [isAdmin, userOficina],
   );
   const [form, setForm] = useState<SubirForm>(baseForm);
   const [file, setFile] = useState<File | null>(null);
