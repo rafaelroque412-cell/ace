@@ -1686,6 +1686,8 @@ export function ExpedientesArchivoWorkspace({
           onSetEditField={setEditField}
           onSaveEdits={saveExpedienteEdits}
           onReplace={setReplaceExp}
+          onOpenDocumentoId={openExpedienteById}
+          statusLabel={statusLabel}
         />
       ) : null}
 
