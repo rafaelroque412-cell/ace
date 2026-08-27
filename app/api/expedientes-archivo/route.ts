@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { getArchivoScopeLevel, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
+import { getArchivoScopeLevel, canAccessArchivoRow, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
 import { entitiesMatch } from "@/lib/entity-utils";
 import {
   ARCHIVO_COLORES,
   type ExpedienteArchivo,
+  type ExpedienteLegajo,
   normalizeCatalogValue,
   normalizeContenedorTipo,
   normalizePersonaTipo,
@@ -30,7 +31,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const SELECT =
-  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at,expediente_id,numero_folio";
 
 function safeName(name: string) {
   return name
@@ -184,6 +185,77 @@ export async function POST(request: Request) {
     const { storageBucket } = getSupabaseServerConfig();
     const title = formText(formData, "title", 300) ?? file.name;
 
+    // Legajo: si viene `expedienteId`, se adjunta el documento a ese legajo
+    // existente (debe existir y el usuario debe poder acceder a él); si no, se
+    // crea un legajo nuevo con los campos de identificación del caso — mismo
+    // comportamiento de siempre, ahora explícito en dos pasos.
+    const expedienteIdInput = formText(formData, "expedienteId", 60);
+    let legajoId: string;
+    if (expedienteIdInput) {
+      const [legajo] = await supabaseRest<ExpedienteLegajo[]>(
+        `expedientes_archivo_legajos?id=eq.${expedienteIdInput}&select=id,oficina,oficina_id,uploaded_by`,
+      );
+      if (!legajo) {
+        return NextResponse.json({ error: "El legajo indicado no existe" }, { status: 400 });
+      }
+      if (
+        !canAccessArchivoRow(auth.user, {
+          oficina: legajo.oficina,
+          oficinaId: legajo.oficina_id,
+          owner: legajo.uploaded_by,
+        })
+      ) {
+        return NextResponse.json({ error: "El legajo indicado no existe" }, { status: 400 });
+      }
+      legajoId = legajo.id;
+    } else {
+      const legajoPayload: Record<string, unknown> = { uploaded_by: auth.user.id };
+      const legajoFields: Array<[string, unknown]> = [
+        ["sgd_expediente", formText(formData, "sgdExpediente", 120)],
+        ["serie_documento", formText(formData, "serieDocumento", 120)],
+        ["anio", formInt(formData, "anio")],
+        ["asunto", formText(formData, "asunto")],
+        ["materia", formText(formData, "materia", 200)],
+        [
+          "oficina",
+          (() => {
+            const fromForm = formText(formData, "oficina", 200);
+            if (auth.user.isAdmin) return fromForm;
+            if (fromForm && !entitiesMatch(fromForm, auth.user.entity)) return auth.user.entity;
+            return fromForm || auth.user.entity;
+          })(),
+        ],
+        ["persona_tipo", normalizePersonaTipo(formData.get("personaTipo"))],
+        ["persona_documento", formText(formData, "personaDocumento", 20)],
+        ["persona_nombre", formText(formData, "personaNombre", 200)],
+        ["nro_archivador", formText(formData, "nroArchivador", 60)],
+        ["nro_paquete", formText(formData, "nroPaquete", 60)],
+        ["color_archivador", normalizeCatalogValue(formData.get("colorArchivador"), ARCHIVO_COLORES)],
+        ["nro_estante", formText(formData, "nroEstante", 60)],
+        ["nro_piso", formText(formData, "nroPiso", 60)],
+        ["nro_local", formText(formData, "nroLocal", 60)],
+        ["observaciones", formText(formData, "observaciones", 1000)],
+      ];
+      for (const [key, value] of legajoFields) {
+        if (value !== null && value !== "" && value !== undefined) {
+          legajoPayload[key] = value;
+        }
+      }
+      const tipoAlmLegajo = formData.get("tipoAlmacenamiento");
+      if (typeof tipoAlmLegajo === "string" && tipoAlmLegajo.trim()) {
+        legajoPayload.tipo_almacenamiento = normalizeContenedorTipo(tipoAlmLegajo);
+      }
+      const empastadoLegajoRaw = formData.get("empastado");
+      if (empastadoLegajoRaw === "si" || empastadoLegajoRaw === "true") legajoPayload.empastado = true;
+      else if (empastadoLegajoRaw === "no" || empastadoLegajoRaw === "false") legajoPayload.empastado = false;
+
+      const insertedLegajo = await supabaseRest<ExpedienteLegajo[]>(`expedientes_archivo_legajos?select=id`, {
+        body: JSON.stringify(legajoPayload),
+        method: "POST",
+      });
+      legajoId = insertedLegajo[0].id;
+    }
+
     const storagePath = `expedientes/${randomUUID()}-${safeName(file.name)}`;
     await uploadPdfToStorage(storagePath, file);
 
@@ -210,6 +282,7 @@ export async function POST(request: Request) {
       status: "uploaded",
       uploaded_by: auth.user.id,
       metadata: { uploadSource: "web" },
+      expediente_id: legajoId,
     };
 
     // Campos opcionales: solo se envian si tienen valor (esquema canónico).
