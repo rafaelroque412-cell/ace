@@ -384,16 +384,31 @@ export function BuscarTabContent({
         </span>
       ) : null}
 
-      {mode === "preguntar" && !query && !answer ? (
-        <div className="mt-2 flex flex-col gap-1.5" aria-label="Ejemplos de preguntas">
+      {/* Ejemplos: antes solo existían para "Preguntar a la IA" — "Buscar" se
+          quedaba con un cuadro vacío sin ninguna guía de qué escribir para
+          alguien que entra por primera vez. Mismo componente, contenido
+          distinto por modo (términos de búsqueda vs. preguntas). */}
+      {(mode === "buscar" && !query && !results) || (mode === "preguntar" && !query && !answer) ? (
+        <div
+          className="mt-2 flex flex-col gap-1.5"
+          aria-label={mode === "buscar" ? "Ejemplos de búsqueda" : "Ejemplos de preguntas"}
+        >
           <span className={cn(EXP_HELP_TEXT, "mb-1 mt-0")}>
-            <Lightbulb size={12} /> Prueba con una de estas preguntas:
+            <Lightbulb size={12} />
+            {mode === "buscar" ? "Prueba buscando por:" : "Prueba con una de estas preguntas:"}
           </span>
-          {[
-            "¿Cuántos expedientes de contratación hay en 2024?",
-            "¿Dónde está el expediente de la licencia 2024-0345?",
-            "Resúmeme los expedientes de la subgerencia de tránsito",
-          ].map((q) => (
+          {(mode === "buscar"
+            ? [
+                "licencia de funcionamiento",
+                "resolución de alcaldía 2024",
+                "contrato de obra por administración directa",
+              ]
+            : [
+                "¿Cuántos expedientes de contratación hay en 2024?",
+                "¿Dónde está el expediente de la licencia 2024-0345?",
+                "Resúmeme los expedientes de la subgerencia de tránsito",
+              ]
+          ).map((q) => (
             <button
               key={q}
               type="button"
@@ -419,6 +434,16 @@ export function BuscarTabContent({
         <div className={expMessageClass("info")} role="status">
           <Info size={16} />
           <span>{searchMessage}</span>
+        </div>
+      ) : null}
+
+      {/* Mientras busca/consulta lo único que se movía era el ícono del
+          botón — el área de resultados se quedaba vacía y quieta varios
+          segundos (sobre todo el modo IA), dando la sensación de que no
+          pasaba nada. Reusa el mismo esqueleto de la lista principal. */}
+      {searching ? (
+        <div className="my-4">
+          <SkeletonList count={3} />
         </div>
       ) : null}
 
@@ -451,16 +476,27 @@ export function BuscarTabContent({
                 <button
                   key={`${source.expedienteId}-${index}`}
                   type="button"
-                  className="flex w-full items-center gap-1.5 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-1.5 text-left text-xs transition-all duration-[120ms] ease-linear hover:-translate-y-px hover:border-exp-brand hover:bg-exp-brand-soft hover:shadow-exp-sm"
+                  className="flex w-full flex-col gap-1 rounded-lg border border-exp-line bg-exp-panel px-2.5 py-1.5 text-left text-xs transition-all duration-[120ms] ease-linear hover:-translate-y-px hover:border-exp-brand hover:bg-exp-brand-soft hover:shadow-exp-sm"
                   onClick={() => void openExpedienteById(source.expedienteId)}
                 >
-                  <span className="shrink-0 rounded bg-exp-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    E{index + 1}
+                  <span className="flex w-full items-center gap-1.5">
+                    <span className="shrink-0 rounded bg-exp-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      E{index + 1}
+                    </span>
+                    <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-exp-ink">
+                      {source.title}
+                    </span>
+                    <span className="whitespace-nowrap text-[11px] text-exp-muted">{source.citation}</span>
                   </span>
-                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-exp-ink">
-                    {source.title}
-                  </span>
-                  <span className="whitespace-nowrap text-[11px] text-exp-muted">{source.citation}</span>
+                  {/* El modo se anuncia como "Respuesta y ubicación" pero las
+                      fuentes no mostraban dónde está el expediente físicamente
+                      — el dato ya viaja en cada SearchResult, solo faltaba
+                      pintarlo (igual que ya hace cada tarjeta del modo Buscar). */}
+                  {source.ubicacionResumen ? (
+                    <span className="inline-flex items-center gap-1 pl-[26px] text-[11px] text-exp-muted [&>svg]:size-3 [&>svg]:shrink-0">
+                      <MapPin size={12} /> {source.ubicacionResumen}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -486,45 +522,68 @@ export function BuscarTabContent({
               </span>
             </h3>
           </div>
-          {results.length === 0
-            ? null
-            : results.map((source) => (
+          {(() => {
+            // Una tarjeta por EXPEDIENTE, no una por fragmento de página que
+            // coincidió — antes un solo documento largo (varios fragmentos)
+            // se veía como N tarjetas idénticas con el mismo título repetido.
+            // Se agrupa preservando el orden de relevancia que ya trae la API
+            // (el primer fragmento de cada grupo es el de mejor puntaje); las
+            // demás páginas que también coincidieron se listan compactas
+            // abajo en vez de repetir la tarjeta entera.
+            const grupos = new Map<string, SearchResult[]>();
+            for (const r of results) {
+              const grupo = grupos.get(r.expedienteId);
+              if (grupo) grupo.push(r);
+              else grupos.set(r.expedienteId, [r]);
+            }
+            return Array.from(grupos.values()).map((coincidencias) => {
+              const principal = coincidencias[0];
+              const otrasPaginas = coincidencias
+                .slice(1)
+                .map((m) => m.pageStart)
+                .filter((p): p is number => p !== null);
+              return (
                 <article
-                  key={source.expedienteId}
+                  key={principal.expedienteId}
                   className="grid cursor-pointer grid-cols-[40px_1fr_auto] items-start gap-3 rounded-exp border border-exp-line bg-exp-panel p-3.5 transition-all duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-px hover:border-exp-brand hover:shadow-exp"
-                  onClick={() => void openExpedienteById(source.expedienteId)}
+                  onClick={() => void openExpedienteById(principal.expedienteId)}
                 >
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-exp bg-exp-brand-soft text-exp-brand">
                     <FileText size={18} />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="m-0 mb-1 text-sm font-bold leading-snug text-exp-ink">{source.title}</h4>
+                    <h4 className="m-0 mb-1 text-sm font-bold leading-snug text-exp-ink">{principal.title}</h4>
                     <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-exp-muted">
-                      {source.serieDocumento ? (
-                        <span className="inline-flex items-center gap-1">{source.serieDocumento}</span>
+                      {principal.serieDocumento ? (
+                        <span className="inline-flex items-center gap-1">{principal.serieDocumento}</span>
                       ) : null}
-                      {source.anio ? <span className="inline-flex items-center gap-1">{source.anio}</span> : null}
-                      {source.materia ? <span className="inline-flex items-center gap-1">{source.materia}</span> : null}
-                      {source.pageStart ? (
-                        <span className="inline-flex items-center gap-1">pág. {source.pageStart}</span>
+                      {principal.anio ? <span className="inline-flex items-center gap-1">{principal.anio}</span> : null}
+                      {principal.materia ? <span className="inline-flex items-center gap-1">{principal.materia}</span> : null}
+                      {principal.pageStart ? (
+                        <span className="inline-flex items-center gap-1">pág. {principal.pageStart}</span>
                       ) : null}
                     </div>
-                    {source.ubicacionResumen ? (
+                    {principal.ubicacionResumen ? (
                       <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-exp-muted">
                         <span className="inline-flex items-center gap-1 [&>svg]:size-3">
-                          <MapPin size={12} /> {source.ubicacionResumen}
+                          <MapPin size={12} /> {principal.ubicacionResumen}
                         </span>
                       </div>
                     ) : null}
-                    {source.excerpt ? (
+                    {principal.excerpt ? (
                       <p className="m-0 mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-exp-ink-soft">
-                        {source.excerpt}
+                        {principal.excerpt}
+                      </p>
+                    ) : null}
+                    {otrasPaginas.length > 0 ? (
+                      <p className="m-0 mt-1.5 text-[11px] text-exp-muted">
+                        También coincide en pág. {otrasPaginas.join(", ")}
                       </p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1">
                     <a
-                      href={`/api/expedientes-archivo/${source.expedienteId}`}
+                      href={`/api/expedientes-archivo/${principal.expedienteId}`}
                       target="_blank"
                       rel="noreferrer"
                       className={EXP_ICON_BUTTON}
@@ -535,7 +594,9 @@ export function BuscarTabContent({
                     </a>
                   </div>
                 </article>
-              ))}
+              );
+            });
+          })()}
         </div>
       ) : null}
 
