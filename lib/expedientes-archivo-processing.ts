@@ -528,6 +528,15 @@ export async function extractExpedienteInventory(
     inventory.nroFolios = extracted.pageCount;
   }
 
+  // Diagnóstico: antes solo se avisaba cuando el texto era CASI nulo (<50
+  // chars); un caso intermedio (OCR "exitoso" pero con texto insuficiente o
+  // basura — p. ej. una capa de OCR de baja calidad ya embebida por el propio
+  // escáner) quedaba invisible: la IA corría, no encontraba nada útil y el
+  // usuario solo veía "sin datos" sin ninguna pista de por qué.
+  console.info(
+    `[expedientes] extractExpedienteInventory: método=${extracted.extractionMethod}, texto=${text.length} chars, folios=${extracted.pageCount}, preview="${text.slice(0, 300).replace(/\s+/g, " ")}"`,
+  );
+
   if (text.length < 50) {
     console.warn(
       `[expedientes] PDF con poco texto (${text.length} chars). Probable escaneado sin OCR.`,
