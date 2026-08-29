@@ -45,6 +45,16 @@ export function LegajoPicker({
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // El toggle vuelve a "nuevo" cada vez que `selected` se limpia — sea porque
+  // el padre reseteó el wizard entero (cancelar/subir con éxito, sin que este
+  // componente llegara a desmontarse si el usuario se quedó en el paso 1) o
+  // porque el propio "Quitar" lo deselecciona. Sin esto, un reset externo con
+  // el componente montado dejaba el botón marcado en "Añadir a uno existente"
+  // con el buscador vacío en vez de volver al estado inicial.
+  useEffect(() => {
+    if (!selected) setModo("nuevo");
+  }, [selected]);
+
   // Debounce 250ms, igual que el resto de buscadores del módulo
   // (ver BibliotecaSelector en respuesta/biblioteca-selector.tsx).
   useEffect(() => {
