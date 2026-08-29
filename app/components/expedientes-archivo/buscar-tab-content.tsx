@@ -474,7 +474,17 @@ export function BuscarTabContent({
             <h3 className={EXP_FORM_SECTION_TITLE}>
               <FileText size={16} /> Resultados
               <span className={EXP_FORM_SECTION_HINT}>
-                {results.length} coincidencia{results.length === 1 ? "" : "s"}
+                {(() => {
+                  // "Coincidencia" es un FRAGMENTO de página (chunk), no un
+                  // expediente — un solo documento largo puede aportar varios.
+                  // Mostrar ambos números evita que "11 coincidencias" se lea
+                  // como "11 expedientes" cuando en realidad es uno solo.
+                  const expedientesUnicos = new Set(results.map((r) => r.expedienteId)).size;
+                  const fragmentos = `${results.length} fragmento${results.length === 1 ? "" : "s"}`;
+                  return expedientesUnicos === results.length
+                    ? `${fragmentos} · ${expedientesUnicos} expediente${expedientesUnicos === 1 ? "" : "s"}`
+                    : `${fragmentos} en ${expedientesUnicos} expediente${expedientesUnicos === 1 ? "" : "s"}`;
+                })()}
               </span>
             </h3>
           </div>
