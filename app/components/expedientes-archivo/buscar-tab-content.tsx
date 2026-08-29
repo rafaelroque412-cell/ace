@@ -475,15 +475,13 @@ export function BuscarTabContent({
               <FileText size={16} /> Resultados
               <span className={EXP_FORM_SECTION_HINT}>
                 {(() => {
-                  // "Coincidencia" es un FRAGMENTO de página (chunk), no un
-                  // expediente — un solo documento largo puede aportar varios.
-                  // Mostrar ambos números evita que "11 coincidencias" se lea
-                  // como "11 expedientes" cuando en realidad es uno solo.
+                  // Al usuario le importa cuántos EXPEDIENTES encontró, no
+                  // cuántos fragmentos de texto generó el indexado (detalle
+                  // interno sin significado fuera de este módulo) — un mismo
+                  // expediente puede aportar varios resultados a la lista, y
+                  // eso ya se ve ahí abajo (misma tarjeta, distinta página).
                   const expedientesUnicos = new Set(results.map((r) => r.expedienteId)).size;
-                  const fragmentos = `${results.length} fragmento${results.length === 1 ? "" : "s"}`;
-                  return expedientesUnicos === results.length
-                    ? `${fragmentos} · ${expedientesUnicos} expediente${expedientesUnicos === 1 ? "" : "s"}`
-                    : `${fragmentos} en ${expedientesUnicos} expediente${expedientesUnicos === 1 ? "" : "s"}`;
+                  return `${expedientesUnicos} expediente${expedientesUnicos === 1 ? "" : "s"} encontrado${expedientesUnicos === 1 ? "" : "s"}`;
                 })()}
               </span>
             </h3>
