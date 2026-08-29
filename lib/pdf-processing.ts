@@ -800,8 +800,15 @@ async function rasterizePdfPages(
     const images: { pageNumber: number; base64: string }[] = [];
     for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
       const page = await doc.getPage(pageNumber);
-      // scale 2.0 ≈ 200dpi: suficiente para OCR sin imagenes enormes.
-      const viewport = page.getViewport({ scale: 2.0 });
+      // scale 3.0 ≈ 300dpi. Antes 2.0 (~200dpi): verificado con un escaneo
+      // real de baja calidad que a 200dpi el OCR de visión leía bien una
+      // corrida y solo fragmentos sueltos ("V°B°", "p", "FIRMA") en la
+      // siguiente — misma imagen, mismo modelo, resultado inconsistente. A
+      // 300dpi, dos corridas seguidas del mismo archivo salieron limpias
+      // (23771 y 23154 caracteres). Imagen más grande = más tokens/costo por
+      // página, pero un OCR que falla a medias es peor: deja campos vacíos
+      // sin aviso y obliga a reintentar a ciegas.
+      const viewport = page.getViewport({ scale: 3.0 });
       const canvas = createCanvas(viewport.width, viewport.height);
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "white";
