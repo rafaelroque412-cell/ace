@@ -630,8 +630,14 @@ export function SubirTabContent({
                     </div>
                   </div>
                   <div className="mb-3.5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5">
+                    {/* Etiqueta corregida a propósito: este valor NUNCA llena el
+                        campo SGD (ese es manual, del sistema documental
+                        externo — ver applyInventory en expedientes-archivo-
+                        workspace.tsx). Solo alimenta Serie documental/Título
+                        como respaldo si no hay cabecera reconocible; "SGD"
+                        prometía algo que "Aplicar al formulario" no hacía. */}
                     <EditableExtractedField
-                      label="SGD"
+                      label="N° detectado"
                       icon={<FileText size={11} />}
                       value={extractedData.numeroExpediente ?? ""}
                       onChange={(v) =>
@@ -651,7 +657,7 @@ export function SubirTabContent({
                             : prev,
                         )
                       }
-                      placeholder="Número SGD"
+                      placeholder="N° del documento"
                     />
                     <EditableExtractedField
                       label="Tipo"
