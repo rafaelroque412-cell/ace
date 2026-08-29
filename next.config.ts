@@ -31,7 +31,14 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "X-Frame-Options", value: "DENY" },
+          // SAMEORIGIN, no DENY: la app enmarca sus propios PDFs en un
+          // <iframe> (vista previa de expedientes/documentos/archivo/EETT) --
+          // con DENY el navegador se negaba a mostrarlos aunque el archivo
+          // cargara bien directo por URL (confirmado: mismo PDF, mismo
+          // servidor, solo fallaba dentro del iframe). SAMEORIGIN da la
+          // misma protección real contra clickjacking (un sitio externo
+          // sigue sin poder enmarcarte) sin romper el uso propio.
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
