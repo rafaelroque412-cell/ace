@@ -33,8 +33,12 @@ export async function POST(request: Request) {
 
     const titleValue = formData.get("title");
     const title = typeof titleValue === "string" ? titleValue.trim() : "";
+    // Reintento manual ("Volver a analizar"): salta la cache de OCR. La visión
+    // no es 100% determinista — un mal resultado que superó el umbral de
+    // caracteres quedaba cacheado para siempre sin forma de superarlo.
+    const forceRefresh = formData.get("forceRefresh") === "true";
 
-    const inventory = await extractExpedienteInventory(file, title);
+    const inventory = await extractExpedienteInventory(file, title, { skipCache: forceRefresh });
 
     await writeAuditLog({
       action: "expedientes.extract",

@@ -789,7 +789,12 @@ export function ExpedientesArchivoWorkspace({
     setExtracting(true);
     setExtractedData(null);
     try {
-      const data = await autoFillFromPdfAction(target, form.title);
+      // Cualquier clic MANUAL (auto=false: "Obtener datos"/"Volver a
+      // analizar") salta la cache de OCR — es justo el gesto de "esto no
+      // salió bien, léelo de nuevo", así que debe poder superar un resultado
+      // malo ya cacheado. La carga automática al arrastrar el PDF sí usa cache
+      // (rápida y barata para el caso normal, que acierta a la primera).
+      const data = await autoFillFromPdfAction(target, form.title, !opts?.auto);
       const fieldsFound = Object.entries(data).filter(
         ([key, value]) =>
           key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,

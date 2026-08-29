@@ -38,28 +38,36 @@ type ExpedienteTokenUsage = {
 // barato de re-extraer). Si la cache falla, degrada a extracción directa.
 async function extractPdfTextCached(
   file: File,
-  options: { forceOcr?: boolean } = {},
+  // `skipCache`: la visión del OCR no es 100% determinista — la misma imagen
+  // puede leerse bien una vez y mal otra (verificado: un reintento manual dio
+  // texto limpio donde una corrida anterior había devuelto solo fragmentos
+  // sueltos). Ese resultado malo, si superaba el umbral de caracteres, quedaba
+  // cacheado PARA SIEMPRE y ningún reintento manual lo podía superar. El botón
+  // "Volver a analizar" pasa `skipCache: true` para forzar una lectura fresca.
+  options: { forceOcr?: boolean; skipCache?: boolean } = {},
 ): Promise<ExtractedPdfText> {
   const bytes = Buffer.from(new Uint8Array(await file.arrayBuffer()));
   const hash = createHash("sha256").update(bytes).digest("hex");
 
-  const cached = await supabaseRest<
-    Array<{ extracted: ExtractedPdfText; input_tokens: number; output_tokens: number; model: string | null }>
-  >(
-    `expedientes_ocr_cache?file_hash=eq.${hash}&select=extracted,input_tokens,output_tokens,model&limit=1`,
-  ).catch(() => []);
+  if (!options.skipCache) {
+    const cached = await supabaseRest<
+      Array<{ extracted: ExtractedPdfText; input_tokens: number; output_tokens: number; model: string | null }>
+    >(
+      `expedientes_ocr_cache?file_hash=eq.${hash}&select=extracted,input_tokens,output_tokens,model&limit=1`,
+    ).catch(() => []);
 
-  const hit = cached[0];
-  if (hit?.extracted && (hit.extracted.text?.length ?? 0) >= minExtractedTextLength) {
-    return {
-      ...hit.extracted,
-      usage: {
-        fromCache: true,
-        inputTokens: hit.input_tokens,
-        model: hit.model ?? hit.extracted.usage?.model ?? "",
-        outputTokens: hit.output_tokens,
-      },
-    };
+    const hit = cached[0];
+    if (hit?.extracted && (hit.extracted.text?.length ?? 0) >= minExtractedTextLength) {
+      return {
+        ...hit.extracted,
+        usage: {
+          fromCache: true,
+          inputTokens: hit.input_tokens,
+          model: hit.model ?? hit.extracted.usage?.model ?? "",
+          outputTokens: hit.output_tokens,
+        },
+      };
+    }
   }
 
   const extracted = await extractPdfText(file, options);
@@ -490,6 +498,7 @@ export type ExpedienteInventory = {
 export async function extractExpedienteInventory(
   file: File,
   titleHint: string = "",
+  options: { skipCache?: boolean } = {},
 ): Promise<ExpedienteInventory> {
   const inventory: ExpedienteInventory = {
     numeroExpediente: null,
@@ -511,8 +520,9 @@ export async function extractExpedienteInventory(
   let extracted;
   try {
     // forceOcr: ver nota en processExpedienteDocument (expedientes escaneados).
-    // Con cache: el OCR de aquí se reutiliza luego al indexar (no se paga 2 veces).
-    extracted = await extractPdfTextCached(file, { forceOcr: true });
+    // Con cache: el OCR de aquí se reutiliza luego al indexar (no se paga 2 veces),
+    // salvo que el llamador pida saltarla (reintento manual tras un mal resultado).
+    extracted = await extractPdfTextCached(file, { forceOcr: true, skipCache: options.skipCache });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[expedientes] extractPdfText fallo: ${message}`);

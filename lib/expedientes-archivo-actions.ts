@@ -150,10 +150,14 @@ export async function fetchLegajoDetalle(id: string): Promise<LegajoDetalle | nu
   }
 }
 
-/** Llama al endpoint /extract para extraer metadata de un PDF */
+/** Llama al endpoint /extract para extraer metadata de un PDF.
+ *  `forceRefresh`: salta la cache de OCR del servidor — la visión no es 100%
+ *  determinista, así que un reintento manual debe poder leer de nuevo en vez
+ *  de repetir un resultado malo ya guardado. */
 export async function autoFillFromPdf(
   file: File,
   title: string,
+  forceRefresh: boolean = false,
 ): Promise<PdfInventory> {
   if (!file) throw new Error("No se proporcionó archivo");
   if (file.type !== "application/pdf") throw new Error("Solo se permiten archivos PDF");
@@ -163,6 +167,7 @@ export async function autoFillFromPdf(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("title", title);
+  if (forceRefresh) formData.append("forceRefresh", "true");
   const res = await fetch("/api/expedientes-archivo/extract", {
     method: "POST",
     body: formData,
