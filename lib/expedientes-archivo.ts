@@ -284,12 +284,16 @@ const SERIE_TIPO_LABEL: Record<string, string> = {
 // "DECRETO DE ALCALDÍA" llevan 1-3 palabras variables, no una lista fija como
 // los modificadores de OFICIO. Se generaliza a "hasta 5 palabras en
 // mayúsculas" (cubre también MÚLTIPLE/CIRCULAR/TÉCNICO/LEGAL sin listarlas).
+// El sufijo del código ("-MDCH/GDTI/SGEIM-OAD-RTC") solo puede tener espacios
+// HORIZONTALES entre separadores ([ \t], no \s): con \s, un punto final de
+// cabecera ("...RTC.") seguido de salto de línea se comía la primera palabra
+// de la línea siguiente (el "AL :" del destinatario) porque \s incluye \n.
 const seriePattern = new RegExp(
   "\\b(RESOLUCI[ÓO]N|DECRETO|ORDENANZA|INFORME|MEMOR[ÁA]NDUM|MEMORANDO|OFICIO|CARTA)" +
     "((?:\\s+[A-ZÁÉÍÓÚÑ]{2,}){0,5})" +
     "\\s*N(?:RO|ro)?\\.?\\s*[°ºª]?\\s*" +
     "(\\d{1,6})\\s*[-–]\\s*(\\d{4})" +
-    "((?:\\s*[-/.]\\s*[A-ZÑ][A-ZÑ0-9]*(?:[-/.][A-ZÑ0-9]+)*)*)",
+    "((?:[ \\t]*[-/.][ \\t]*[A-ZÑ][A-ZÑ0-9]*(?:[-/.][A-ZÑ0-9]+)*)*)",
 );
 
 export function extractSerieDocumental(text: string): SerieDocumentalDetectada | null {

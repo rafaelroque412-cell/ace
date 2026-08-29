@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, contenedorTipoLabel, extractExpedienteNumber, extractFecha, extractSerieDocumental, getExpedientesNamespace, normalizeCatalogValue, normalizeContenedorTipo } from "@/lib/expedientes-archivo";
+import { ARCHIVO_COLORES, CONTENEDOR_TIPOS, contenedorTipoLabel, extractAsunto, extractExpedienteNumber, extractFecha, extractSerieDocumental, getExpedientesNamespace, normalizeCatalogValue, normalizeContenedorTipo } from "@/lib/expedientes-archivo";
 import { expedienteSearchSchema } from "@/lib/expedientes-archivo-schema";
+
+// Cabecera real de un INFORME (MDCH, agosto 2026) usada para verificar contra
+// un documento de verdad, no solo casos sintéticos.
+const CABECERA_INFORME_REAL = [
+  "INFORME N°1741-2026-MDCH/GDTI/SGEIM-OAD-RTC.",
+  "AL : ING. ABEL HURTADO PALOMINO",
+  "Gerente de Desarrollo Territorial e Infraestructura.",
+  "ATENCION : CPC. JUAN ROJAS MAYTAN",
+  "Jefe de la Oficina de Abastecimiento",
+  "DEL : ING. RODOLFO TISOC CORDOVA",
+  "Sub Gerente de Ejecución de Inversiones y Mantenimiento",
+  "Jefe(E) de la Oficina de Obras por Administración Directa (OAD)",
+  "ASUNTO : REMITO SOLICITUD DE GENERACION DE LA ORDEN DE COMPRA",
+  "REF. : INFORME N°263-2026-SGEIM-MDCH/ROGRAR",
+].join("\n");
 
 describe("extractExpedienteNumber", () => {
   it("detecta el numero anclado a la palabra clave", () => {
@@ -73,6 +88,31 @@ describe("extractSerieDocumental", () => {
 
   it("devuelve null sin cabecera reconocible", () => {
     expect(extractSerieDocumental("documento sin numeracion")).toBeNull();
+  });
+
+  it("lee la cabecera de un INFORME real (MDCH, agosto 2026)", () => {
+    expect(extractSerieDocumental(CABECERA_INFORME_REAL)).toEqual({
+      serie: "INFORME N°1741-2026-MDCH/GDTI/SGEIM-OAD-RTC",
+      tipoDocumento: "Informe",
+      numero: "1741",
+      anio: 2026,
+    });
+  });
+});
+
+describe("extractAsunto", () => {
+  it("lee el rotulo ASUNTO hasta el siguiente rotulo de cabecera (REF.)", () => {
+    expect(extractAsunto(CABECERA_INFORME_REAL)).toBe(
+      "REMITO SOLICITUD DE GENERACION DE LA ORDEN DE COMPRA",
+    );
+  });
+
+  it("no confunde una mencion en minusculas del cuerpo con el rotulo", () => {
+    expect(extractAsunto("el asunto tratado en la reunion fue otro")).toBeNull();
+  });
+
+  it("devuelve null sin rotulo ASUNTO", () => {
+    expect(extractAsunto("documento sin ese rotulo")).toBeNull();
   });
 });
 

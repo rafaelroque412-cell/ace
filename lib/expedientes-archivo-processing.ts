@@ -12,6 +12,7 @@ import {
 import { type ExtractedPdfText, chunkPages, extractPdfText } from "./pdf-processing";
 import {
   type ExpedienteArchivo,
+  extractAsunto,
   extractExpedienteNumber,
   extractFecha,
   extractSerieDocumental,
@@ -572,10 +573,18 @@ export async function extractExpedienteInventory(
     if (serieDetectada.anio) inventory.anio = serieDetectada.anio;
     inventory.extractionMethod = "deterministic";
   }
+  // Asunto: el rótulo "ASUNTO :" de la cabecera es tan fijo como el de la
+  // serie documental — se detecta con regex por el mismo motivo (más fiable
+  // que la IA, nunca alucina) antes de dejárselo al modelo.
+  const asuntoDetectado = extractAsunto(text);
+  if (asuntoDetectado) {
+    inventory.asunto = asuntoDetectado;
+    inventory.extractionMethod = "deterministic";
+  }
 
   // IA para campos semanticos
   const { insights } = await analyzeExpedienteWithAi(text);
-  if (insights.asunto) inventory.asunto = insights.asunto;
+  if (!inventory.asunto && insights.asunto) inventory.asunto = insights.asunto;
   if (insights.materia) inventory.materia = insights.materia;
   if (!inventory.tipoDocumento && insights.tipoDocumento) inventory.tipoDocumento = insights.tipoDocumento;
   if (!inventory.serieDocumental && insights.serieDocumental) inventory.serieDocumental = insights.serieDocumental;
