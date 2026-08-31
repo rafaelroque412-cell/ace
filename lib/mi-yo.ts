@@ -212,7 +212,41 @@ async function resumenActividad(user: SessionUser): Promise<string> {
 // exactamente el que vería el usuario si contara las tarjetas de su propia
 // lista, ni más ni menos.
 
-async function responderDatos(user: SessionUser): Promise<string> {
+// "¿qué necesidades no tienen expediente?" es un seguimiento natural del
+// conteo, y antes se ignoraba: la herramienta devolvía SIEMPRE el mismo
+// resumen fijo sin mirar la pregunta. `necesidades.process_id` es el enlace
+// real a `procurement_processes` (se llena al derivar, ver
+// lib/necesidad-flujo.ts) — nula significa exactamente "sin expediente
+// todavía". No es una lectura genérica de cualquier pregunta (eso exigiría
+// dejar que la IA arme filtros arbitrarios contra la BD, que es el tipo de
+// superficie que este proyecto evita); es UN patrón concreto y frecuente,
+// resuelto con una consulta real.
+const RE_SIN_EXPEDIENTE = /\bsin\s+(expediente|proceso)|no\s+tiene[n]?\s+expediente|pendiente[s]?\s+de\s+derivar/i;
+
+type NecesidadSinProcesoRow = { id: string; codigo: string | null; descripcion_catalogo: string | null };
+
+async function necesidadesSinExpediente(user: SessionUser): Promise<string> {
+  const rows = await supabaseUserRest<NecesidadSinProcesoRow[]>(
+    user.accessToken,
+    "necesidades?process_id=is.null&select=id,codigo,descripcion_catalogo&order=created_at.desc&limit=20",
+  ).catch(() => [] as NecesidadSinProcesoRow[]);
+
+  if (rows.length === 0) {
+    return "Ninguna: todas tus necesidades registradas ya tienen expediente de contratación.";
+  }
+  const lineas = rows.map((r) => `- ${r.codigo ?? r.id}${r.descripcion_catalogo ? ` — ${r.descripcion_catalogo}` : ""}`);
+  const cabecera =
+    rows.length === 20
+      ? `Las 20 más recientes sin expediente todavía (puede haber más):`
+      : `${rows.length} necesidad${rows.length === 1 ? "" : "es"} sin expediente todavía:`;
+  return [cabecera, ...lineas].join("\n");
+}
+
+async function responderDatos(user: SessionUser, pregunta: string): Promise<string> {
+  if (RE_SIN_EXPEDIENTE.test(pregunta)) {
+    return necesidadesSinExpediente(user);
+  }
+
   const [procesos, necesidades] = await Promise.all([
     supabaseUserRest<Array<{ status: string }>>(user.accessToken, "procurement_processes?select=status").catch(
       () => [] as Array<{ status: string }>,
@@ -444,7 +478,7 @@ export async function responderMiYo(
     } else if (intent === "actividad") {
       answer = await resumenActividad(user);
     } else if (intent === "datos") {
-      answer = await responderDatos(user);
+      answer = await responderDatos(user, queryInterna);
     } else if (intent === "registro" && contexto) {
       // Misma capacidad que exige el copiloto embebido de cada página: sin
       // ella, "Mi Yo" no debe usar IA sobre ese registro aunque RLS le deje
