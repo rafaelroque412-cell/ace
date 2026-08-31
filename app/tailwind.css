@@ -82,6 +82,9 @@
 @source "./components/expedientes-archivo-workspace.tsx";
 @source "./components/expedientes-archivo";
 
+/* "Mi Yo" — el asistente único, flota en <AppShell> sobre cualquier módulo. */
+@source "./components/asistente";
+
 /* ── Tokens de marca ────────────────────────────────────────────────────────
    REFERENCIAN las variables CSS efectivas del sistema (el :root ganador de
    styles.css), no valores hardcodeados: así la identidad es IDÉNTICA a la del

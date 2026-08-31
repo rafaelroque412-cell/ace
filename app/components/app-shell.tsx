@@ -4,6 +4,7 @@ import { NAVEGACION, type ActiveId } from "@/lib/navegacion";
 import { supabaseRest } from "@/lib/supabase-server";
 import { Sidebar } from "./sidebar";
 import { YearSelector } from "./year-selector";
+import { MiYoWidget } from "./asistente/mi-yo-widget";
 
 // Frase clara (para usuarios no tecnicos) de que puede ver cada usuario en el
 // archivo de expedientes, derivada del mismo modelo de scope de lib/auth.
@@ -110,6 +111,10 @@ export async function AppShell({ active, action, children, eyebrow, title }: App
 
         {children}
       </section>
+
+      {/* Flota sobre cualquier módulo autenticado: un solo asistente, no uno
+          por página (ver docs/superpowers/plans). Sin sesión no se renderiza. */}
+      {user ? <MiYoWidget /> : null}
     </main>
   );
 }
