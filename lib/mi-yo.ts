@@ -35,10 +35,10 @@ import { answerLegalQuestion, type LegalSource } from "@/lib/legal-chat";
 import { streamCopiloto } from "@/lib/necesidad-copiloto";
 import { getOpenAIClient, legalAnswerModel } from "@/lib/openai-server";
 import { roleHasCapability } from "@/lib/permisos-contratacion";
-import type { HitosMap } from "@/lib/procurement-fases";
+import { FASES, type HitosMap } from "@/lib/procurement-fases";
 import { supabaseRest, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
-export type MiYoIntent = "legal" | "archivo" | "actividad" | "registro" | "general";
+export type MiYoIntent = "legal" | "archivo" | "actividad" | "registro" | "datos" | "general";
 
 // Con qué registro está el usuario en pantalla (lo manda el widget según la
 // ruta actual — ver mi-yo-widget.tsx). Sin esto, "registro" no es una
@@ -65,7 +65,9 @@ type MensajeRow = { role: "user" | "assistant"; content: string };
 const NUCLEO_MI_YO = [
   'Eres "Mi Yo", el asistente personal del sistema ACE (contratación pública peruana, Ley N.° 32069 y su Reglamento).',
   "Acompañas al usuario en todos los módulos: Necesidades, Expedientes/Contratos, el Archivo documental y la normativa.",
-  "Hablas en español, cercano pero profesional, sin rodeos. Si no sabes algo o no tienes el dato, dilo — nunca inventes cifras, artículos, fechas ni datos de expedientes.",
+  "Hablas en español, cercano pero profesional, CORTO Y DIRECTO — sin párrafos de relleno, sin repetir la pregunta, sin disculpas largas.",
+  "Si no sabes algo o no tienes el dato, dilo en una frase — nunca inventes cifras, artículos, fechas ni datos de expedientes.",
+  "NUNCA digas que \"no tienes acceso a la base de datos en tiempo real\" o que \"eres solo un modelo de lenguaje\": es falso, tienes herramientas reales para consultar normativa, el archivo, la actividad del usuario y conteos del sistema — si te preguntan algo así de específico, es que la clasificación falló, así que responde con lo que sí sabes y sugiere reformular en vez de explicar tu propia arquitectura.",
   "Puedes: saludar, explicar qué es ACE y cómo usarlo, orientar sobre qué módulo conviene para cada tarea, y conversar sobre el trabajo del usuario en general.",
   "No debes: inventar una respuesta normativa específica (artículos, plazos, montos) tú mismo. Si te preguntan algo así, dilo con claridad e invita a reformular para buscarlo en la normativa indexada.",
 ].join(" ");
@@ -74,7 +76,7 @@ const NUCLEO_MI_YO = [
 
 type Clasificacion = { intent: MiYoIntent; queryInterna: string };
 
-const INTENTS_SIN_CONTEXTO: MiYoIntent[] = ["legal", "archivo", "actividad", "general"];
+const INTENTS_SIN_CONTEXTO: MiYoIntent[] = ["legal", "archivo", "actividad", "datos", "general"];
 const INTENTS_CON_CONTEXTO: MiYoIntent[] = [...INTENTS_SIN_CONTEXTO, "registro"];
 
 function historialParaPrompt(mensajes: MensajeRow[]): string {
@@ -110,6 +112,7 @@ async function clasificarIntencion(
         "- legal: pregunta sobre normativa de contratación pública (Ley 32069, su Reglamento, directivas, plazos, procedimientos, artículos) SIN referirse al registro abierto.",
         "- archivo: pregunta sobre expedientes/documentos ARCHIVADOS de la entidad (buscar un documento, saber dónde está, de qué trata, quién lo subió) — es la biblioteca documental, no un expediente de contratación en curso.",
         "- actividad: pregunta sobre lo que el propio usuario hizo en el sistema (\"qué hice hoy\", \"en qué estoy trabajando\", \"mis últimas acciones\").",
+        "- datos: pregunta sobre CUÁNTOS registros hay en el sistema o su distribución (\"cuántos expedientes hay\", \"cuántas necesidades tengo registradas\", \"cuántos en fase de selección\") — conteos y totales, no una pregunta sobre UN registro puntual.",
         contexto
           ? `- registro: pregunta sobre EL ${contexto.tipo === "necesidad" ? "REQUERIMIENTO/NECESIDAD" : "EXPEDIENTE DE CONTRATACIÓN"} que el usuario tiene abierto ahora mismo en pantalla ("esta necesidad", "este expediente", "qué le falta", "revisa esto", o cualquier pregunta sin sujeto explícito que tenga sentido sobre el registro actual).`
           : "",
@@ -197,6 +200,41 @@ async function resumenActividad(user: SessionUser): Promise<string> {
   }
   const lineas = formatearResumenActividad(rows);
   return ["Esto es lo último que hiciste en ACE:", ...lineas.map((l) => `- ${l}`)].join("\n");
+}
+
+// ── "Datos": conteos reales del sistema (sin IA de por medio en el número) ──
+// La respuesta anterior a esto ("no tengo acceso a la base de datos en tiempo
+// real") era literalmente falsa: el problema no era que Mi Yo no PUDIERA
+// consultarlo, es que no existía esta herramienta y todo caía en "general"
+// (conversación libre, sin datos). Aquí el conteo es una consulta real —cero
+// margen de invención— y el mismo scope (RLS con el token del usuario) que ya
+// aplican las listas de /expedientes y /necesidades: el número que da Mi Yo es
+// exactamente el que vería el usuario si contara las tarjetas de su propia
+// lista, ni más ni menos.
+
+async function responderDatos(user: SessionUser): Promise<string> {
+  const [procesos, necesidades] = await Promise.all([
+    supabaseUserRest<Array<{ status: string }>>(user.accessToken, "procurement_processes?select=status").catch(
+      () => [] as Array<{ status: string }>,
+    ),
+    supabaseUserRest<Array<{ id: string }>>(user.accessToken, "necesidades?select=id").catch(
+      () => [] as Array<{ id: string }>,
+    ),
+  ]);
+
+  const porFase = FASES.map((fase) => ({
+    label: fase.label,
+    total: procesos.filter((p) => fase.statuses.includes(p.status)).length,
+  })).filter((f) => f.total > 0);
+  const sinFase = procesos.length - porFase.reduce((sum, f) => sum + f.total, 0);
+
+  const lineas = [
+    `Expedientes de contratación: ${procesos.length}.`,
+    ...porFase.map((f) => `  - ${f.label}: ${f.total}.`),
+    ...(sinFase > 0 ? [`  - Sin fase reconocida: ${sinFase}.`] : []),
+    `Necesidades registradas: ${necesidades.length}.`,
+  ];
+  return lineas.join("\n");
 }
 
 // ── "Archivo": biblioteca de expedientes, mismo scope que /expedientes-archivo ─
@@ -405,6 +443,8 @@ export async function responderMiYo(
       sources = r.sources;
     } else if (intent === "actividad") {
       answer = await resumenActividad(user);
+    } else if (intent === "datos") {
+      answer = await responderDatos(user);
     } else if (intent === "registro" && contexto) {
       // Misma capacidad que exige el copiloto embebido de cada página: sin
       // ella, "Mi Yo" no debe usar IA sobre ese registro aunque RLS le deje
