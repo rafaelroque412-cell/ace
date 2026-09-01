@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Ban,
+  Check,
   CheckCircle2,
   Clock,
   Download,
@@ -12,11 +13,13 @@ import {
   FileDown,
   Loader,
   MessageSquareText,
+  Pencil,
   ScanSearch,
   ShieldAlert,
   Workflow,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -252,6 +255,7 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
     documentos,
     error: errorDelExpediente,
     evaluaciones,
+    necesidad,
     proceso,
     recargarDocumentos,
     recargarTodo: reload,
@@ -274,6 +278,12 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
   const [confirmDeleteProcess, setConfirmDeleteProcess] = useState(false);
   const [deletingProcess, setDeletingProcess] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [editandoNomenclature, setEditandoNomenclature] = useState(false);
+  const [nomenclatureDraft, setNomenclatureDraft] = useState("");
+  const [guardandoNomenclature, setGuardandoNomenclature] = useState(false);
+  const [editandoNombreNecesidad, setEditandoNombreNecesidad] = useState(false);
+  const [nombreNecesidadDraft, setNombreNecesidadDraft] = useState("");
+  const [guardandoNombreNecesidad, setGuardandoNombreNecesidad] = useState(false);
 
   const [kind, setKind] = useState("bases");
   const [libraryDocumentId, setLibraryDocumentId] = useState("");
@@ -487,6 +497,68 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
     }
   }
 
+  async function guardarNomenclature() {
+    const valor = nomenclatureDraft.trim();
+    if (!valor || valor === process?.nomenclature) {
+      setEditandoNomenclature(false);
+      return;
+    }
+    setGuardandoNomenclature(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/processes/${processId}`, {
+        body: JSON.stringify({ nomenclature: valor }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error ?? "No se pudo actualizar el nombre del expediente.");
+        return;
+      }
+      await reload();
+      setEditandoNomenclature(false);
+    } catch {
+      setError("No se pudo actualizar el nombre del expediente.");
+    } finally {
+      setGuardandoNomenclature(false);
+    }
+  }
+
+  // El nombre de la necesidad se guarda en /api/necesidades/{id}, no en el
+  // expediente: ese endpoint YA propaga el cambio a `procurement_processes.
+  // nomenclature` (ver el comentario "la denominación es UNA" en esa ruta), así
+  // que recargar el expediente después de este PATCH también refresca el título
+  // de arriba si el usuario no lo había editado por su cuenta.
+  async function guardarNombreNecesidad() {
+    const necesidadId = necesidad?.id as string | undefined;
+    const valor = nombreNecesidadDraft.trim();
+    if (!necesidadId || !valor || valor === (necesidad?.nombre as string | undefined)) {
+      setEditandoNombreNecesidad(false);
+      return;
+    }
+    setGuardandoNombreNecesidad(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/necesidades/${necesidadId}`, {
+        body: JSON.stringify({ nombre: valor }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error ?? "No se pudo actualizar el nombre de la necesidad.");
+        return;
+      }
+      await reload();
+      setEditandoNombreNecesidad(false);
+    } catch {
+      setError("No se pudo actualizar el nombre de la necesidad.");
+    } finally {
+      setGuardandoNombreNecesidad(false);
+    }
+  }
+
   async function deleteProcess() {
     setDeletingProcess(true);
     setError("");
@@ -631,7 +703,115 @@ export function ProcessDetail({ permisos, processId }: { permisos: ExpedientePer
     <div className="tw grid gap-4 p-[18px]">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2>{process.nomenclature}</h2>
+          {editandoNomenclature ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                autoFocus
+                value={nomenclatureDraft}
+                onChange={(event) => setNomenclatureDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void guardarNomenclature();
+                  if (event.key === "Escape") setEditandoNomenclature(false);
+                }}
+                disabled={guardandoNomenclature}
+                className="!h-9 !w-auto min-w-[320px] text-base font-semibold"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={guardandoNomenclature}
+                loading={guardandoNomenclature}
+                onClick={() => void guardarNomenclature()}
+                aria-label="Guardar nombre del expediente"
+              >
+                {!guardandoNomenclature ? <Check size={14} /> : null}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={guardandoNomenclature}
+                onClick={() => setEditandoNomenclature(false)}
+                aria-label="Cancelar"
+              >
+                <X size={14} />
+              </Button>
+            </div>
+          ) : (
+            <h2 className="group flex items-center gap-1.5">
+              {process.nomenclature}
+              {permisos.manage ? (
+                <button
+                  type="button"
+                  aria-label="Editar nombre del expediente"
+                  onClick={() => {
+                    setNomenclatureDraft(process.nomenclature);
+                    setEditandoNomenclature(true);
+                  }}
+                  className="text-muted opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                >
+                  <Pencil size={14} />
+                </button>
+              ) : null}
+            </h2>
+          )}
+
+          {/* Solo si el expediente viene de una necesidad (los creados directo,
+              vía "crear expediente directo", no tienen — ver expediente-contexto.tsx). */}
+          {necesidad ? (
+            editandoNombreNecesidad ? (
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="shrink-0 text-[11px] font-semibold text-muted">Necesidad:</span>
+                <Input
+                  autoFocus
+                  value={nombreNecesidadDraft}
+                  onChange={(event) => setNombreNecesidadDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void guardarNombreNecesidad();
+                    if (event.key === "Escape") setEditandoNombreNecesidad(false);
+                  }}
+                  disabled={guardandoNombreNecesidad}
+                  className="!h-8 !w-auto min-w-[280px] text-[13px]"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={guardandoNombreNecesidad}
+                  loading={guardandoNombreNecesidad}
+                  onClick={() => void guardarNombreNecesidad()}
+                  aria-label="Guardar nombre de la necesidad"
+                >
+                  {!guardandoNombreNecesidad ? <Check size={13} /> : null}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={guardandoNombreNecesidad}
+                  onClick={() => setEditandoNombreNecesidad(false)}
+                  aria-label="Cancelar"
+                >
+                  <X size={13} />
+                </Button>
+              </div>
+            ) : (
+              <p className="group mt-1 flex items-center gap-1.5 text-[12px] text-muted">
+                Necesidad: {(necesidad.nombre as string) || "Sin nombre"}
+                {permisos.manage ? (
+                  <button
+                    type="button"
+                    aria-label="Editar nombre de la necesidad"
+                    onClick={() => {
+                      setNombreNecesidadDraft((necesidad.nombre as string) ?? "");
+                      setEditandoNombreNecesidad(true);
+                    }}
+                    className="opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                ) : null}
+              </p>
+            )
+          ) : null}
+
           <div className="mt-2 flex flex-wrap gap-2 [&>span]:text-[12px] [&>span]:text-muted">
             <span>{objectTypeLabel(process.object_type)}</span>
             {process.procedure_type ? <span>{processTypeLabel(process.procedure_type) ?? process.procedure_type}</span> : null}

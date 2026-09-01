@@ -24,6 +24,12 @@ import {
   Target,
 } from "lucide-react";
 import type { PedidoNecesidadImport } from "@/lib/pedido-compra-import";
+
+// Un pedido en revisión de lote, editable: mismos campos que el modal de un
+// solo pedido (Nombre, Tipo de objeto, Área usuaria, Meta, Proyecto de
+// inversión, Finalidad pública), para poder corregir CUALQUIER pedido de la
+// lista antes de crear, no solo el primero.
+type ImportItemEditable = PedidoNecesidadImport & { finalidadPublica?: string };
 import { OBJETOS_NECESIDAD, objetoNecesidadLabel } from "@/lib/necesidades";
 import { filasTextarea } from "@/lib/textarea-alto";
 import { PROCESOS_SELECCION, type ObjetoFilter } from "@/lib/procesos-seleccion";
@@ -211,11 +217,17 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
   const [importing, setImporting] = useState(false);
   const [importedItem, setImportedItem] = useState<PedidoNecesidadImport | null>(null);
   const [importInfo, setImportInfo] = useState<{ nro: string; count: number } | null>(null);
-  // Multi-ítem: revisión y creación en lote.
-  const [importItems, setImportItems] = useState<PedidoNecesidadImport[]>([]);
+  // Multi-ítem: revisión y creación en lote. `finalidadPublica` no viene del
+  // pedido (ninguna de las dos fuentes la trae) — se agrega vacía, igual que
+  // en el modal de un solo pedido, para que se pueda escribir ahí mismo.
+  const [importItems, setImportItems] = useState<ImportItemEditable[]>([]);
   const [importSelected, setImportSelected] = useState<Set<number>>(new Set());
   const [listOpen, setListOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
+  // Vista previa expandible de cada pedido en el diálogo de importación en
+  // lote: antes solo se veía nombre/área/cantidad, sin poder revisar los
+  // ítems ni el monto antes de crear la necesidad.
+  const [importExpandido, setImportExpandido] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Segunda forma de importar: buscar el pedido por su N°, en vez de subir el
   // .xlsx (ver app/api/necesidades/import-pedido-control/route.ts).
@@ -520,7 +532,7 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
     }
     // Varios ítems → revisión en lote. Un solo ítem → prellenar el modal.
     if (items.length > 1) {
-      setImportItems(items);
+      setImportItems(items.map((it): ImportItemEditable => ({ ...it, finalidadPublica: "" })));
       setImportSelected(new Set(items.map((_, i) => i)));
       setListOpen(true);
       return;
@@ -598,6 +610,19 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
     });
   }
 
+  function toggleImportExpandido(i: number) {
+    setImportExpandido((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  function actualizarImportItem(i: number, patch: Partial<ImportItemEditable>) {
+    setImportItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+
   async function createBatch() {
     const seleccion = importItems.filter((_, i) => importSelected.has(i));
     if (seleccion.length === 0) return;
@@ -606,8 +631,9 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
     try {
       const creadas: NecesidadExt[] = [];
       let fallidas = 0;
+      let sinItems = 0;
       for (const item of seleccion) {
-        const { nroPedido, secuencia, ...fields } = item;
+        const { items: itemsDelPedido, nroPedido, secuencia, ...fields } = item;
         const res = await fetch("/api/necesidades", {
           // nroPedido/pedidoSecuencia no son columnas: el POST los usa para
           // vincular la fila de pedidos_siga (trazabilidad pedido → necesidad).
@@ -616,8 +642,22 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
           method: "POST",
         });
         const payload = await res.json().catch(() => ({}));
-        if (res.ok && payload.necesidad) creadas.push(payload.necesidad);
-        else fallidas += 1;
+        if (!res.ok || !payload.necesidad) {
+          fallidas += 1;
+          continue;
+        }
+        creadas.push(payload.necesidad);
+        // El desagregado del pedido, igual que en la creación de un solo
+        // pedido (createNecesidad): antes se perdía en el lote, la necesidad
+        // se creaba sin sus ítems.
+        if (Array.isArray(itemsDelPedido) && itemsDelPedido.length > 0) {
+          const resItems = await fetch(`/api/necesidades/${payload.necesidad.id}/items`, {
+            body: JSON.stringify({ items: itemsDelPedido }),
+            headers: { "Content-Type": "application/json" },
+            method: "PUT",
+          });
+          if (!resItems.ok) sinItems += 1;
+        }
       }
       if (creadas.length > 0) {
         setNecesidades((prev) => [...creadas, ...prev]);
@@ -626,8 +666,11 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
       }
       setListOpen(false);
       setImportItems([]);
-      if (fallidas > 0) {
-        setError(`Se crearon ${creadas.length} necesidad(es); ${fallidas} no se pudieron registrar.`);
+      const avisos: string[] = [];
+      if (fallidas > 0) avisos.push(`${fallidas} pedido(s) no se pudieron registrar`);
+      if (sinItems > 0) avisos.push(`${sinItems} necesidad(es) se crearon sin sus ítems (añádelos desde su ficha)`);
+      if (avisos.length > 0) {
+        setError(`Se crearon ${creadas.length} necesidad(es). ${avisos.join("; ")}.`);
       }
     } catch {
       setError("No se pudo conectar para crear las necesidades.");
@@ -1005,7 +1048,10 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
               open={listOpen}
               onOpenChange={(open) => {
                 setListOpen(open);
-                if (!open) setImportItems([]);
+                if (!open) {
+                  setImportItems([]);
+                  setImportExpandido(new Set());
+                }
               }}
             >
               <DialogContent
@@ -1029,33 +1075,132 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
                   </>
                 }
               >
+                <datalist id="oficinas-datalist-lote">
+                  {oficinas.map((o) => (
+                    <option key={o.id} value={o.nombre} />
+                  ))}
+                </datalist>
                 <div className="flex flex-col gap-2">
                   {importItems.map((it, i) => {
                     const checked = importSelected.has(i);
+                    const expandido = importExpandido.has(i);
                     return (
-                      <label
+                      <div
                         key={i}
                         className={cn(
-                          "flex cursor-pointer items-start gap-3 rounded-[12px] border p-3 transition",
+                          "rounded-[12px] border transition",
                           checked ? "border-brand/40 bg-brand-soft" : "border-line bg-panel hover:border-brand/25",
                         )}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleImportSel(i)}
-                          className="mt-0.5 size-4 shrink-0 accent-brand"
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-ink">{it.nombre}</p>
-                          <p className="mt-0.5 text-[12px] text-muted">
-                            {it.nroPedido ? `Pedido N° ${it.nroPedido} · ` : ""}
-                            {it.tipoObjeto === "servicios" ? "Servicio" : "Bien"}
-                            {it.areaUsuaria ? ` · ${it.areaUsuaria}` : ""}
-                            {it.cantidad != null ? ` · ${it.cantidad} ${it.unidadMedida ?? ""}` : ""}
-                          </p>
+                        <div className="flex items-start gap-3 p-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleImportSel(i)}
+                            className="mt-2.5 size-4 shrink-0 accent-brand"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-ink">{it.nombre}</p>
+                            <p className="mt-0.5 text-[12px] text-muted">
+                              {it.nroPedido ? `Pedido N° ${it.nroPedido} · ` : ""}
+                              {it.tipoObjeto === "servicios" ? "Servicio" : "Bien"}
+                              {it.areaUsuaria ? ` · ${it.areaUsuaria}` : ""}
+                              {it.cantidad != null ? ` · ${it.cantidad} ${it.unidadMedida ?? ""}` : ""}
+                              {it.montoEstimado != null ? ` · S/ ${it.montoEstimado.toLocaleString("es-PE")}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleImportExpandido(i)}
+                            className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-semibold text-brand hover:bg-brand/10"
+                          >
+                            {expandido ? "Ocultar" : "Editar / ver detalle"}
+                            <ChevronDown className={cn("size-3.5 transition-transform", expandido ? "rotate-180" : "")} />
+                          </button>
                         </div>
-                      </label>
+
+                        {/* Igual que el modal de un solo pedido: los mismos campos
+                            editables, para poder corregir CUALQUIER pedido de la
+                            lista antes de crear — no solo revisarlo de lejos. */}
+                        {expandido ? (
+                          <div className="mx-3 mb-3 grid gap-3 rounded-[10px] border border-line bg-canvas p-3">
+                            <Field label="Nombre de la contratación" required>
+                              <Input
+                                value={it.nombre}
+                                onChange={(e) => actualizarImportItem(i, { nombre: e.target.value })}
+                              />
+                            </Field>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <Field label="Tipo de objeto" required>
+                                <Select
+                                  value={it.tipoObjeto}
+                                  onChange={(e) =>
+                                    actualizarImportItem(i, { tipoObjeto: e.target.value as PedidoNecesidadImport["tipoObjeto"] })
+                                  }
+                                >
+                                  {OBJETOS_NECESIDAD.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </Field>
+                              <Field label="Meta presupuestal">
+                                <Input
+                                  value={it.metaPresupuestal ?? ""}
+                                  onChange={(e) => actualizarImportItem(i, { metaPresupuestal: e.target.value })}
+                                />
+                              </Field>
+                            </div>
+                            <Field label="Área usuaria" required help="Escribe o elige la oficina solicitante.">
+                              <Input
+                                list="oficinas-datalist-lote"
+                                value={it.areaUsuaria ?? ""}
+                                onChange={(e) => actualizarImportItem(i, { areaUsuaria: e.target.value })}
+                              />
+                            </Field>
+                            <Field label="Proyecto de inversión" help="Nombre del proyecto en Invierte.pe.">
+                              <Textarea
+                                value={it.proyectoInversion ?? ""}
+                                onChange={(e) => actualizarImportItem(i, { proyectoInversion: e.target.value })}
+                                rows={filasTextarea(it.proyectoInversion ?? "")}
+                              />
+                            </Field>
+                            <Field label="Finalidad pública">
+                              <Input
+                                value={it.finalidadPublica ?? ""}
+                                onChange={(e) => actualizarImportItem(i, { finalidadPublica: e.target.value })}
+                                placeholder="Necesidad pública que se satisface"
+                              />
+                            </Field>
+
+                            {it.items && it.items.length > 0 ? (
+                              <table className="w-full border-collapse text-[12px]">
+                                <thead>
+                                  <tr className="border-b border-line text-left text-muted">
+                                    <th className="py-1 pr-2 font-medium">Ítem</th>
+                                    <th className="py-1 pr-2 font-medium">Cant.</th>
+                                    <th className="py-1 pr-2 font-medium">Unidad</th>
+                                    <th className="py-1 text-right font-medium">Costo</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {it.items.map((linea, j) => (
+                                    <tr key={j} className="border-b border-line/60 last:border-0">
+                                      <td className="py-1 pr-2 text-ink">{linea.descripcion}</td>
+                                      <td className="py-1 pr-2 text-muted">{linea.cantidad ?? "—"}</td>
+                                      <td className="py-1 pr-2 text-muted">{linea.unidadMedida ?? "—"}</td>
+                                      <td className="py-1 text-right text-muted">
+                                        {linea.costoTotal != null ? `S/ ${linea.costoTotal.toLocaleString("es-PE")}` : "—"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     );
                   })}
                 </div>

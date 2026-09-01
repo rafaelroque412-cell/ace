@@ -63,8 +63,17 @@ export type ProcessDocument = {
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
+// `nomenclaturaExpediente()` (lib/necesidad-denominacion.ts) arma "código —
+// nombre", y el nombre de la necesidad admite hasta NOMBRE_MAX (500,
+// lib/necesidades-limites.ts). Un tope de 200 aquí rechazaba una nomenclatura
+// que la propia cascada "la denominación es UNA" ya había escrito sin pasar
+// por este schema — el primer PATCH manual del nombre del expediente (sin
+// tocar nada) ya fallaba con "Solicitud inválida". 550 cubre nombre + código
+// con margen.
+const NOMENCLATURE_MAX = 550;
+
 export const processCreateSchema = z.object({
-  nomenclature: z.string().trim().min(3).max(200),
+  nomenclature: z.string().trim().min(3).max(NOMENCLATURE_MAX),
   objectType: z.enum(["bienes", "servicios", "obras", "consultoria_obra"]).default("servicios"),
   procedureType: optionalText(80),
   amount: z.coerce.number().nonnegative().optional(),
@@ -73,7 +82,7 @@ export const processCreateSchema = z.object({
 });
 
 export const processUpdateSchema = z.object({
-  nomenclature: z.string().trim().min(3).max(200).optional(),
+  nomenclature: z.string().trim().min(3).max(NOMENCLATURE_MAX).optional(),
   procedureType: optionalText(80),
   amount: z.coerce.number().nonnegative().optional(),
   entity: optionalText(160),
