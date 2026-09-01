@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { FileText, Loader2, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { Check, FileText, Loader2, MessageCircle, Send, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { AccionPropuesta } from "@/lib/mi-yo";
 
 const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const RUTA_NECESIDAD = new RegExp(`^/necesidades/(${UUID_RE})(?:/|$)`, "i");
@@ -27,6 +28,10 @@ type Mensaje = {
   content: string;
   intent?: string | null;
   sources?: Array<{ title: string; citation: string; ubicacionResumen?: string }>;
+  accionPropuesta?: AccionPropuesta;
+  // Una vez confirmada o cancelada, la tarjeta deja de mostrar los botones —
+  // evita doble ejecución con un segundo clic sobre el mismo mensaje.
+  accionResuelta?: boolean;
 };
 
 // Botón flotante + panel del asistente único de ACE. Vive en <AppShell> (una
@@ -40,6 +45,7 @@ export function MiYoWidget() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
   const contexto = useMemo(() => contextoDesdeRuta(pathname ?? ""), [pathname]);
@@ -82,7 +88,10 @@ export function MiYoWidget() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "No se pudo responder");
       setConversationId(data.conversationId);
-      setMensajes((prev) => [...prev, { role: "assistant", content: data.answer, intent: data.intent, sources: data.sources }]);
+      setMensajes((prev) => [
+        ...prev,
+        { role: "assistant", content: data.answer, intent: data.intent, sources: data.sources, accionPropuesta: data.accionPropuesta },
+      ]);
     } catch (error) {
       setMensajes((prev) => [
         ...prev,
@@ -90,6 +99,42 @@ export function MiYoWidget() {
       ]);
     } finally {
       setEnviando(false);
+    }
+  }
+
+  // Marca la propuesta del mensaje `index` como resuelta (ya sea confirmada o
+  // cancelada), para que la tarjeta deje de mostrar los botones.
+  function marcarResuelta(index: number) {
+    setMensajes((prev) => prev.map((m, i) => (i === index ? { ...m, accionResuelta: true } : m)));
+  }
+
+  function cancelarAccion(index: number) {
+    marcarResuelta(index);
+    setMensajes((prev) => [...prev, { role: "assistant", content: "Acción cancelada." }]);
+  }
+
+  async function confirmarAccion(index: number, propuesta: AccionPropuesta) {
+    if (confirmando) return;
+    marcarResuelta(index);
+    setConfirmando(true);
+    try {
+      const res = await fetch("/api/asistente/accion/confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: propuesta.tipo, parametros: propuesta.parametros, conversationId: conversationId ?? undefined }),
+      });
+      const data = await res.json();
+      setMensajes((prev) => [
+        ...prev,
+        { role: "assistant", content: res.ok ? data.mensaje : `No pude completarlo: ${data.error ?? "error desconocido"}` },
+      ]);
+    } catch (error) {
+      setMensajes((prev) => [
+        ...prev,
+        { role: "assistant", content: `No pude completarlo: ${error instanceof Error ? error.message : "error desconocido"}` },
+      ]);
+    } finally {
+      setConfirmando(false);
     }
   }
 
@@ -125,8 +170,9 @@ export function MiYoWidget() {
           <div ref={scrollRef} className="flex-1 space-y-2.5 overflow-y-auto p-3">
             {mensajes.length === 0 ? (
               <p className="rounded-lg border border-line bg-panel px-3 py-2.5 text-sm text-muted">
-                Hola, soy Mi Yo. Pregúntame sobre la normativa de contratación, busca en el archivo de expedientes, o
-                pídeme un resumen de lo último que hiciste en ACE.
+                Hola, soy Mi Yo. Pregúntame sobre la normativa de contratación, busca en el archivo de expedientes,
+                pídeme un resumen de lo último que hiciste en ACE, o dime &quot;crea una necesidad para...&quot; — te
+                muestro la propuesta y tú confirmas antes de que se registre.
               </p>
             ) : null}
             {mensajes.map((m, i) => (
@@ -147,6 +193,26 @@ export function MiYoWidget() {
                       </li>
                     ))}
                   </ul>
+                ) : null}
+                {m.accionPropuesta && !m.accionResuelta ? (
+                  <div className="flex max-w-[85%] gap-2">
+                    <button
+                      type="button"
+                      disabled={confirmando}
+                      onClick={() => void confirmarAccion(i, m.accionPropuesta!)}
+                      className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-xs font-semibold text-white transition-opacity disabled:opacity-40"
+                    >
+                      <Check size={12} /> Confirmar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={confirmando}
+                      onClick={() => cancelarAccion(i)}
+                      className="rounded-md border border-line bg-panel px-2.5 py-1.5 text-xs font-semibold text-ink transition-opacity disabled:opacity-40"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 ) : null}
               </div>
             ))}

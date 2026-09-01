@@ -38,7 +38,7 @@ import { roleHasCapability } from "@/lib/permisos-contratacion";
 import { FASES, type HitosMap } from "@/lib/procurement-fases";
 import { supabaseRest, supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
-export type MiYoIntent = "legal" | "archivo" | "actividad" | "registro" | "datos" | "general";
+export type MiYoIntent = "legal" | "archivo" | "actividad" | "registro" | "datos" | "accion" | "general";
 
 // Con qué registro está el usuario en pantalla (lo manda el widget según la
 // ruta actual — ver mi-yo-widget.tsx). Sin esto, "registro" no es una
@@ -52,11 +52,24 @@ export type MiYoSource = {
   ubicacionResumen?: string;
 };
 
+// Una ORDEN, no una pregunta: Mi Yo NUNCA la ejecuta directo. La propone en
+// `MiYoResult.accionPropuesta`; el widget la muestra con botones Confirmar/
+// Cancelar, y solo al confirmar se llama a /api/asistente/accion/confirmar
+// (que a su vez llama al MISMO endpoint que usaría un clic en la UI —
+// POST /api/necesidades o POST /api/necesidades/{id}/derivar— con la sesión,
+// los permisos y la auditoría reales de esa ruta; Mi Yo no escribe nada por
+// su cuenta). La propuesta vive solo en el estado del widget: si se cierra el
+// panel sin confirmar, se pierde — no hay una tabla de "acciones pendientes".
+export type AccionPropuesta =
+  | { tipo: "crear_necesidad"; parametros: { nombre: string; tipoObjeto: "bienes" | "servicios" | "obras" | "consultoria_obra" } }
+  | { tipo: "derivar_necesidad"; parametros: { necesidadId: string } };
+
 export type MiYoResult = {
   answer: string;
   intent: MiYoIntent;
   conversationId: string;
   sources: MiYoSource[];
+  accionPropuesta?: AccionPropuesta;
 };
 
 type ConversacionRow = { id: string };
@@ -76,7 +89,7 @@ const NUCLEO_MI_YO = [
 
 type Clasificacion = { intent: MiYoIntent; queryInterna: string };
 
-const INTENTS_SIN_CONTEXTO: MiYoIntent[] = ["legal", "archivo", "actividad", "datos", "general"];
+const INTENTS_SIN_CONTEXTO: MiYoIntent[] = ["legal", "archivo", "actividad", "datos", "accion", "general"];
 const INTENTS_CON_CONTEXTO: MiYoIntent[] = [...INTENTS_SIN_CONTEXTO, "registro"];
 
 function historialParaPrompt(mensajes: MensajeRow[]): string {
@@ -113,6 +126,7 @@ async function clasificarIntencion(
         "- archivo: pregunta sobre expedientes/documentos ARCHIVADOS de la entidad (buscar un documento, saber dónde está, de qué trata, quién lo subió) — es la biblioteca documental, no un expediente de contratación en curso.",
         "- actividad: pregunta sobre lo que el propio usuario hizo en el sistema (\"qué hice hoy\", \"en qué estoy trabajando\", \"mis últimas acciones\").",
         "- datos: pregunta sobre CUÁNTOS registros hay en el sistema o su distribución (\"cuántos expedientes hay\", \"cuántas necesidades tengo registradas\", \"cuántos en fase de selección\") — conteos y totales, no una pregunta sobre UN registro puntual.",
+        "- accion: el usuario quiere que TÚ hagas algo, no solo que respondas (\"crea una necesidad para...\", \"registra un requerimiento de...\", \"deriva esto a expediente\", \"convierte esta necesidad en expediente\"). Es una ORDEN, no una pregunta.",
         contexto
           ? `- registro: pregunta sobre EL ${contexto.tipo === "necesidad" ? "REQUERIMIENTO/NECESIDAD" : "EXPEDIENTE DE CONTRATACIÓN"} que el usuario tiene abierto ahora mismo en pantalla ("esta necesidad", "este expediente", "qué le falta", "revisa esto", o cualquier pregunta sin sujeto explícito que tenga sentido sobre el registro actual).`
           : "",
@@ -140,6 +154,53 @@ async function clasificarIntencion(
     return { intent, queryInterna };
   } catch {
     return { intent: "general", queryInterna: mensaje };
+  }
+}
+
+// ── "Acción": interpreta la ORDEN a una de un puñado de acciones soportadas ──
+// Whitelist deliberadamente corta y cerrada (v1: crear/derivar una necesidad):
+// dejar que el modelo arme "la acción que sea" contra la base es la superficie
+// que este proyecto evita en todo lo demás (RAG con citas verificables, filtros
+// deterministas para "datos"). Cada tipo nuevo de acción se agrega a mano aquí,
+// no se infiere.
+
+type InterpretacionAccion =
+  | { tipo: "crear_necesidad"; nombre: string; tipoObjeto: string }
+  | { tipo: "derivar_necesidad" }
+  | { tipo: "no_reconocida" };
+
+async function interpretarAccion(mensaje: string, historial: MensajeRow[]): Promise<InterpretacionAccion> {
+  try {
+    const openai = getOpenAIClient();
+    const response = await openai.responses.create({
+      model: legalAnswerModel,
+      instructions: [
+        "Traduces una ORDEN dentro de ACE a UNA de estas acciones EXACTAS:",
+        "- crear_necesidad: registrar una necesidad/requerimiento nuevo. Parámetros: nombre (resume en una frase clara y concreta QUÉ se necesita, en español, sin \"crear\" ni \"necesito\" al inicio), tipoObjeto (uno de: bienes, servicios, obras, consultoria_obra — 'bienes' si no está claro).",
+        "- derivar_necesidad: convertir/derivar a expediente de contratación la necesidad que el usuario tiene abierta en pantalla. Sin parámetros.",
+        "- no_reconocida: la orden no corresponde a ninguna acción soportada todavía, o el mensaje en realidad es una pregunta, no una orden.",
+        "Responde SOLO JSON: {\"tipo\": \"crear_necesidad|derivar_necesidad|no_reconocida\", \"nombre\": \"...\", \"tipoObjeto\": \"...\"} (nombre/tipoObjeto solo aplican a crear_necesidad).",
+      ].join("\n"),
+      input: `Historial reciente:\n${historialParaPrompt(historial)}\n\nOrden del usuario: ${mensaje}`,
+      temperature: 0,
+      max_output_tokens: 200,
+    });
+    const texto = (response.output_text ?? "").replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+    const ini = texto.indexOf("{");
+    const fin = texto.lastIndexOf("}");
+    const raw =
+      ini !== -1 && fin > ini
+        ? (JSON.parse(texto.slice(ini, fin + 1)) as { tipo?: unknown; nombre?: unknown; tipoObjeto?: unknown })
+        : {};
+    const TIPOS_OBJETO = ["bienes", "servicios", "obras", "consultoria_obra"];
+    if (raw.tipo === "crear_necesidad" && typeof raw.nombre === "string" && raw.nombre.trim().length >= 3) {
+      const tipoObjeto = TIPOS_OBJETO.includes(raw.tipoObjeto as string) ? (raw.tipoObjeto as string) : "bienes";
+      return { tipo: "crear_necesidad", nombre: raw.nombre.trim(), tipoObjeto };
+    }
+    if (raw.tipo === "derivar_necesidad") return { tipo: "derivar_necesidad" };
+    return { tipo: "no_reconocida" };
+  } catch {
+    return { tipo: "no_reconocida" };
   }
 }
 
@@ -465,9 +526,40 @@ export async function responderMiYo(
 
   let answer: string;
   let sources: MiYoSource[] = [];
+  let accionPropuesta: AccionPropuesta | undefined;
 
   try {
-    if (intent === "legal") {
+    if (intent === "accion") {
+      const interpretada = await interpretarAccion(mensaje, historial);
+      if (interpretada.tipo === "no_reconocida") {
+        answer =
+          "Todavía no sé hacer eso. Por ahora puedo: crear una necesidad nueva, o derivar a expediente la necesidad que tienes abierta.";
+      } else if (interpretada.tipo === "crear_necesidad") {
+        if (!roleHasCapability(user.role, "necesidad.manage")) {
+          answer = "Tu rol no tiene permiso para crear necesidades.";
+        } else {
+          accionPropuesta = {
+            tipo: "crear_necesidad",
+            parametros: {
+              nombre: interpretada.nombre,
+              tipoObjeto: interpretada.tipoObjeto as "bienes" | "servicios" | "obras" | "consultoria_obra",
+            },
+          };
+          answer = `¿Confirmas registrar esta necesidad?\n\nNombre: ${interpretada.nombre}\nTipo: ${interpretada.tipoObjeto}`;
+        }
+      } else {
+        // derivar_necesidad: exige la necesidad abierta — sin eso no hay a
+        // cuál referirse, y adivinar sería el mismo riesgo que "registro".
+        if (!contexto || contexto.tipo !== "necesidad") {
+          answer = "Para derivar una necesidad a expediente, ábrela primero (entra a su ficha) y pídemelo desde ahí.";
+        } else if (!roleHasCapability(user.role, "expediente.manage")) {
+          answer = "Tu rol no tiene permiso para derivar necesidades a expediente.";
+        } else {
+          accionPropuesta = { tipo: "derivar_necesidad", parametros: { necesidadId: contexto.id } };
+          answer = "¿Confirmas derivar esta necesidad a expediente de contratación?";
+        }
+      }
+    } else if (intent === "legal") {
       const r = await responderLegal(user, queryInterna);
       answer = r.answer;
       sources = r.sources;
@@ -507,11 +599,11 @@ export async function responderMiYo(
   await writeAuditLog({
     action: "asistente.mensaje",
     actorReference: user.email ?? user.id,
-    details: { intent, contexto: contexto ?? null },
+    details: { intent, contexto: contexto ?? null, accionPropuesta: accionPropuesta ?? null },
     entityId: idConversacion,
     entityType: "asistente",
     module: "asistente",
   });
 
-  return { answer, conversationId: idConversacion, intent, sources };
+  return { accionPropuesta, answer, conversationId: idConversacion, intent, sources };
 }
