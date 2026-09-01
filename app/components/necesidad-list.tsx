@@ -14,6 +14,7 @@ import {
   Inbox,
   FolderCheck,
   FileUp,
+  Hash,
   LayoutGrid,
   Plus,
   Rows3,
@@ -216,6 +217,11 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
   const [listOpen, setListOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Segunda forma de importar: buscar el pedido por su N°, en vez de subir el
+  // .xlsx (ver app/api/necesidades/import-pedido-control/route.ts).
+  const [nroPedidoDialogOpen, setNroPedidoDialogOpen] = useState(false);
+  const [nroPedidoInput, setNroPedidoInput] = useState("");
+  const [importingControl, setImportingControl] = useState(false);
 
   const [searchQ, setSearchQ] = useState("");
   const debouncedSearch = useDebouncedValue(searchQ, 300);
@@ -504,6 +510,39 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
     await fetchNecesidades(next, true);
   }
 
+  // Común a las dos formas de importar (archivo .xlsx y N° de pedido en
+  // control): ambos endpoints devuelven `{items, count, pedidoGuardado}` con
+  // la misma forma, así que lo que se hace con la respuesta es idéntico.
+  function aplicarPedidoImportado(items: PedidoNecesidadImport[], count: number, pedidoGuardado?: boolean) {
+    if (items.length === 0) {
+      setError("El pedido no contiene ítems.");
+      return;
+    }
+    // Varios ítems → revisión en lote. Un solo ítem → prellenar el modal.
+    if (items.length > 1) {
+      setImportItems(items);
+      setImportSelected(new Set(items.map((_, i) => i)));
+      setListOpen(true);
+      return;
+    }
+    const item = items[0];
+    setNombre(item.nombre ?? "");
+    setTipoObjeto(item.tipoObjeto ?? "bienes");
+    setAreaUsuaria(item.areaUsuaria ?? "");
+    setProyectoInversion(item.proyectoInversion ?? "");
+    setMetaPresupuestal(item.metaPresupuestal ?? "");
+    setFinalidadPublica("");
+    setImportedItem(item);
+    setImportInfo({ nro: item.nroPedido ?? "—", count });
+    if (pedidoGuardado === false) {
+      setError(
+        "El pedido se leyó pero no se pudo archivar en pedidos_siga (¿falta ejecutar el SQL?). Puedes crear la necesidad igualmente.",
+      );
+    }
+    setOptionalOpen(true);
+    setFormOpen(true);
+  }
+
   async function handleImportPedido(file: File) {
     setImporting(true);
     setError("");
@@ -516,38 +555,37 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
         setError(payload.error ?? "No se pudo importar el pedido de compra.");
         return;
       }
-      const items: PedidoNecesidadImport[] = payload.items ?? [];
-      if (items.length === 0) {
-        setError("El pedido no contiene ítems.");
-        return;
-      }
-      // Varios ítems → revisión en lote. Un solo ítem → prellenar el modal.
-      if (items.length > 1) {
-        setImportItems(items);
-        setImportSelected(new Set(items.map((_, i) => i)));
-        setListOpen(true);
-        return;
-      }
-      const item = items[0];
-      setNombre(item.nombre ?? "");
-      setTipoObjeto(item.tipoObjeto ?? "bienes");
-      setAreaUsuaria(item.areaUsuaria ?? "");
-      setProyectoInversion(item.proyectoInversion ?? "");
-      setMetaPresupuestal(item.metaPresupuestal ?? "");
-      setFinalidadPublica("");
-      setImportedItem(item);
-      setImportInfo({ nro: item.nroPedido ?? "—", count: payload.count });
-      if (payload.pedidoGuardado === false) {
-        setError(
-          "El pedido se leyó pero no se pudo archivar en pedidos_siga (¿falta ejecutar el SQL?). Puedes crear la necesidad igualmente.",
-        );
-      }
-      setOptionalOpen(true);
-      setFormOpen(true);
+      aplicarPedidoImportado(payload.items ?? [], payload.count, payload.pedidoGuardado);
     } catch {
       setError("No se pudo conectar para importar el pedido.");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleImportPedidoControl() {
+    const nroPedido = nroPedidoInput.trim();
+    if (!nroPedido) return;
+    setImportingControl(true);
+    setError("");
+    try {
+      const res = await fetch("/api/necesidades/import-pedido-control", {
+        body: JSON.stringify({ nroPedido }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        setError(payload.error ?? "No se pudo importar el pedido.");
+        return;
+      }
+      aplicarPedidoImportado(payload.items ?? [], payload.count, payload.pedidoGuardado);
+      setNroPedidoDialogOpen(false);
+      setNroPedidoInput("");
+    } catch {
+      setError("No se pudo conectar para importar el pedido.");
+    } finally {
+      setImportingControl(false);
     }
   }
 
@@ -775,6 +813,61 @@ export function NecesidadList({ canManage, role = "" }: { canManage: boolean; ro
               {!importing ? <FileUp className="size-4" /> : null}
               {importing ? "Importando…" : "Importar pedido"}
             </Button>
+
+            {/* Segunda forma de importar: buscar el pedido por su N° en vez de
+                subir el archivo — ver app/api/necesidades/import-pedido-control. */}
+            <Dialog open={nroPedidoDialogOpen} onOpenChange={setNroPedidoDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="secondary"
+                  title="Buscar un pedido por su número e importarlo (sin subir archivo)"
+                >
+                  <Hash className="size-4" />
+                  Importar por N° de pedido
+                </Button>
+              </DialogTrigger>
+              <DialogContent
+                title="Importar por N° de pedido"
+                description="Escribe el número del pedido de compra; se busca y se prellena la necesidad automáticamente, sin subir ningún archivo."
+                size="sm"
+                footer={
+                  <>
+                    <DialogClose asChild>
+                      <Button variant="ghost" type="button" disabled={importingControl}>
+                        Cancelar
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      form="import-nro-pedido-form"
+                      loading={importingControl}
+                      disabled={!nroPedidoInput.trim()}
+                    >
+                      Buscar e importar
+                    </Button>
+                  </>
+                }
+              >
+                <form
+                  id="import-nro-pedido-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleImportPedidoControl();
+                  }}
+                >
+                  <Field label="N° de pedido">
+                    <Input
+                      autoFocus
+                      value={nroPedidoInput}
+                      onChange={(event) => setNroPedidoInput(event.target.value)}
+                      placeholder="Ej. 1388"
+                      disabled={importingControl}
+                    />
+                  </Field>
+                </form>
+              </DialogContent>
+            </Dialog>
 
             <Dialog
               open={formOpen}
