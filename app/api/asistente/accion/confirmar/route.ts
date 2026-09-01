@@ -11,10 +11,11 @@ export const maxDuration = 30;
 // Ejecuta una acción que "Mi Yo" propuso (ver AccionPropuesta en lib/mi-yo.ts)
 // y que el usuario confirmó con un clic en el widget. NUNCA escribe directo a
 // la base: llama internamente al MISMO endpoint que usaría un clic en la UI
-// (POST /api/necesidades, POST /api/necesidades/{id}/derivar), reenviando la
-// cookie de sesión de esta misma petición — así esos endpoints hacen su
-// propio requireCapability/RLS/validación/auditoría de siempre, sin que este
-// archivo tenga que duplicar ninguna de esas reglas.
+// (POST /api/necesidades, POST /api/necesidades/{id}/derivar, POST
+// /api/processes), reenviando la cookie de sesión de esta misma petición —
+// así esos endpoints hacen su propio requireCapability/RLS/validación/
+// auditoría de siempre, sin que este archivo tenga que duplicar ninguna de
+// esas reglas.
 const bodySchema = z.discriminatedUnion("tipo", [
   z.object({
     tipo: z.literal("crear_necesidad"),
@@ -28,6 +29,14 @@ const bodySchema = z.discriminatedUnion("tipo", [
     tipo: z.literal("derivar_necesidad"),
     conversationId: z.string().uuid().optional(),
     parametros: z.object({ necesidadId: z.string().uuid() }),
+  }),
+  z.object({
+    tipo: z.literal("crear_expediente"),
+    conversationId: z.string().uuid().optional(),
+    parametros: z.object({
+      nomenclature: z.string().trim().min(3).max(200),
+      objectType: z.enum(["bienes", "servicios", "obras", "consultoria_obra"]),
+    }),
   }),
 ]);
 
@@ -70,13 +79,23 @@ export async function POST(request: Request) {
         method: "POST",
       });
       mensajeExito = `Listo, registré la necesidad "${payload.data.parametros.nombre}".`;
-    } else {
+    } else if (payload.data.tipo === "derivar_necesidad") {
       respuestaInterna = await fetch(`${origin}/api/necesidades/${payload.data.parametros.necesidadId}/derivar`, {
         body: JSON.stringify({}),
         headers: { "Content-Type": "application/json", cookie },
         method: "POST",
       });
       mensajeExito = "Listo, derivé la necesidad a expediente de contratación.";
+    } else {
+      respuestaInterna = await fetch(`${origin}/api/processes`, {
+        body: JSON.stringify({
+          nomenclature: payload.data.parametros.nomenclature,
+          objectType: payload.data.parametros.objectType,
+        }),
+        headers: { "Content-Type": "application/json", cookie },
+        method: "POST",
+      });
+      mensajeExito = `Listo, creé el expediente "${payload.data.parametros.nomenclature}".`;
     }
 
     const cuerpo = await respuestaInterna.json().catch(() => ({}));

@@ -56,13 +56,19 @@ export type MiYoSource = {
 // `MiYoResult.accionPropuesta`; el widget la muestra con botones Confirmar/
 // Cancelar, y solo al confirmar se llama a /api/asistente/accion/confirmar
 // (que a su vez llama al MISMO endpoint que usaría un clic en la UI —
-// POST /api/necesidades o POST /api/necesidades/{id}/derivar— con la sesión,
-// los permisos y la auditoría reales de esa ruta; Mi Yo no escribe nada por
-// su cuenta). La propuesta vive solo en el estado del widget: si se cierra el
-// panel sin confirmar, se pierde — no hay una tabla de "acciones pendientes".
+// POST /api/necesidades, POST /api/necesidades/{id}/derivar o POST
+// /api/processes— con la sesión, los permisos y la auditoría reales de esa
+// ruta; Mi Yo no escribe nada por su cuenta). La propuesta vive solo en el
+// estado del widget: si se cierra el panel sin confirmar, se pierde — no hay
+// una tabla de "acciones pendientes".
 export type AccionPropuesta =
   | { tipo: "crear_necesidad"; parametros: { nombre: string; tipoObjeto: "bienes" | "servicios" | "obras" | "consultoria_obra" } }
-  | { tipo: "derivar_necesidad"; parametros: { necesidadId: string } };
+  | { tipo: "derivar_necesidad"; parametros: { necesidadId: string } }
+  // Expediente de contratación DIRECTO, sin pasar por una necesidad — casos
+  // donde no hace falta el flujo del área usuaria (p. ej. contrataciones que
+  // la propia DEC inicia). Distinto de "derivar_necesidad", que exige una
+  // necesidad ya conforme.
+  | { tipo: "crear_expediente"; parametros: { nomenclature: string; objectType: "bienes" | "servicios" | "obras" | "consultoria_obra" } };
 
 export type MiYoResult = {
   answer: string;
@@ -126,7 +132,7 @@ async function clasificarIntencion(
         "- archivo: pregunta sobre expedientes/documentos ARCHIVADOS de la entidad (buscar un documento, saber dónde está, de qué trata, quién lo subió) — es la biblioteca documental, no un expediente de contratación en curso.",
         "- actividad: pregunta sobre lo que el propio usuario hizo en el sistema (\"qué hice hoy\", \"en qué estoy trabajando\", \"mis últimas acciones\").",
         "- datos: pregunta sobre CUÁNTOS registros hay en el sistema o su distribución (\"cuántos expedientes hay\", \"cuántas necesidades tengo registradas\", \"cuántos en fase de selección\") — conteos y totales, no una pregunta sobre UN registro puntual.",
-        "- accion: el usuario quiere que TÚ hagas algo, no solo que respondas (\"crea una necesidad para...\", \"registra un requerimiento de...\", \"deriva esto a expediente\", \"convierte esta necesidad en expediente\"). Es una ORDEN, no una pregunta.",
+        "- accion: el usuario quiere que TÚ hagas algo, no solo que respondas (\"crea una necesidad para...\", \"registra un requerimiento de...\", \"deriva esto a expediente\", \"crea un expediente directo para...\", \"abre un expediente sin necesidad\"). Es una ORDEN, no una pregunta.",
         contexto
           ? `- registro: pregunta sobre EL ${contexto.tipo === "necesidad" ? "REQUERIMIENTO/NECESIDAD" : "EXPEDIENTE DE CONTRATACIÓN"} que el usuario tiene abierto ahora mismo en pantalla ("esta necesidad", "este expediente", "qué le falta", "revisa esto", o cualquier pregunta sin sujeto explícito que tenga sentido sobre el registro actual).`
           : "",
@@ -167,7 +173,10 @@ async function clasificarIntencion(
 type InterpretacionAccion =
   | { tipo: "crear_necesidad"; nombre: string; tipoObjeto: string }
   | { tipo: "derivar_necesidad" }
+  | { tipo: "crear_expediente"; nomenclature: string; objectType: string }
   | { tipo: "no_reconocida" };
+
+const TIPOS_OBJETO = ["bienes", "servicios", "obras", "consultoria_obra"];
 
 async function interpretarAccion(mensaje: string, historial: MensajeRow[]): Promise<InterpretacionAccion> {
   try {
@@ -176,10 +185,12 @@ async function interpretarAccion(mensaje: string, historial: MensajeRow[]): Prom
       model: legalAnswerModel,
       instructions: [
         "Traduces una ORDEN dentro de ACE a UNA de estas acciones EXACTAS:",
-        "- crear_necesidad: registrar una necesidad/requerimiento nuevo. Parámetros: nombre (resume en una frase clara y concreta QUÉ se necesita, en español, sin \"crear\" ni \"necesito\" al inicio), tipoObjeto (uno de: bienes, servicios, obras, consultoria_obra — 'bienes' si no está claro).",
+        "- crear_necesidad: registrar una necesidad/requerimiento nuevo, que luego seguirá el flujo normal (área usuaria → DEC → derivar). Parámetros: nombre (resume en una frase clara y concreta QUÉ se necesita, en español, sin \"crear\" ni \"necesito\" al inicio), tipoObjeto (uno de: bienes, servicios, obras, consultoria_obra — 'bienes' si no está claro).",
         "- derivar_necesidad: convertir/derivar a expediente de contratación la necesidad que el usuario tiene abierta en pantalla. Sin parámetros.",
+        "- crear_expediente: abrir un expediente de contratación DIRECTO, SIN pasar por una necesidad (el usuario lo pide explícitamente: \"crea un expediente directo\", \"abre un expediente sin necesidad\", \"expediente directo para...\"). Parámetros: nomenclature (frase clara y concreta de QUÉ se va a contratar, en español), objectType (uno de: bienes, servicios, obras, consultoria_obra — 'servicios' si no está claro).",
         "- no_reconocida: la orden no corresponde a ninguna acción soportada todavía, o el mensaje en realidad es una pregunta, no una orden.",
-        "Responde SOLO JSON: {\"tipo\": \"crear_necesidad|derivar_necesidad|no_reconocida\", \"nombre\": \"...\", \"tipoObjeto\": \"...\"} (nombre/tipoObjeto solo aplican a crear_necesidad).",
+        "Si el usuario pide \"crear una necesidad\"/\"un requerimiento\" SIN decir \"directo\"/\"sin necesidad\", es crear_necesidad, NO crear_expediente — son flujos distintos.",
+        "Responde SOLO JSON: {\"tipo\": \"crear_necesidad|derivar_necesidad|crear_expediente|no_reconocida\", \"nombre\": \"...\", \"tipoObjeto\": \"...\", \"nomenclature\": \"...\", \"objectType\": \"...\"} (los campos que no apliquen al tipo elegido se omiten u obvian).",
       ].join("\n"),
       input: `Historial reciente:\n${historialParaPrompt(historial)}\n\nOrden del usuario: ${mensaje}`,
       temperature: 0,
@@ -190,14 +201,23 @@ async function interpretarAccion(mensaje: string, historial: MensajeRow[]): Prom
     const fin = texto.lastIndexOf("}");
     const raw =
       ini !== -1 && fin > ini
-        ? (JSON.parse(texto.slice(ini, fin + 1)) as { tipo?: unknown; nombre?: unknown; tipoObjeto?: unknown })
+        ? (JSON.parse(texto.slice(ini, fin + 1)) as {
+            tipo?: unknown;
+            nombre?: unknown;
+            tipoObjeto?: unknown;
+            nomenclature?: unknown;
+            objectType?: unknown;
+          })
         : {};
-    const TIPOS_OBJETO = ["bienes", "servicios", "obras", "consultoria_obra"];
     if (raw.tipo === "crear_necesidad" && typeof raw.nombre === "string" && raw.nombre.trim().length >= 3) {
       const tipoObjeto = TIPOS_OBJETO.includes(raw.tipoObjeto as string) ? (raw.tipoObjeto as string) : "bienes";
       return { tipo: "crear_necesidad", nombre: raw.nombre.trim(), tipoObjeto };
     }
     if (raw.tipo === "derivar_necesidad") return { tipo: "derivar_necesidad" };
+    if (raw.tipo === "crear_expediente" && typeof raw.nomenclature === "string" && raw.nomenclature.trim().length >= 3) {
+      const objectType = TIPOS_OBJETO.includes(raw.objectType as string) ? (raw.objectType as string) : "servicios";
+      return { tipo: "crear_expediente", nomenclature: raw.nomenclature.trim(), objectType };
+    }
     return { tipo: "no_reconocida" };
   } catch {
     return { tipo: "no_reconocida" };
@@ -533,7 +553,7 @@ export async function responderMiYo(
       const interpretada = await interpretarAccion(mensaje, historial);
       if (interpretada.tipo === "no_reconocida") {
         answer =
-          "Todavía no sé hacer eso. Por ahora puedo: crear una necesidad nueva, o derivar a expediente la necesidad que tienes abierta.";
+          "Todavía no sé hacer eso. Por ahora puedo: crear una necesidad nueva, derivar a expediente la necesidad que tienes abierta, o crear un expediente directo (sin necesidad).";
       } else if (interpretada.tipo === "crear_necesidad") {
         if (!roleHasCapability(user.role, "necesidad.manage")) {
           answer = "Tu rol no tiene permiso para crear necesidades.";
@@ -546,6 +566,19 @@ export async function responderMiYo(
             },
           };
           answer = `¿Confirmas registrar esta necesidad?\n\nNombre: ${interpretada.nombre}\nTipo: ${interpretada.tipoObjeto}`;
+        }
+      } else if (interpretada.tipo === "crear_expediente") {
+        if (!roleHasCapability(user.role, "expediente.manage")) {
+          answer = "Tu rol no tiene permiso para crear expedientes de contratación.";
+        } else {
+          accionPropuesta = {
+            tipo: "crear_expediente",
+            parametros: {
+              nomenclature: interpretada.nomenclature,
+              objectType: interpretada.objectType as "bienes" | "servicios" | "obras" | "consultoria_obra",
+            },
+          };
+          answer = `¿Confirmas crear este expediente directo (sin pasar por una necesidad)?\n\nNomenclatura: ${interpretada.nomenclature}\nTipo: ${interpretada.objectType}`;
         }
       } else {
         // derivar_necesidad: exige la necesidad abierta — sin eso no hay a
