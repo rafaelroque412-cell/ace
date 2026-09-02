@@ -8,10 +8,35 @@
 import { plantillaDeProceso } from "./bases-plantillas";
 import type { HitosMap } from "./procurement-fases";
 
-export type ValorBases = { ruta: string; label: string; valor: string; resuelto: boolean };
+export type FilaFactorEvaluacion = { factor: string; sustento: string };
+
+export type ValorBases = {
+  ruta: string;
+  label: string;
+  valor: string;
+  resuelto: boolean;
+  /** Solo presente cuando el campoHito es un array real (hoy: factores_items).
+   *  lib/bases-docx.ts lo usa para pintar una tabla; `valor` sigue trayendo un
+   *  resumen en texto plano para cualquier otro consumidor. */
+  filas?: FilaFactorEvaluacion[];
+};
 
 function txt(v: unknown): string {
   return typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
+}
+
+// Filas de un campoHito que es un array real (hoy, solo factores_items: A4 lo
+// guarda como FactorEvaluacion[] = {nombre?, sustento?}[], ver
+// lib/estrategia-formato.ts — NO como texto). `txt()` lo trataba como "" y
+// "Factores de evaluación" nunca se resolvía en ningún .docx generado hasta
+// este fix. No se acopla al nombre del campo: cualquier array de objetos con
+// `nombre`/`sustento` se lee igual.
+function filasDeArray(v: unknown): FilaFactorEvaluacion[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    return { factor: txt(o.nombre), sustento: txt(o.sustento) };
+  });
 }
 
 export function resolverBases(
@@ -35,7 +60,17 @@ export function resolverBases(
     }
     // origen === "literal"
     const data = (hitos[campo.hito!]?.data ?? {}) as Record<string, unknown>;
-    const valor = txt(data[campo.campoHito!]);
+    const crudo = data[campo.campoHito!];
+    const filas = filasDeArray(crudo);
+    if (filas) {
+      const valor = filas.map((f) => `${f.factor}: ${f.sustento}`).join("\n");
+      // Array vacío: igual que cualquier otro campo sin dato, sin `filas` (para
+      // que un consumidor no tenga que distinguir "array vacío" de "ausente").
+      return filas.length > 0
+        ? { filas, label: campo.label, resuelto: true, ruta: campo.ruta, valor }
+        : { label: campo.label, resuelto: false, ruta: campo.ruta, valor: "" };
+    }
+    const valor = txt(crudo);
     return { label: campo.label, resuelto: valor !== "", ruta: campo.ruta, valor };
   });
 }
