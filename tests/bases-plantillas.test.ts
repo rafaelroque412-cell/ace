@@ -45,4 +45,28 @@ describe("PLANTILLAS_BASES · Licitación Pública para bienes", () => {
     expect(nombre.origen).toBe("entidad");
     expect(ruc.origen).toBe("entidad");
   });
+
+  it("el resto del Capítulo III (3.3.c-j) y el 3.5 salen de A3/A4, leídos del PDF real", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap3.plazoEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "plazo_dias" });
+    expect(porRuta["cap3.lugarEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "lugar_entrega" });
+    expect(porRuta["cap3.penalidadMora"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "penalidad_mora" });
+    expect(porRuta["cap3.otrasPenalidades"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "otras_penalidades" });
+    expect(porRuta["cap3.subcontratacion"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "subcontratacion" });
+    expect(porRuta["cap3.formulaReajuste"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "formula_reajuste" });
+    expect(porRuta["cap3.solucionControversias"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "solucion_controversias" });
+    // Los requisitos de calificación de las bases son los DECIDIDOS en la
+    // estrategia (A4 · f), no la propuesta del área usuaria en A3.
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+  });
+
+  it("el Capítulo IV (factores de evaluación) sale de la estrategia decidida en A4", () => {
+    const factores = plantilla.seccionEspecifica.find((c) => c.ruta === "cap4.factoresEvaluacion")!;
+    expect(factores).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("el Capítulo V (proforma del contrato) no se mapea aquí: depende de datos de Fase 2 (buena pro), no de A1-A9", () => {
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
+  });
 });

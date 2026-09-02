@@ -227,10 +227,28 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
       // la estrategia (A4), no la propuesta del área usuaria en A3.
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
       { ruta: "cap3.sistemaEntrega", label: "Sistema de entrega", origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" },
-      // El resto de la Sección Específica (Cap. II cronograma/requisitos de
-      // participación, Cap. IV factores de evaluación, Cap. V proforma del
-      // contrato) se completa en el Task 2, leyendo el resto del documento
-      // igual que se hizo con estos 6 campos — no se adivina aquí.
+
+      // ===== Task 2: resto del Cap. III "Requerimiento" de la Sección
+      // Específica (numerales 3.3.c-j y 3.5), leído del propio PDF de bienes. =====
+      { ruta: "cap3.plazoEntrega", label: "Plazo de entrega", origen: "literal", hito: "A3", campoHito: "plazo_dias" },
+      { ruta: "cap3.lugarEntrega", label: "Lugar de entrega o de prestación", origen: "literal", hito: "A3", campoHito: "lugar_entrega" },
+      { ruta: "cap3.penalidadMora", label: "Penalidad por mora", origen: "literal", hito: "A3", campoHito: "penalidad_mora" },
+      { ruta: "cap3.otrasPenalidades", label: "Otras penalidades", origen: "literal", hito: "A3", campoHito: "otras_penalidades" },
+      { ruta: "cap3.subcontratacion", label: "Subcontratación", origen: "literal", hito: "A3", campoHito: "subcontratacion" },
+      { ruta: "cap3.formulaReajuste", label: "Fórmulas de reajuste", origen: "literal", hito: "A3", campoHito: "formula_reajuste" },
+      { ruta: "cap3.solucionControversias", label: "Solución de controversias contractuales", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
+      // 3.5 Requisitos de calificación: el DECIDIDO por la DEC en la estrategia
+      // (A4 · f), no la propuesta del área usuaria en A3.
+      { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
+
+      // ===== Task 2: Cap. IV "Evaluación" — factores de evaluación (4.1-4.2). =====
+      { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
+
+      // El Cap. V "Proforma del contrato" queda FUERA de este mapeo: sus datos
+      // (postor ganador, DNI/RUC del contratista, fecha de suscripción, monto
+      // adjudicado) no vienen de A1-A9 sino del otorgamiento de la buena pro en
+      // Fase 2 (B7, ver lib/buena-pro-docx-datos.ts). Se resuelve en el Task 3/4
+      // cruzando esos hitos de Fase 2, no aquí.
     ],
   },
 };
