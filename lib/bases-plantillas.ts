@@ -2449,51 +2449,96 @@ En el caso que los documentos requeridos para el perfeccionamiento del contrato 
 Todos los demás aspectos del presente procedimiento de selección no contemplados en las bases se rigen por la Ley y su Reglamento, así como por las disposiciones legales vigentes.
 `.trim();
 
+// Campos de la Sección Específica compartidos por "Licitación Pública para
+// bienes" y "Licitación Pública para bienes especializados": confirmado en
+// lib/procesos-seleccion.ts que ambos catálogos apuntan al MISMO
+// `pdfBasesEstandar` (BASES_BIENES) — el OECE no publicó una bases estándar
+// propia para la variante "especializados" (Art. 93, precalificación por
+// cuantía/sistema de entrega llave en mano), reutiliza el mismo documento.
+// Se extrae a una constante para no duplicar el array entre ambas entradas
+// de PLANTILLAS_BASES.
+const CAMPOS_BIENES: CampoBases[] = [
+  // Nombre y RUC de la entidad contratante: no viven en ningún hito de la
+  // fase de contratación, sino en Configuración → Municipalidad
+  // (entity_settings.name / entity_settings.ruc). El Task 3 los resuelve
+  // desde ahí, igual que ya hacen otros exportables de Fase 1
+  // (ver lib/settings-catalog.ts).
+  { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
+  { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
+  // El año fiscal no tiene campo propio en A1 (no existe "anio_fiscal" en
+  // sus campos); se deja "libre" hasta confirmar en el Task 3 si conviene
+  // derivarlo del año de partición del expediente en vez de inventarlo aquí.
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
+  { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
+  // Modalidad de pago y sistema de entrega son los DECIDIDOS por la DEC en
+  // la estrategia (A4), no la propuesta del área usuaria en A3.
+  { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
+  { ruta: "cap3.sistemaEntrega", label: "Sistema de entrega", origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" },
+  { ruta: "cap3.plazoEntrega", label: "Plazo de entrega", origen: "literal", hito: "A3", campoHito: "plazo_dias" },
+  { ruta: "cap3.lugarEntrega", label: "Lugar de entrega o de prestación", origen: "literal", hito: "A3", campoHito: "lugar_entrega" },
+  { ruta: "cap3.penalidadMora", label: "Penalidad por mora", origen: "literal", hito: "A3", campoHito: "penalidad_mora" },
+  { ruta: "cap3.otrasPenalidades", label: "Otras penalidades", origen: "literal", hito: "A3", campoHito: "otras_penalidades" },
+  { ruta: "cap3.subcontratacion", label: "Subcontratación", origen: "literal", hito: "A3", campoHito: "subcontratacion" },
+  { ruta: "cap3.formulaReajuste", label: "Fórmulas de reajuste", origen: "literal", hito: "A3", campoHito: "formula_reajuste" },
+  { ruta: "cap3.solucionControversias", label: "Solución de controversias contractuales", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
+  // 3.5 Requisitos de calificación: el DECIDIDO por la DEC en la estrategia
+  // (A4 · f), no la propuesta del área usuaria en A3.
+  { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
+  { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
+  // El Cap. V "Proforma del contrato" queda FUERA de este mapeo: sus datos
+  // (postor ganador, DNI/RUC del contratista, fecha de suscripción, monto
+  // adjudicado) no vienen de A1-A9 sino del otorgamiento de la buena pro en
+  // Fase 2 (B7, ver lib/buena-pro-docx-datos.ts). Se resuelve en el Task 3/4
+  // cruzando esos hitos de Fase 2, no aquí.
+];
+
+// Campos de la Sección Específica compartidos por "Licitación Pública de
+// obras" y "Licitación Pública de obras con precalificación": mismo motivo
+// que CAMPOS_BIENES — ambos catálogos apuntan al MISMO `pdfBasesEstandar`
+// (BASES_OBRAS, ver lib/procesos-seleccion.ts). Mapeo PARCIAL: la Sección
+// Específica de obras tiene DOS variantes completas de Cap. III según
+// sistema de entrega, con contenido propio (Art. 154) sin campoHito
+// equivalente hoy — ver el comentario junto a "Licitación Pública de obras"
+// más abajo para el detalle completo de por qué es parcial.
+const CAMPOS_OBRAS_SM: CampoBases[] = [
+  { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
+  { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  // 3.1 Finalidad pública: idéntica en ambas variantes del Cap. III
+  // (diseño y construcción, p. 34; solo construcción, p. 53).
+  { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
+  // 3.2 Descripción general pide el "Código Único de Inversión (CUI), de
+  // corresponder" — el mismo dato que A4 ya captura para inversiones.
+  { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
+  // El resto de 3.2 (nombre del proyecto, ubicación, especialidad,
+  // subespecialidad, tipología, nivel de estudios de preinversión) es un
+  // bloque estructurado propio de obras sin campo equivalente en ACE
+  // todavía: no se fuerza contra el `descripcion` genérico de A3, que
+  // perdería esa estructura. Queda para el pase dedicado (Cap. II-IV).
+];
+
 export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
   "Licitación Pública para bienes": {
     proceso: "Licitación Pública para bienes",
     seccionGeneral: SECCION_GENERAL_BIENES,
-    seccionEspecifica: [
-      // Nombre y RUC de la entidad contratante: no viven en ningún hito de la
-      // fase de contratación, sino en Configuración → Municipalidad
-      // (entity_settings.name / entity_settings.ruc). El Task 3 los resuelve
-      // desde ahí, igual que ya hacen otros exportables de Fase 1
-      // (ver lib/settings-catalog.ts).
-      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
-      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      // El año fiscal no tiene campo propio en A1 (no existe "anio_fiscal" en
-      // sus campos); se deja "libre" hasta confirmar en el Task 3 si conviene
-      // derivarlo del año de partición del expediente en vez de inventarlo aquí.
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
-      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
-      { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
-      // Modalidad de pago y sistema de entrega son los DECIDIDOS por la DEC en
-      // la estrategia (A4), no la propuesta del área usuaria en A3.
-      { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
-      { ruta: "cap3.sistemaEntrega", label: "Sistema de entrega", origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" },
+    seccionEspecifica: CAMPOS_BIENES,
+  },
 
-      // ===== Task 2: resto del Cap. III "Requerimiento" de la Sección
-      // Específica (numerales 3.3.c-j y 3.5), leído del propio PDF de bienes. =====
-      { ruta: "cap3.plazoEntrega", label: "Plazo de entrega", origen: "literal", hito: "A3", campoHito: "plazo_dias" },
-      { ruta: "cap3.lugarEntrega", label: "Lugar de entrega o de prestación", origen: "literal", hito: "A3", campoHito: "lugar_entrega" },
-      { ruta: "cap3.penalidadMora", label: "Penalidad por mora", origen: "literal", hito: "A3", campoHito: "penalidad_mora" },
-      { ruta: "cap3.otrasPenalidades", label: "Otras penalidades", origen: "literal", hito: "A3", campoHito: "otras_penalidades" },
-      { ruta: "cap3.subcontratacion", label: "Subcontratación", origen: "literal", hito: "A3", campoHito: "subcontratacion" },
-      { ruta: "cap3.formulaReajuste", label: "Fórmulas de reajuste", origen: "literal", hito: "A3", campoHito: "formula_reajuste" },
-      { ruta: "cap3.solucionControversias", label: "Solución de controversias contractuales", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
-      // 3.5 Requisitos de calificación: el DECIDIDO por la DEC en la estrategia
-      // (A4 · f), no la propuesta del área usuaria en A3.
-      { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
-
-      // ===== Task 2: Cap. IV "Evaluación" — factores de evaluación (4.1-4.2). =====
-      { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
-
-      // El Cap. V "Proforma del contrato" queda FUERA de este mapeo: sus datos
-      // (postor ganador, DNI/RUC del contratista, fecha de suscripción, monto
-      // adjudicado) no vienen de A1-A9 sino del otorgamiento de la buena pro en
-      // Fase 2 (B7, ver lib/buena-pro-docx-datos.ts). Se resuelve en el Task 3/4
-      // cruzando esos hitos de Fase 2, no aquí.
-    ],
+  // "Licitación Pública para bienes especializados" — mismo `pdfBasesEstandar`
+  // que "Licitación Pública para bienes" (BASES_BIENES, ver
+  // lib/procesos-seleccion.ts): el OECE no publicó una bases estándar propia
+  // para esta variante diferenciada (bienes bajo sistema de entrega llave en
+  // mano/llave en mano con mantenimiento, cuantía > S/ 2 000 000,00, con
+  // precalificación — Art. 93). Reutiliza la MISMA Sección General y Sección
+  // Específica, mismo patrón ya usado para el grupo de "Concurso Público con
+  // precalificación" (ver VARIANTES_AMBIGUAS más abajo) — pero aquí no hace
+  // falta pasar por ahí porque `pdfBasesEstandar` tiene un solo PDF, no varios:
+  // no es ambiguo, solo un alias directo bajo su propio value de catálogo.
+  "Licitación Pública para bienes especializados": {
+    proceso: "Licitación Pública para bienes especializados",
+    seccionGeneral: SECCION_GENERAL_BIENES,
+    seccionEspecifica: CAMPOS_BIENES,
   },
 
   // "Licitación Pública de obras" — mapeo PARCIAL (equivalente al Task 1 de
@@ -2523,22 +2568,23 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
   "Licitación Pública de obras": {
     proceso: "Licitación Pública de obras",
     seccionGeneral: SECCION_GENERAL_OBRAS,
-    seccionEspecifica: [
-      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
-      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
-      // 3.1 Finalidad pública: idéntica en ambas variantes del Cap. III
-      // (diseño y construcción, p. 34; solo construcción, p. 53).
-      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
-      // 3.2 Descripción general pide el "Código Único de Inversión (CUI), de
-      // corresponder" — el mismo dato que A4 ya captura para inversiones.
-      { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
-      // El resto de 3.2 (nombre del proyecto, ubicación, especialidad,
-      // subespecialidad, tipología, nivel de estudios de preinversión) es un
-      // bloque estructurado propio de obras sin campo equivalente en ACE
-      // todavía: no se fuerza contra el `descripcion` genérico de A3, que
-      // perdería esa estructura. Queda para el pase dedicado (Cap. II-IV).
-    ],
+    seccionEspecifica: CAMPOS_OBRAS_SM,
+  },
+
+  // "Licitación Pública de obras con precalificación" — mismo
+  // `pdfBasesEstandar` que "Licitación Pública de obras" (BASES_OBRAS, ver
+  // lib/procesos-seleccion.ts): el OECE no publicó una bases estándar propia
+  // para esta variante diferenciada (mismos sistemas de entrega que la
+  // licitación de obras sin precalificar, cuantía ≥ S/ 79 000 000,00 —
+  // Art. 93). Reutiliza la MISMA Sección General y Sección Específica que
+  // "Licitación Pública de obras", mismo patrón que
+  // "Licitación Pública para bienes especializados" arriba: `pdfBasesEstandar`
+  // tiene un solo PDF, no es ambiguo, solo un alias directo bajo su propio
+  // value de catálogo.
+  "Licitación Pública de obras con precalificación": {
+    proceso: "Licitación Pública de obras con precalificación",
+    seccionGeneral: SECCION_GENERAL_OBRAS,
+    seccionEspecifica: CAMPOS_OBRAS_SM,
   },
 
   // "Concurso Público de servicios" — mapeo COMPLETO (mismo alcance que el

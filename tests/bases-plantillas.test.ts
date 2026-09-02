@@ -71,6 +71,29 @@ describe("PLANTILLAS_BASES · Licitación Pública para bienes", () => {
   });
 });
 
+describe("PLANTILLAS_BASES · Licitación Pública para bienes especializados", () => {
+  const especializados = PLANTILLAS_BASES["Licitación Pública para bienes especializados"];
+  const bienes = PLANTILLAS_BASES["Licitación Pública para bienes"];
+
+  it("existe y no está vacía", () => {
+    expect(especializados).toBeDefined();
+    expect(especializados.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("reutiliza la MISMA Sección General y los mismos campos que bienes: mismo pdfBasesEstandar (BASES_BIENES)", () => {
+    // Confirmado en lib/procesos-seleccion.ts: ambos catálogos apuntan al
+    // mismo PDF — el OECE no publicó una bases estándar propia para la
+    // variante "especializados". No es una coincidencia de contenido, es
+    // literalmente el mismo array de campos (misma referencia).
+    expect(especializados.seccionGeneral).toBe(bienes.seccionGeneral);
+    expect(especializados.seccionEspecifica).toBe(bienes.seccionEspecifica);
+  });
+
+  it("el proceso declarado es el propio, no el de bienes sin especializar", () => {
+    expect(especializados.proceso).toBe("Licitación Pública para bienes especializados");
+  });
+});
+
 describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
   const plantilla = PLANTILLAS_BASES["Licitación Pública de obras"];
 
@@ -120,6 +143,28 @@ describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
     expect(rutas).not.toContain("cap3.descripcionRequerimiento");
     expect(rutas).not.toContain("cap3.modalidadPago");
     expect(rutas).not.toContain("cap3.sistemaEntrega");
+  });
+});
+
+describe("PLANTILLAS_BASES · Licitación Pública de obras con precalificación", () => {
+  const conPrecalificacion = PLANTILLAS_BASES["Licitación Pública de obras con precalificación"];
+  const obras = PLANTILLAS_BASES["Licitación Pública de obras"];
+
+  it("existe y no está vacía", () => {
+    expect(conPrecalificacion).toBeDefined();
+    expect(conPrecalificacion.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("reutiliza la MISMA Sección General y los mismos campos que obras sin precalificar: mismo pdfBasesEstandar (BASES_OBRAS)", () => {
+    // Confirmado en lib/procesos-seleccion.ts: ambos catálogos apuntan al
+    // mismo PDF — el OECE no publicó una bases estándar propia para la
+    // variante "con precalificación".
+    expect(conPrecalificacion.seccionGeneral).toBe(obras.seccionGeneral);
+    expect(conPrecalificacion.seccionEspecifica).toBe(obras.seccionEspecifica);
+  });
+
+  it("el proceso declarado es el propio, no el de obras sin precalificar", () => {
+    expect(conPrecalificacion.proceso).toBe("Licitación Pública de obras con precalificación");
   });
 });
 
