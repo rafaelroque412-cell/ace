@@ -399,6 +399,52 @@ describe("PLANTILLAS_BASES · Comparación de Precios", () => {
   });
 });
 
+describe("PLANTILLAS_BASES · Procedimiento de Selección No Competitivo", () => {
+  const plantilla = PLANTILLAS_BASES["Procedimiento de Selección No Competitivo"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General tiene SOLO 3 capítulos: no hay Recurso de Apelación", () => {
+    // Confirmado leyendo el PDF: al invitarse a un único proveedor, no hay
+    // postores en competencia ni buena pro que impugnar entre ellos.
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN NO COMPETITIVO");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+    expect(plantilla.seccionGeneral).not.toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).not.toContain("CAPÍTULO IV");
+  });
+
+  it("refleja las etapas propias: actuaciones preparatorias, fase de selección, aprobación", () => {
+    expect(plantilla.seccionGeneral).toContain("a) Actuaciones preparatorias.");
+    expect(plantilla.seccionGeneral).toContain("b) Fase de Selección.");
+    expect(plantilla.seccionGeneral).toContain("c) Aprobación del procedimiento no competitivo.");
+  });
+
+  it("el mapeo es PARCIAL: solo entidad, año fiscal, finalidad pública, descripción y requisitos de calificación", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+  });
+
+  it("no fuerza 'condiciones de contratación': el PDF remite a las bases estándar del objeto, no da campos propios", () => {
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas).not.toContain("cap3.modalidadPago");
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.plazoEntrega");
+    expect(rutas).not.toContain("cap3.lugarEntrega");
+    expect(rutas).not.toContain("cap3.penalidadMora");
+    expect(rutas).not.toContain("cap4.factoresEvaluacion");
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 

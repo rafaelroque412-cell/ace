@@ -1343,6 +1343,131 @@ En el caso que los documentos requeridos para el perfeccionamiento del contrato 
 Todos los demás aspectos del presente procedimiento de selección no contemplados en las bases se rigen por la Ley y su Reglamento, así como por las disposiciones legales vigentes.
 `.trim();
 
+// Transcrita a mano leyendo el texto de capa del PDF oficial de
+// "procedimiento de selección no competitivo" (actuaciones-preparatorias/bases/7614342-19-bases-estandar-procedimiento-de-seleccion-no-competitivo.pdf),
+// mismo método que las anteriores. Misma advertencia de fidelidad.
+//
+// Estructuralmente el más distinto de todos: al no haber postores en
+// competencia (se invita a UN proveedor identificado en la estrategia), la
+// Sección General tiene solo TRES capítulos — Aspectos Generales,
+// Desarrollo del Procedimiento y Del Contrato — SIN Capítulo de "Recurso de
+// Apelación" (no hay buena pro que impugnar entre postores) y con etapas
+// propias (a. Actuaciones preparatorias, b. Fase de Selección, c. Aprobación
+// del procedimiento no competitivo) distintas a convocatoria/registro de
+// participantes/evaluación/otorgamiento de los demás tipos.
+const SECCION_GENERAL_NO_COMPETITIVO = `
+CAPÍTULO I
+ASPECTOS GENERALES
+
+1.1. REFERENCIAS
+Cuando en el presente documento se mencione la palabra "Ley", se entiende que se está haciendo referencia a la Ley N° 32069, Ley General de Contrataciones Públicas, y cuando se mencione la palabra "Reglamento", se entiende que se está haciendo referencia al Reglamento de la Ley N° 32069, Ley General de Contrataciones Públicas, aprobado por Decreto Supremo N° 009-2025-EF. Las referidas normas incluyen sus respectivas modificaciones, de ser el caso.
+
+1.2. ALCANCE
+La presente base estándar correspondiente al procedimiento de selección no competitivo es utilizada por la entidad contratante para contratar directamente con un proveedor solo cuando se configure alguno de los supuestos del numeral 55.1 del artículo 55 de la Ley y del artículo 100 del Reglamento.
+
+CAPÍTULO II
+DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN NO COMPETITIVO
+
+2.1 DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN NO COMPETITIVO
+Para proceder a una contratación mediante un procedimiento de selección no competitivo se realizan las siguientes acciones (de conformidad con el numeral 27.1 del artículo 27 de la Ley, la facultad para actuar discrecionalmente se fundamenta en el rigor técnico empleado por los funcionarios y servidores, dependencias y unidades de organización encargadas de las contrataciones públicas para optar por la mejor decisión debidamente sustentada que permita el cumplimiento oportuno de los fines públicos):
+
+a) Actuaciones preparatorias.
+Se elabora el requerimiento de acuerdo con el artículo 46 de la Ley, aplicando las disposiciones generales de actuaciones preparatorias. No corresponde realizar segmentación en el caso de procedimientos de selección no competitivos. La estrategia de contratación tiene como objetivo identificar a un proveedor que cumpla los requisitos de admisión y requisitos de calificación, pudiendo aplicar el artículo 47, según lo considere necesario. Culmina con la identificación del proveedor invitado y la aprobación del expediente de contratación, en el que consta la cuantía del procedimiento de selección.
+(Artículo 46 de la Ley. Artículos 44 y 101 del Reglamento.)
+
+b) Fase de Selección.
+La DEC invita al proveedor identificado en la estrategia de contratación a presentar formalmente sus ofertas, para lo cual adjunta las bases correspondientes, elaboradas en la fase de actuaciones preparatorias. El proveedor invitado presenta la oferta técnica y económica conforme al contenido previsto en el artículo 69 del Reglamento. Además, debe contar con inscripción vigente ante el Registro Nacional de Proveedores (RNP). La oferta económica del proveedor no puede superar la cuantía incluida en el expediente de contratación. Asimismo, la oferta económica y sus subtotales se expresan en dos decimales y todos sus valores desagregados pueden ser expresados con más de dos decimales. La DEC verifica la documentación presentada y procede a iniciar el trámite de aprobación del procedimiento no competitivo. Cabe señalar que en caso el proveedor invitado no cumpla con las condiciones establecidas en las bases, se deja sin efecto la selección del proveedor y se procede a invitar a otro.
+(Artículo 30 de la Ley. Artículos 40, 65, 69 y 101 del Reglamento.)
+
+c) Aprobación del procedimiento no competitivo.
+Para aprobar el procedimiento no competitivo se requiere informes técnico y legal respecto de la necesidad de la contratación y la procedencia del supuesto respectivo. El informe técnico es emitido por la DEC. Se aprueba con resolución del titular de la entidad contratante o de la autoridad de la gestión administrativa según corresponda la causal invocada (el titular de la entidad aprueba la contratación mediante procedimientos no competitivos en las causales b), c) y k) del numeral 55.1 del artículo 55 de la Ley, en tanto que la autoridad de la gestión administrativa aprueba la contratación mediante procedimientos no competitivos en las causales a), d), e), f), g), h), i), j), l) y m) del numeral 55.1 del artículo 55 de la Ley).
+
+Excepción: de acuerdo con el numeral 102.6 del artículo 102 del Reglamento, la aprobación de procedimientos de selección no competitivos en vía de regularización se encuentra prohibida, a excepción del supuesto previsto en el literal b) del numeral 55.1 del artículo 55 de la Ley (situación de emergencia). Asimismo, de acuerdo con el artículo 289 del Reglamento, únicamente en las contrataciones directas por situación de emergencia se regulariza y se publica en el SEACE de la Pladicop la siguiente documentación: a) el informe o los informes que contienen el sustento técnico legal de la contratación directa (el informe técnico emitido por la DEC precisa las acciones, indagaciones y criterios que tomó la entidad contratante para seleccionar al proveedor y atender la emergencia mediante la referida contratación); b) la resolución que aprueba la contratación mediante esta causal; c) el requerimiento; d) el contrato y sus requisitos que, a la fecha de la contratación, no haya sido elaborado, aprobado o suscrito, según corresponda.
+(Numeral 55.2 del artículo 55 de la Ley. Artículo 102 del Reglamento.)
+
+2.2 CONSIDERACIONES PARA EL PROVEEDOR:
+2.2.1 Es necesario que el proveedor invitado en un procedimiento de selección no competitivo cuente con inscripción vigente ante el Registro Nacional de Proveedores (RNP) que administra el Organismo Especializado para las Contrataciones Públicas Eficientes (OECE) en el registro correspondiente al objeto del procedimiento de selección. Para obtener mayor información se puede ingresar a la siguiente dirección electrónica: www.rnp.gob.pe.
+2.2.2 El proveedor invitado debe presentar su oferta ingresando al SEACE de la Pladicop utilizando su certificado (usuario y contraseña).
+2.2.3 Las declaraciones juradas, formatos o formularios previstos en las bases que conforman la oferta deben estar debidamente firmados por el postor (firma manuscrita o digital, según la Ley Nº 27269, Ley de Firmas y Certificados Digitales). No se acepta insertar la imagen de una firma. El postor, el representante legal o común, apoderado o mandatario designado se hace responsable de la totalidad de los documentos incluidos en la oferta. El postor es responsable de verificar, antes de su envío, que el archivo pueda ser descargado y su contenido sea legible. En caso la información contenida en los documentos que conforman la oferta no coincida con lo declarado a través del SEACE de la Pladicop, prevalece la información declarada en los documentos de la oferta.
+
+Advertencia: en caso de que el proveedor emplee la firma digital como una única firma en los documentos que conforman la oferta, esta es suficiente para que el documento sea considerado firmado legalmente.
+
+2.2.4 Para la admisión de su oferta el proveedor debe presentar, de corresponder, una declaración jurada de desafectación del impedimento debido al parentesco establecido en el inciso 2 del numeral 30.1 del artículo 30 de la Ley, y, adicionalmente, la acreditación documental de su condición de desafectación conforme a lo indicado en el literal f) del numeral 2.2.1.1 del Capítulo II de la Sección Específica de las bases.
+
+2.3 CONSIDERACIONES ADICIONALES PARA LOS CONSORCIOS:
+2.3.1 En el caso de consorcios, para presentar su oferta es necesario que todos los integrantes del consorcio cuenten con inscripción vigente en el RNP. No se considera consorcio a la asociación de personas de duración ilimitada o indefinida que, denominándose consorcios, han sido constituidas como personas jurídicas en los Registros Públicos.
+2.3.2 Como parte de los documentos de su oferta el consorcio debe presentar la promesa de consorcio con firmas digitales de todos sus integrantes o, en su defecto, firmas legalizadas, de ser el caso, conforme a lo establecido en el literal d) del numeral 69.1 del artículo 69 del Reglamento. La promesa de consorcio debe consignar, como mínimo, lo siguiente:
+a) La identificación de los integrantes del consorcio. Se debe precisar el nombre completo o la denominación o razón social de los integrantes del consorcio, según corresponda.
+b) La designación del representante común del consorcio.
+c) El domicilio común del consorcio.
+d) El correo electrónico común del consorcio, al cual se dirigirán todas las comunicaciones remitidas por la entidad contratante al consorcio durante el proceso de contratación, siendo éste el único válido para todos los efectos.
+e) Las obligaciones que correspondan a cada uno de los integrantes del consorcio.
+f) El porcentaje del total de las obligaciones de cada uno de los integrantes respecto del objeto del contrato. Dicho porcentaje debe ser expresado en número entero, sin decimales.
+2.3.3 La información contenida en los literales a), e) y f) precedentes no puede ser modificada con ocasión de la suscripción del contrato de consorcio, ni durante la etapa de ejecución contractual. En tal sentido, no cabe variación alguna en la conformación del consorcio, por lo que no es posible que se incorpore, sustituya o separe a un integrante.
+2.3.4 El representante común tiene facultades para actuar en nombre y representación del consorcio, en todos los actos referidos al procedimiento de selección, suscripción y ejecución del contrato, con poderes suficientes para ejercitar los derechos y cumplir las obligaciones que se deriven de su calidad de postor y de contratista hasta la conformidad o liquidación del contrato, según corresponda. El representante común no debe encontrarse impedido, inhabilitado ni suspendido para contratar con el Estado. Para cambiar al representante común, todos los integrantes del consorcio deben firmar (mediante firmas legalizadas o firmas digitales) el documento en el que conste el acuerdo, el cual surte efectos cuando es notificado a la entidad contratante.
+2.3.5 Las declaraciones juradas, formatos o formularios previstos en las bases que conforman la oferta deben estar debidamente firmados por el representante común, por todos los integrantes del consorcio o de forma independiente por cada consorciado, según corresponda (firma manuscrita o digital, según la Ley Nº 27269, Ley de Firmas y Certificados Digitales). En el caso de los documentos que deban suscribir todos los integrantes del consorcio, la firma es seguida de la razón social o denominación de cada uno de ellos. Lo mismo aplica en caso deban ser suscritos en forma independiente por cada integrante del consorcio, de acuerdo con lo establecido en los documentos del procedimiento de selección. En el caso de un consorcio integrado por una persona natural, basta que la persona natural indique debajo de su firma sus nombres y apellidos completos.
+2.3.6 La acreditación del requisito de calificación de la experiencia del postor se realiza en base a la documentación aportada por el o los integrantes del consorcio que se hubieran comprometido a ejecutar conjuntamente las obligaciones vinculadas directamente con el objeto materia de la contratación, de acuerdo con lo declarado en la promesa de consorcio. Para ello se debe seguir los siguientes pasos: a) Primer paso: obtener el monto de facturación por cada integrante del consorcio, el cual se obtiene de la sumatoria de montos facturados por éste que, a criterio de la dependencia encargada de las contrataciones han sido acreditados conforme a las bases, correspondiente a las contrataciones ejecutadas en forma individual y/o consorcio. En caso un integrante del consorcio presente facturación de contrataciones ejecutadas en consorcio, se considera el monto que corresponda al porcentaje de las obligaciones del referido integrante del consorcio. Este porcentaje debe estar consignado expresamente en la promesa o en el contrato de consorcio, de lo contrario, no se considera la experiencia ofertada en consorcio. b) Segundo paso: verificar si el integrante del consorcio que acredita la mayor experiencia cumple con un determinado porcentaje de participación. En caso la entidad contratante haya establecido en las bases un porcentaje determinado de participación en la ejecución del contrato, para el integrante del consorcio que acredite mayor experiencia, debe verificarse que éste cumple con dicho parámetro a efectos de considerar su experiencia. c) Tercer paso: sumatoria de experiencia de los consorciados. Para obtener la experiencia del consorcio se suma el monto de facturación aportado por cada integrante que cumple con lo señalado previamente.
+2.3.7 Para calificar la experiencia del postor no se toma en cuenta la documentación presentada por el o los consorciados que asumen las obligaciones referidas a las siguientes actividades: i) actividades de carácter administrativo o de gestión como facturación, financiamiento, aporte de garantías, entre otras; ii) actividades relacionadas con asuntos de organización interna, tales como representación u otros aspectos que no se relacionan con la ejecución de las prestaciones, entre otras. Tratándose de bienes, solo se consideran las obligaciones vinculadas directamente al objeto de la contratación, como la fabricación y/o comercialización. No corresponde considerar la experiencia presentada por los integrantes del consorcio que se obliguen a ejecutar las demás actividades de la cadena productiva y actividades accesorias, tales como el aporte de materias primas, combustible, infraestructura, transporte, envasado, almacenaje, entre otras.
+2.3.8 Los integrantes del consorcio son responsables de que su inscripción en el RNP se encuentre vigente, así como no estar inhabilitados o suspendidos al momento de recibir la invitación, en la presentación de ofertas, en la selección del proveedor que cumple los requisitos de admisión y los requisitos de calificación y en el perfeccionamiento del contrato.
+2.3.9 Los integrantes de un consorcio se encuentran obligados solidariamente a responder frente a la entidad contratante por los efectos patrimoniales que ésta sufra como consecuencia de la actuación de dichos integrantes, ya sea individual o conjunta, durante el procedimiento de selección y la ejecución contractual.
+
+CAPÍTULO III
+DEL CONTRATO
+
+3.1. REQUISITOS PARA EL PERFECCIONAMIENTO DEL CONTRATO
+Para perfeccionar el contrato, el proveedor invitado que cumple los requisitos de admisión y los requisitos de calificación presenta lo siguiente de conformidad con el artículo 88 del Reglamento:
+
+a) Garantías, salvo casos de excepción.
+El proveedor presenta una garantía de fiel cumplimiento por una suma equivalente al 10% del monto del contrato original. La garantía de fiel cumplimiento puede ser: (i) fideicomiso (tratándose de bienes o servicios solo opera en caso el plazo de ejecución del contrato supere los 90 días calendario), (ii) carta fianza financiera, (iii) contrato de seguro o (iv) retención de pago cuando la cuantía adjudicada sea igual o menor a S/ 480 000,00 (cuatrocientos ochenta mil y 00/100 soles) en el caso de bienes y servicios y S/ 5 000 000,00 (cinco millones y 00/100 soles) en el caso de obras. Asimismo, en la Sección Específica de las Bases puede considerarse la presentación de la garantía de fiel cumplimiento de prestaciones accesorias para la suscripción del contrato, siempre que se cumplan las condiciones señaladas en el Reglamento.
+Excepciones: conforme a lo dispuesto en el literal a) del artículo 139 del Reglamento, en los contratos de bienes y servicios cuyos montos sean menores o iguales a 50 UIT, no corresponde presentar garantía de fiel cumplimiento de contrato ni garantía de fiel cumplimiento por prestaciones accesorias. Esta excepción no aplica cuando la sumatoria de los contratos derivados de procedimientos de selección por relación de ítems, adjudicados a un mismo postor, superen el monto señalado. Asimismo, tampoco se otorga garantía de fiel cumplimiento en caso el objeto contractual sea la adquisición de bienes inmuebles de propiedad privada o el arrendamiento de bienes muebles e inmuebles de propiedad privada. En las contrataciones para la atención de emergencias mediante procedimiento de selección no competitivo, el artículo 289 del Reglamento señala que no se puede exigir la garantía cuando se haya otorgado la conformidad de la recepción de la prestación a cargo del contratista para la contratación de bienes, servicios en general y consultoría en general, o en el supuesto que se haya producido el consentimiento de liquidación final para la ejecución y consultoría de obras.
+(Numerales 61.4 y 61.5 del artículo 61 de la Ley. Literal a) del numeral 88.1 del artículo 88, así como los artículos 113, 114, 115, 116, 138, 139 y 289 del Reglamento.)
+
+b) Contrato de consorcio, de ser el caso.
+El contrato de consorcio debe cumplir con los siguientes requisitos: a. Contener la información indicada en el numeral 2.3.2 del Capítulo II de la Sección General de las presentes bases. b. Identificar al integrante del consorcio a quien se efectúa el pago y emite la respectiva factura o, en caso de llevar contabilidad independiente, señalar el número de Registro Único de Contribuyente (RUC) del consorcio. c. Consignar las firmas legalizadas ante notario público de cada uno de los integrantes del consorcio, de sus apoderados o de sus representantes legales, según corresponda.
+Lo indicado no excluye la información adicional que pueda consignarse en el contrato de consorcio con el objeto de regular su administración interna, como es el régimen y los sistemas de participación en los resultados del consorcio, al que se refiere el artículo 448 de la Ley N° 26887, Ley General de Sociedades. En ningún caso puede aceptarse la presentación de la promesa de consorcio que fue parte de la oferta, independientemente de que dicha promesa contenga firmas legalizadas ante notario público.
+(Literal b) del numeral 88.1 del artículo 88, así como el artículo 89 del Reglamento.)
+
+c) Código de cuenta interbancaria (CCI) o, en el caso de proveedores no domiciliados, el número de cuenta bancaria y nombre de la entidad bancaria en el exterior.
+El CCI es requisito indispensable para realizar una transferencia entre cuentas de bancos diferentes, siendo requerido para efectuar el pago a los proveedores domiciliados en el Perú. Para los proveedores no domiciliados, corresponde el número de cuenta bancaria y nombre de la entidad bancaria en el exterior.
+(Artículo 67 de la Ley. Literal c) del numeral 88.1 del artículo 88 del Reglamento.)
+
+d) Documento que acredite que cuenta con facultades para perfeccionar el contrato, cuando corresponda.
+Corresponde a la vigencia del poder del representante legal que acredite que cuenta con facultades para perfeccionar el contrato, en caso el postor sea persona jurídica. Adicionalmente, el representante legal presenta copia de su documento de identidad (DNI o carné de extranjería, según corresponda). En el caso de personas naturales, se solicita copia de su documento de identidad (DNI o carné de extranjería, según corresponda). En el caso de consorcios, estos documentos deben ser presentados por cada uno de los integrantes que suscribieron la promesa de consorcio, según corresponda. Asimismo, debe presentarse copia del documento de identidad (DNI o carné de extranjería, según corresponda) del representante común del consorcio.
+(Literal d) del numeral 88.1 del artículo 88 del Reglamento.)
+
+e) Institución Arbitral elegida del listado de instituciones arbitrales propuesto por la entidad contratante o propuesta de tres instituciones arbitrales del postor.
+Este requisito es obligatorio para todos los contratos que superen las 10 UIT (de conformidad con el numeral 84.1 del artículo 84 de la Ley, el arbitraje puede ser ad hoc solo en los casos en los que el monto de la controversia no supere las diez UIT). Desde el 1 de enero de 2026, la institución arbitral elegida debe encontrarse inscrita en el Registro de Instituciones Arbitrales y Centros de Administración de Juntas de Prevención y Resolución de Disputas (REGAJU).
+(Artículos 77, 83 y 84, así como la Décima Disposición Complementaria Transitoria de la Ley. Literal e) del numeral 88.1 del artículo 88 del Reglamento.)
+
+f) Centro de administración de la JPRD elegido del listado de centros de administración propuesto por la entidad contratante o propuesta de tres centros de administración de la JPRD del postor.
+Solo procede este requisito cuando el contrato tenga como objeto la contratación del suministro de bienes que supere los S/ 10 000 000,00 (diez millones y 00/100 soles) y, adicionalmente, se haya determinado la JPRD como medio de solución de controversias en la estrategia de contratación. Además, la JPRD es obligatoria en los contratos de obras cuyos montos sean iguales o superiores a S/ 10 000 000,00 (diez millones y 00/100 soles), siendo facultativa para contratos cuyos montos sean inferiores. No puede establecerse JPRD a obras cuyos montos sean inferiores a S/ 5 000 000,00 (cinco millones y 00/100 soles).
+(Artículos 77 y 79, así como la Décima Disposición Complementaria Transitoria de la Ley. Artículos 88 y 346 del Reglamento.)
+
+3.2. PERFECCIONAMIENTO DEL CONTRATO
+3.2.1. Luego de aprobado el procedimiento de selección no competitivo, la DEC comunica al proveedor invitado que cumple los requisitos de admisión y los requisitos de calificación para la suscripción del contrato, siendo de aplicación lo dispuesto en el artículo 88 y siguientes, con excepción de lo dispuesto en el artículo 90 del Reglamento. En ese sentido, la entidad contratante, en atención a su necesidad, define el plazo que le permita suscribir el contrato. El plazo máximo para la presentación de los documentos debe estar definido en la comunicación, lo que no obsta a que este plazo pueda ser ampliado según la necesidad de la entidad contratante.
+3.2.2. El contrato se suscribe mediante firma digital, siempre que el proveedor invitado que cumple los requisitos de admisión y los requisitos de calificación cuente con certificado digital emitido por una entidad de certificación, de acuerdo con la normativa de la materia; caso contrario, se suscribe manualmente.
+3.2.3. De conformidad con el numeral 87.3 del Reglamento, excepcionalmente, la entidad contratante puede sustentar la imposibilidad de suscribir el contrato mediante firma digital, supuesto en el cual la suscripción se realiza manualmente.
+3.2.4. En caso no se concrete la suscripción del contrato, la adjudicación queda sin efecto y la entidad contratante continúa con las acciones que correspondan, lo que puede incluir el volver a realizar el procedimiento de selección no competitivo para seleccionar e invitar a otro proveedor.
+
+3.3. CONSIDERACIONES PARA LOS CONSORCIOS
+3.3.1. Las garantías que presenten los consorcios para el perfeccionamiento del contrato durante la ejecución contractual, además de cumplir con las condiciones establecidas en la Ley y el Reglamento, deben consignar expresamente el nombre completo o la denominación o razón social de los integrantes del consorcio, en calidad de garantizados, de lo contrario no pueden ser aceptadas por las entidades contratantes. No se cumple el requisito antes indicado si se consigna únicamente la denominación del consorcio.
+3.3.2. Cuando la cuantía del ítem sea igual o menor a S/ 480 000,00 (Cuatrocientos ochenta mil y 00/100 Soles), solo aplica la retención del 10% del monto del contrato original en calidad de garantía de fiel cumplimiento, para las micro o pequeñas empresas que hayan declarado en su oferta inicial tal condición, según lo señalado en el artículo 114 del Reglamento. En caso de consorcio, aplica dicha retención si todos sus integrantes declaran en su oferta inicial la condición de micro o pequeña empresa.
+
+3.4. CONSIDERACIONES PARA LAS GARANTÍAS FINANCIERAS
+3.4.1. En caso de garantías financieras, estas deben ser incondicionales, solidarias, irrevocables y de realización automática en el país, al solo requerimiento de la respectiva entidad contratante bajo responsabilidad de las empresas que las emiten. Las empresas que emitan garantías financieras deben encontrarse bajo la supervisión directa de la Superintendencia de Banca, Seguros y Administradoras Privadas de Fondos de Pensiones, contar con clasificación de riesgo B o superior, y deben estar autorizadas para emitir garantías o estar consideradas en la última lista de bancos extranjeros de primera categoría que periódicamente publica el Banco Central de Reserva del Perú.
+3.4.2. La clasificadora de riesgo que asigna la clasificación a la empresa que emite la garantía debe encontrarse listada en el portal web de la SBS (http://www.sbs.gob.pe/sistema-financiero/clasificadoras-de-riesgo).
+3.4.3. Se debe identificar en la página web de la clasificadora de riesgo respectiva, cuál es la clasificación vigente de la empresa que emite la garantía, considerando la vigencia a la fecha de emisión de la garantía. Para fines de lo establecido en el artículo 61 de la Ley, se requiere la clasificación de riesgo B o superior.
+3.4.4. Si la empresa que otorga la garantía cuenta con más de una clasificación de riesgo emitida por distintas empresas listadas en la sede digital de la SBS, basta que en una de ellas cumpla con la clasificación mínima establecida en la Ley.
+3.4.5. En caso exista alguna duda sobre la clasificación de riesgo asignada a la empresa emisora de la garantía, se debe consultar a la clasificadora de riesgos respectiva.
+3.4.6. Además de cumplir con el requisito referido a la clasificación de riesgo, a efectos de verificar si la empresa emisora se encuentra autorizada por la SBS para emitir garantías, debe revisarse la sede digital de dicha entidad (http://www.sbs.gob.pe/sistema-financiero/relacion-de-empresas-que-se-encuentran-autorizadas-a-emitir-cartas-fianza).
+
+3.5. CONSIDERACIONES PARA LOS DOCUMENTOS EXTENDIDOS EN EL EXTRANJERO
+En el caso que los documentos requeridos para el perfeccionamiento del contrato incluyan documentos públicos extendidos en el exterior, que no les sea aplicable el Convenio de la Apostilla, se debe tener en cuenta que, de conformidad con lo previsto en el artículo 137 del Reglamento Consular del Perú, aprobado mediante Decreto Supremo N° 032-2023-RE, para que estos surtan efectos legales en el Perú deben estar legalizados por los funcionarios consulares peruanos competentes, cuyas firmas deben ser autenticadas posteriormente por el área competente del órgano de línea consular, además de cumplir con los requisitos adicionales que contemple la legislación peruana para su validez en el Perú. Cuando se trate de documentos privados extendidos en el exterior, el funcionario consular sólo legaliza las firmas cuando hayan sido suscritas en su presencia o cuando conste de modo indubitable su autenticidad, verificando en ambos casos la identidad de los firmantes, conforme lo requiere el artículo 138 del citado Reglamento.
+
+3.6. DISPOSICIONES FINALES
+Todos los demás aspectos del presente procedimiento de selección no contemplados en las bases se rigen por la Ley y su Reglamento, así como por las disposiciones legales vigentes.
+`.trim();
+
 export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
   "Licitación Pública para bienes": {
     proceso: "Licitación Pública para bienes",
@@ -1629,6 +1754,37 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
       { ruta: "cap3.solucionControversias", label: "Solución de controversias desde el perfeccionamiento del contrato", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
       { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
       // Cap. V "Proforma del contrato" queda fuera, mismo motivo que bienes.
+    ],
+  },
+
+  // "Procedimiento de Selección No Competitivo" — mapeo PARCIAL a propósito,
+  // por un motivo distinto al de obras/consultoría de obra: aquí cubre los
+  // 11 supuestos del Art. 55.1 y los CUATRO objetos contractuales (bienes,
+  // servicios, obras, consultoría de obra) con un único documento genérico,
+  // así que su Capítulo III "Requerimiento" NO desglosa "3.3 Condiciones de
+  // contratación" en literales a-j como bienes: el propio PDF dice
+  // textualmente "indicar las disposiciones que, de acuerdo con el objeto
+  // contractual, sean aplicables... según lo previsto en las bases estándar
+  // respectivas" — es un bloque de remisión, no campos individuales que
+  // mapear. Tampoco hay Capítulo IV de evaluación (no hay postores en
+  // competencia: se invita a un único proveedor, sin factores que asignar
+  // puntaje). Se mapea solo lo que el propio documento sí desglosa como
+  // campo propio: finalidad pública, descripción general y requisitos de
+  // calificación (3.5).
+  "Procedimiento de Selección No Competitivo": {
+    proceso: "Procedimiento de Selección No Competitivo",
+    seccionGeneral: SECCION_GENERAL_NO_COMPETITIVO,
+    seccionEspecifica: [
+      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
+      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
+      { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
+      { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
+      // 3.3 "Condiciones de contratación" es un bloque de remisión a las
+      // bases estándar del objeto correspondiente, no campos propios: no se
+      // fuerza contra modalidadPago/sistemaEntrega/etc. Cap. IV "Proforma
+      // del contrato" queda fuera, mismo motivo que bienes.
     ],
   },
 };
