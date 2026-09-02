@@ -874,3 +874,76 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
 export function plantillaDeProceso(proceso: string): PlantillaBases | undefined {
   return PLANTILLAS_BASES[proceso];
 }
+
+// ── Resolución de procedimientos AMBIGUOS ──────────────────────────────────
+//
+// Algunos `value` del catálogo (lib/procesos-seleccion.ts) resuelven a MÁS DE
+// UN PDF de bases estándar del OECE — hoy solo "Concurso Público para
+// consultorías y servicios de mantenimiento vial" (BASES_CONSULTORIA_VIAL:
+// consultoría en general / consultoría de obra / mantenimiento vial). ACE no
+// tiene un dato que distinga cuál de los tres aplica a un expediente
+// concreto, así que ese `value` NUNCA tiene una entrada directa en
+// PLANTILLAS_BASES (ver la advertencia junto a SECCION_GENERAL_CONSULTORIA_GENERAL).
+// Este mapa conecta el `value` ambiguo con las claves de PLANTILLAS_BASES que
+// SÍ identifican una plantilla sin ambigüedad, para que quien elabora las
+// bases (o la ruta de exportación) pueda elegir entre ellas en vez de que el
+// sistema adivine.
+export const VARIANTES_AMBIGUAS: Record<string, string[]> = {
+  "Concurso Público para consultorías y servicios de mantenimiento vial": [
+    "Concurso Público para consultoría en general",
+    // Las otras dos variantes (consultoría de obra / mantenimiento vial) se
+    // agregan aquí en cuanto se transcriba su propia plantilla — no antes.
+  ],
+};
+
+export function esProcesoAmbiguo(proceso: string): boolean {
+  return proceso in VARIANTES_AMBIGUAS;
+}
+
+export type ResolucionBases =
+  | { ok: true; plantilla: PlantillaBases }
+  // No hay plantilla para este procedimiento, ambiguo o no.
+  | { ok: false; motivo: "sin_plantilla" }
+  // El procedimiento es ambiguo y hace falta que alguien elija cuál de las
+  // variantes aplica (`variantes` trae las claves válidas para volver a
+  // llamar con `variante`).
+  | { ok: false; motivo: "ambiguo"; variantes: string[] }
+  // Se pidió una `variante` que no corresponde a ese procedimiento ambiguo.
+  | { ok: false; motivo: "variante_invalida"; variantes: string[] };
+
+/**
+ * Resuelve la plantilla de un procedimiento, incluidos los ambiguos.
+ *
+ * - Si `proceso` tiene una plantilla directa (el caso normal, 1 PDF), la
+ *   devuelve — `variante` se ignora.
+ * - Si `proceso` es ambiguo (varios PDF posibles) y trae exactamente UNA
+ *   variante registrada todavía, se usa esa automáticamente: no tiene
+ *   sentido pedirle a alguien que "elija" entre una sola opción. En cuanto
+ *   se registre una segunda variante, este atajo deja de aplicar solo y
+ *   pasa a exigir la elección explícita — no hay que tocar este código
+ *   cuando eso ocurra.
+ * - Si `proceso` es ambiguo con 2+ variantes: sin `variante`, devuelve
+ *   `motivo: "ambiguo"` con la lista para que la UI arme un selector; con
+ *   una `variante` que no está en la lista, `motivo: "variante_invalida"`.
+ */
+export function resolverPlantillaAmbigua(proceso: string, variante?: string | null): ResolucionBases {
+  const directa = plantillaDeProceso(proceso);
+  if (directa) return { ok: true, plantilla: directa };
+
+  const variantes = VARIANTES_AMBIGUAS[proceso];
+  if (!variantes || variantes.length === 0) return { ok: false, motivo: "sin_plantilla" };
+
+  if (variante) {
+    if (!variantes.includes(variante)) return { ok: false, motivo: "variante_invalida", variantes };
+    const plantilla = plantillaDeProceso(variante);
+    if (!plantilla) return { ok: false, motivo: "variante_invalida", variantes };
+    return { ok: true, plantilla };
+  }
+
+  if (variantes.length === 1) {
+    const plantilla = plantillaDeProceso(variantes[0]);
+    if (plantilla) return { ok: true, plantilla };
+  }
+
+  return { ok: false, motivo: "ambiguo", variantes };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLANTILLAS_BASES } from "@/lib/bases-plantillas";
+import { esProcesoAmbiguo, PLANTILLAS_BASES, resolverPlantillaAmbigua, VARIANTES_AMBIGUAS } from "@/lib/bases-plantillas";
 
 describe("PLANTILLAS_BASES · Licitación Pública para bienes", () => {
   const plantilla = PLANTILLAS_BASES["Licitación Pública para bienes"];
@@ -220,4 +220,52 @@ describe("PLANTILLAS_BASES · Concurso Público para consultoría en general", (
     // SECCION_GENERAL_CONSULTORIA_GENERAL en lib/bases-plantillas.ts).
     expect(PLANTILLAS_BASES["Concurso Público para consultorías y servicios de mantenimiento vial"]).toBeUndefined();
   });
+});
+
+describe("resolverPlantillaAmbigua", () => {
+  const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
+
+  it("un procedimiento con plantilla directa la devuelve sin mirar variantes", () => {
+    const r = resolverPlantillaAmbigua("Licitación Pública para bienes");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.plantilla.proceso).toBe("Licitación Pública para bienes");
+  });
+
+  it("un procedimiento sin plantilla y sin variantes conocidas: sin_plantilla", () => {
+    const r = resolverPlantillaAmbigua("Comparación de Precios");
+    expect(r).toEqual({ ok: false, motivo: "sin_plantilla" });
+  });
+
+  it("esProcesoAmbiguo identifica el único procedimiento ambiguo conocido hoy", () => {
+    expect(esProcesoAmbiguo(AMBIGUO)).toBe(true);
+    expect(esProcesoAmbiguo("Licitación Pública para bienes")).toBe(false);
+  });
+
+  it("con exactamente UNA variante registrada, la resuelve automáticamente (no hay elección real)", () => {
+    // Hoy VARIANTES_AMBIGUAS[AMBIGUO] solo tiene "consultoría en general".
+    expect(VARIANTES_AMBIGUAS[AMBIGUO]).toHaveLength(1);
+    const r = resolverPlantillaAmbigua(AMBIGUO);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.plantilla.proceso).toBe("Concurso Público para consultoría en general");
+  });
+
+  it("una variante explícita válida se resuelve igual, aunque haya una sola registrada", () => {
+    const r = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría en general");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.plantilla.proceso).toBe("Concurso Público para consultoría en general");
+  });
+
+  it("una variante que no pertenece a ese procedimiento ambiguo: variante_invalida", () => {
+    const r = resolverPlantillaAmbigua(AMBIGUO, "Licitación Pública para bienes");
+    expect(r).toEqual({ ok: false, motivo: "variante_invalida", variantes: VARIANTES_AMBIGUAS[AMBIGUO] });
+  });
+
+  // La rama "2+ variantes sin elección explícita → motivo: 'ambiguo'" de
+  // resolverPlantillaAmbigua no tiene todavía un caso real que probar: hoy
+  // solo hay una variante registrada (consultoría en general), así que el
+  // atajo del "length === 1" siempre gana primero. En cuanto se transcriba
+  // la segunda variante (consultoría de obra o mantenimiento vial), agregar
+  // aquí el test que confirma que, SIN `variante`, la función pide elegir en
+  // vez de devolver cualquiera de las dos al azar — es la señal correcta de
+  // que la brecha de disambiguación pasó a tener una elección real.
 });
