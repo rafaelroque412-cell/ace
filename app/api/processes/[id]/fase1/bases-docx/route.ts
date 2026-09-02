@@ -11,6 +11,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const SIN_PLANTILLA = "Todavía no hay plantilla de bases para este tipo de procedimiento.";
+// Distinto del mensaje anterior a propósito: "sin_plantilla" con
+// `procedure_type` NULO no significa que el OECE no publicó bases estándar
+// para ese tipo (SIN_PLANTILLA) — significa que el expediente TODAVÍA no
+// tiene un tipo de procedimiento definido, porque la DEC no ha completado la
+// Estrategia (A4, donde se confirma `procedure_type`). Confundir ambos casos
+// bajo un solo mensaje genérico llevó a un reporte real: la entidad veía
+// "no hay plantilla" en un expediente cuyo problema real era A4 sin terminar.
+const SIN_TIPO_DEFINIDO =
+  "Este expediente todavía no tiene definido el tipo de procedimiento de selección. Complétalo en la Estrategia de contratación (A4) antes de elaborar las Bases.";
 
 // GET /api/processes/{id}/fase1/bases-docx?variante=<...> → elabora las
 // Bases del procedimiento de selección (A9) en Word, a partir de la
@@ -20,10 +29,12 @@ const SIN_PLANTILLA = "Todavía no hay plantilla de bases para este tipo de proc
 //
 // Un puñado de procedimientos de catálogo resuelven a MÁS DE UN PDF oficial
 // (ver VARIANTES_AMBIGUAS en lib/bases-plantillas.ts); `resolverPlantillaAmbigua`
-// decide: 404 si no hay ninguna plantilla, 409 con la lista de variantes si
-// hace falta elegir una explícitamente (`?variante=`), o la plantilla
-// directa en cualquier otro caso — incluida la variante única de hoy, que
-// se resuelve sola sin pedir nada.
+// decide: 404 si el tipo está definido pero el OECE no publicó bases estándar
+// para él, 409 con la lista de variantes si hace falta elegir una
+// explícitamente (`?variante=`), o la plantilla directa en cualquier otro
+// caso — incluida la variante única de hoy, que se resuelve sola sin pedir
+// nada. Si el expediente ni siquiera tiene `procedure_type` (A4 sin
+// completar), se responde 409 sin llegar a preguntarle a esa función.
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireCapability("expediente.manage");
   if ("error" in auth) return auth.error;
@@ -40,9 +51,16 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     >(auth.user.accessToken, `procurement_processes?id=eq.${id}&select=nomenclature,procedure_type,hitos`);
     if (!proceso) return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
 
-    const resolucion = proceso.procedure_type
-      ? resolverPlantillaAmbigua(proceso.procedure_type, variante)
-      : ({ ok: false, motivo: "sin_plantilla" } as const);
+    if (!proceso.procedure_type) {
+      // No es lo mismo que "sin_plantilla": aquí el expediente ni siquiera
+      // tiene un tipo de procedimiento asignado (A4 sin completar), así que
+      // no tiene sentido preguntarle a `resolverPlantillaAmbigua` — 409
+      // porque es un prerrequisito pendiente y corregible, no una ausencia
+      // permanente del OECE.
+      return NextResponse.json({ error: SIN_TIPO_DEFINIDO }, { status: 409 });
+    }
+
+    const resolucion = resolverPlantillaAmbigua(proceso.procedure_type, variante);
 
     if (!resolucion.ok) {
       if (resolucion.motivo === "sin_plantilla") {
