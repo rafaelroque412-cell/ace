@@ -146,6 +146,7 @@ import { ProveedoresConsultadosEditor } from "./proveedores-consultados-editor";
 import { PostoresEditor } from "./postores-editor";
 import { PuntajesEditor } from "./puntajes-editor";
 import { RequisitosCalificacionEditor } from "./requisitos-calificacion-editor";
+import { VARIANTES_AMBIGUAS } from "@/lib/bases-plantillas";
 import { cn } from "@/lib/utils";
 
 const STATUS_ORDER: HitoStatus[] = ["pendiente", "en_curso", "hecho", "na"];
@@ -1159,6 +1160,7 @@ function PasoCard({
   processId,
   objetoContractual,
   procesoNecesidad,
+  procedureType,
   nivelMinimo,
   areaUsuariaSugerida,
   responsableSugerido,
@@ -1205,6 +1207,10 @@ function PasoCard({
   // Tipo de proceso que anticipó el área usuaria (nec.tipo_proceso_seleccion),
   // para proponer el procedimiento competitivo de A4 a).
   procesoNecesidad?: string;
+  // El procedimiento REAL del expediente (procurement_processes.procedure_type).
+  // A9 lo usa para saber si el tipo de bases a elaborar es ambiguo (ver
+  // VARIANTES_AMBIGUAS en lib/bases-plantillas.ts) y mostrar el selector.
+  procedureType?: string | null;
   nivelMinimo?: NivelMinimo | null;
   areaUsuariaSugerida?: string;
   responsableSugerido?: string;
@@ -1647,10 +1653,19 @@ function PasoCard({
   // Path que se está descargando ahora (para el spinner por botón).
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
 
+  // A9 · "Elaborar Bases (Word)": un puñado de procedimientos de catálogo
+  // resuelven a más de un PDF de bases estándar (VARIANTES_AMBIGUAS en
+  // lib/bases-plantillas.ts). Si el expediente está en uno de esos casos, la
+  // descarga necesita que se elija cuál corresponde ANTES de pedirla — la
+  // ruta ya rechaza (409) una petición sin `?variante=` cuando hay 2+.
+  const variantesBases =
+    code === "A9" && procedureType ? VARIANTES_AMBIGUAS[procedureType] : undefined;
+  const [varianteBasesSel, setVarianteBasesSel] = useState<string>("");
+
   // Se declara DESPUÉS del estado que usa (draftStatus/draftData): así el
   // compilador de React no ve un uso antes de la declaración y puede optimizar
   // el componente sin descartar la memoización manual de más abajo.
-  async function descargar(target: FormatoExport, miembro?: number | null) {
+  async function descargar(target: FormatoExport, miembro?: number | null, varianteBases?: string) {
     setDownloadingPath(target.path);
     try {
       // El documento lo genera el SERVIDOR a partir de lo guardado. Si el paso
@@ -1670,9 +1685,15 @@ function PasoCard({
       const extra = code === "A7" && fechaSolicitud ? `${sep}fecha=${encodeURIComponent(fechaSolicitud)}` : "";
       // A6: descarga por miembro (la ruta ya lleva "?doc=", así que va con "&").
       const extraMiembro = miembro != null ? `&miembro=${miembro}` : "";
+      // A9: procedimiento ambiguo (VARIANTES_AMBIGUAS) — la variante elegida en
+      // el selector viaja como query param. A diferencia de fecha/miembro
+      // arriba, `fase1/bases-docx` no lleva "?" propio, así que el separador
+      // se decide contra lo ya concatenado (no se puede asumir "&" a ciegas).
+      const sepVariante = `${target.path}${extra}${extraMiembro}`.includes("?") ? "&" : "?";
+      const extraVariante = varianteBases ? `${sepVariante}variante=${encodeURIComponent(varianteBases)}` : "";
       // A7/A8 consumen el correlativo del contador del AÑO FISCAL: se pasa en la URL
       // para que coincida con el año de la sugerencia (no el calendario del servidor).
-      const base = `/api/processes/${processId}/${target.path}${extra}${extraMiembro}`;
+      const base = `/api/processes/${processId}/${target.path}${extra}${extraMiembro}${extraVariante}`;
       const urlDescarga =
         code === "A7" || code === "A8" ? `${base}${base.includes("?") ? "&" : "?"}${yearParam}` : base;
       const res = await fetch(urlDescarga);
@@ -2989,6 +3010,37 @@ function PasoCard({
             <div className="flex flex-wrap gap-2">
               {exportables.map((fmt) => {
                 const cargando = downloadingPath === fmt.path;
+                // Bases de un procedimiento ambiguo: hace falta elegir la
+                // variante ANTES de poder pedir la descarga — ver
+                // VARIANTES_AMBIGUAS en lib/bases-plantillas.ts. El selector
+                // reemplaza al botón simple solo para este documento.
+                if (fmt.path === "fase1/bases-docx" && variantesBases && variantesBases.length > 0) {
+                  return (
+                    <div className="flex flex-wrap items-center gap-2" key={fmt.path}>
+                      <select
+                        aria-label="Variante de bases a elaborar"
+                        onChange={(e) => setVarianteBasesSel(e.target.value)}
+                        value={varianteBasesSel}
+                      >
+                        <option value="">— Elegir variante de bases —</option>
+                        {variantesBases.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="secondaryButton compactButton pasoExport"
+                        disabled={downloadingPath !== null || !varianteBasesSel}
+                        onClick={() => void descargar(fmt, null, varianteBasesSel)}
+                        type="button"
+                      >
+                        {cargando ? <Loader className="spinIcon" size={14} /> : <FileText size={14} />}
+                        {cargando ? "Generando…" : `Exportar ${fmt.label} (Word)`}
+                      </button>
+                    </div>
+                  );
+                }
                 return (
                   <button
                     className="secondaryButton compactButton pasoExport"
@@ -4032,6 +4084,7 @@ export function FasePanel({
                     nivelMinimo={nivelMinimo}
                     objetoContractual={objetoContractual}
                     procesoNecesidad={procesoNecesidad}
+                    procedureType={procedureType}
                     onSave={(status, data) => savePaso(paso.code, status, data)}
                     onToggle={() => setExpanded((cur) => (cur === paso.code ? null : paso.code))}
                     processId={processId}
