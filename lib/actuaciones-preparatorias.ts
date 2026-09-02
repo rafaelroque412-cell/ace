@@ -624,11 +624,11 @@ const CAMPOS_ESTRATEGIA: CampoFormulario[] = [
       // h) e i) van a media rejilla (sin `ancho:"full"`) para que cada SELECT
       // quede en la misma fila que su SUSTENTO: modalidad ↔ su sustento, sistema
       // de entrega ↔ el suyo. Comparten grupo ("h–j"), así que nada se interpone.
-      { name: "var_h_modalidad_pago", label: "h) Modalidad de pago", tipo: "select", opciones: OPCIONES_MODALIDAD_PAGO, ayuda: "Bienes/Servicios: suma alzada, precios unitarios, esquema mixto, tarifas, porcentajes, honorario+comisión, pago por consumo. Obras: + costo reembolsable, pago disponibilidad/activación/mixto." },
+      { name: "var_h_modalidad_pago", label: "h) Modalidad de pago", tipo: "select", recomendado: true, opciones: OPCIONES_MODALIDAD_PAGO, ayuda: "Bienes/Servicios: suma alzada, precios unitarios, esquema mixto, tarifas, porcentajes, honorario+comisión, pago por consumo. Obras: + costo reembolsable, pago disponibilidad/activación/mixto. Se usa tal cual en la Sección Específica de las Bases (A9): sin elegirla, esa condición de contratación sale sin completar." },
       { name: "var_h_sustento_pago", label: "h) Sustento de la elección de la modalidad de pago", tipo: "textarea", recomendado: true, baseLegal: "Art. 46.1.h Reglamento", ayuda: "Por qué esa modalidad de pago y no otra. La modalidad marca su casilla en el formato; esta celda (B70) lleva el sustento, que se precarga con su norma (Art. 130/286) al elegirla." },
 
       // ===== i) Sistema de entrega =====
-      { name: "var_i_sistema_entrega", label: "i) Sistema de entrega", tipo: "select", opciones: OPCIONES_SISTEMA_ENTREGA, baseLegal: "Art. 46.1.i Reglamento", ayuda: "Marca su casilla en el formato. Lo decide la DEC (Art. 72.1); si el área usuaria propuso uno, se ofrece al lado para adoptarlo." },
+      { name: "var_i_sistema_entrega", label: "i) Sistema de entrega", tipo: "select", recomendado: true, opciones: OPCIONES_SISTEMA_ENTREGA, baseLegal: "Art. 46.1.i Reglamento", ayuda: "Marca su casilla en el formato. Lo decide la DEC (Art. 72.1); si el área usuaria propuso uno, se ofrece al lado para adoptarlo. Se usa tal cual en la Sección Específica de las Bases (A9), donde aplique (no en obras, que lo fija con la variante del capítulo)." },
       { name: "var_i_sustento_entrega", label: "i) Sustento de la elección del sistema de entrega", tipo: "textarea", recomendado: true, baseLegal: "Art. 46.1.i Reglamento", ayuda: "Por qué ese sistema de entrega y no otro. El sistema marca su casilla en el formato; esta celda (B83) lleva el sustento, que se precarga con su norma (Art. 129 bienes/servicios · Art. 158 obras) al elegirlo." },
 
       // ===== j) Puntos no negociables =====
@@ -1151,24 +1151,27 @@ export const PASOS_F1: Record<string, PasoDetalle> = {
         label: "Otras penalidades",
         tipo: "textarea",
         ancho: "full",
+        recomendado: true,
         baseLegal: "Art. 119.1 Reglamento · el contrato establece la penalidad por mora y OTRAS penalidades aplicables (bases estándar, Cap. III); Art. 119.2 · el tope conjunto es el 10%",
-        ayuda: "Penalidades distintas de la mora (supuesto, forma de cálculo y verificación), o 'No aplica'. Viene de la ficha.",
+        ayuda: "Penalidades distintas de la mora (supuesto, forma de cálculo y verificación), o 'No aplica'. Viene de la ficha. Se usa tal cual en la Sección Específica de las Bases (A9): sin llenarla, esa condición de contratación sale sin completar.",
       },
       {
         name: "subcontratacion",
         label: "Subcontratación",
         tipo: "textarea",
         ancho: "full",
+        recomendado: true,
         baseLegal: "Bases estándar, Cap. III · condición de contratación del requerimiento (no figura entre los literales a)-e) del Art. 44.2)",
-        ayuda: "Si se admite subcontratar y en qué porcentaje/prestaciones, o 'No aplica'.",
+        ayuda: "Si se admite subcontratar y en qué porcentaje/prestaciones, o 'No aplica'. Se usa tal cual en la Sección Específica de las Bases (A9): sin llenarla, esa condición de contratación sale sin completar.",
       },
       {
         name: "solucion_controversias",
         label: "Solución de controversias",
         tipo: "textarea",
         ancho: "full",
+        recomendado: true,
         baseLegal: "Arts. 330-332 Reglamento · conciliación y arbitraje; las instituciones arbitrales requieren inscripción vigente en el REGAJU (Art. 332.1)",
-        ayuda: "Medios de solución de controversias e instituciones arbitrales designadas, o 'No aplica'. Viene de la ficha.",
+        ayuda: "Medios de solución de controversias e instituciones arbitrales designadas, o 'No aplica'. Viene de la ficha. Se usa tal cual en la Sección Específica de las Bases (A9): sin llenarla, esa condición de contratación sale sin completar.",
       },
       {
         name: "condiciones_obra",
