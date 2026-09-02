@@ -358,6 +358,47 @@ describe("PLANTILLAS_BASES · Subasta Inversa Electrónica", () => {
   });
 });
 
+describe("PLANTILLAS_BASES · Comparación de Precios", () => {
+  const plantilla = PLANTILLAS_BASES["Comparación de Precios"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("refleja diferencias reales: cuantía tope S/ 100 000 y sin garantía de fiel cumplimiento", () => {
+    // Confirmado leyendo el PDF: por la cuantía tope, el Capítulo IV nunca
+    // menciona garantía de fiel cumplimiento (empieza directo en "Contrato
+    // de consorcio"), a diferencia del resto de bases estándar.
+    expect(plantilla.seccionGeneral).toContain("S/ 100 000,00");
+    expect(plantilla.seccionGeneral).not.toContain("garantía de fiel cumplimiento");
+    expect(plantilla.seccionGeneral).not.toContain("CONSIDERACIONES PARA LAS GARANTÍAS FINANCIERAS");
+  });
+
+  it("mapea el Capítulo III salvo lo confirmado ausente: sin sistema de entrega, subcontratación, reajuste ni factores", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.subcontratacion");
+    expect(rutas).not.toContain("cap3.formulaReajuste");
+    expect(rutas).not.toContain("cap4.factoresEvaluacion");
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
@@ -368,7 +409,9 @@ describe("resolverPlantillaAmbigua", () => {
   });
 
   it("un procedimiento sin plantilla y sin variantes conocidas: sin_plantilla", () => {
-    const r = resolverPlantillaAmbigua("Comparación de Precios");
+    // Todavía no tiene plantilla propia: no confundir con las variantes de
+    // VARIANTES_AMBIGUAS, que sí resuelven (ver los tests de esa constante).
+    const r = resolverPlantillaAmbigua("Concurso Público con diálogo competitivo");
     expect(r).toEqual({ ok: false, motivo: "sin_plantilla" });
   });
 
