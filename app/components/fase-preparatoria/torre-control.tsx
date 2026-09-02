@@ -107,7 +107,12 @@ export function TorreControl({
           </p>
           <ul className="m-0 grid list-none gap-[5px] p-0">
             {pendientes.map((f) => (
-              <li className="flex items-baseline justify-between gap-2.5 text-[12.5px]" key={f.literal}>
+              // El 54.2.c real agrupa DOS logros verificables por separado
+              // (estrategia + interacción con el mercado, ver
+              // lib/expediente-contenido.ts) — mismo `literal` a propósito,
+              // así que la key no puede ser solo el literal (mismo patrón
+              // defensivo que ya usa fase-panel.tsx).
+              <li className="flex items-baseline justify-between gap-2.5 text-[12.5px]" key={`${f.literal}-${f.etiqueta}`}>
                 <span>
                   <strong>{f.literal}</strong> · {f.etiqueta}
                   {f.detalle ? <span className="text-muted"> — {f.detalle}</span> : null}
