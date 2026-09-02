@@ -122,3 +122,57 @@ describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
     expect(rutas).not.toContain("cap3.sistemaEntrega");
   });
 });
+
+describe("PLANTILLAS_BASES · Concurso Público de servicios", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público de servicios"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("la Sección General refleja el contenido propio de servicios (ASISTE, sin el literal f de JPRD)", () => {
+    expect(plantilla.seccionGeneral).toContain("ASISTE");
+    // Confirmado leyendo el PDF: el Capítulo IV de servicios termina en el
+    // literal e) Institución Arbitral — NO tiene el literal f) de JPRD que sí
+    // tienen bienes y obras. Si algún día aparece "Centro de administración
+    // de la JPRD" aquí, la transcripción se copió mal de otro tipo.
+    expect(plantilla.seccionGeneral).not.toContain("Centro de administración de la JPRD");
+  });
+
+  it("tiene el mismo mapeo completo que bienes: la estructura del Capítulo III es idéntica", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap3.plazoEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "plazo_dias" });
+    expect(porRuta["cap3.lugarEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "lugar_entrega" });
+    expect(porRuta["cap3.penalidadMora"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "penalidad_mora" });
+    expect(porRuta["cap3.otrasPenalidades"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "otras_penalidades" });
+    expect(porRuta["cap3.subcontratacion"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "subcontratacion" });
+    expect(porRuta["cap3.formulaReajuste"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "formula_reajuste" });
+    expect(porRuta["cap3.solucionControversias"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "solucion_controversias" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("el Capítulo V (proforma del contrato) no se mapea aquí", () => {
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
+  });
+});
