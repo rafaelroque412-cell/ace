@@ -481,6 +481,42 @@ describe("PLANTILLAS_BASES · Licitación Pública abreviada para bienes", () =>
   });
 });
 
+describe("PLANTILLAS_BASES · Licitación Pública abreviada de obras", () => {
+  const plantilla = PLANTILLAS_BASES["Licitación Pública abreviada de obras"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("refleja plazos abreviados y el alcance propio (sin la variante de precalificación)", () => {
+    expect(plantilla.seccionGeneral).toContain("no menor a tres días hábiles");
+    expect(plantilla.seccionGeneral).toContain("dentro de los cinco días hábiles siguientes");
+    expect(plantilla.seccionGeneral).toContain("rehabilitación y reconstrucción");
+  });
+
+  it("el mapeo es PARCIAL a propósito: solo entidad, año fiscal, finalidad pública y CUI", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas).not.toContain("cap3.modalidadPago");
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
