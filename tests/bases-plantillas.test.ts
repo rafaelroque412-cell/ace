@@ -342,25 +342,42 @@ describe("PLANTILLAS_BASES · Concurso Público para consultoría de obra", () =
     expect(plantilla.seccionGeneral).not.toContain("Centro de administración de la JPRD");
   });
 
-  it("el mapeo es PARCIAL a propósito: solo entidad, año fiscal, finalidad pública y CUI", () => {
+  it("las condiciones de contratación del 3.3.5 salen de A3/A4, confirmadas contra el PDF completo", () => {
+    // Confirmado leyendo el PDF completo (no solo la Sección General): el
+    // numeral 3.3.5 "Condiciones de contratación" (a diferencia de obras, un
+    // solo numeral, no repetido por variante de capítulo) trae modalidad de
+    // pago (Art. 161), sistema de entrega (Art. 159/160 — aquí SÍ es un
+    // campo de relleno, a diferencia de obras), lugar de prestación,
+    // penalidades, subcontratación (Art. 108), fórmula de reajuste (Art.
+    // 209) y solución de controversias, más requisitos de calificación
+    // (3.4) y factores de evaluación (Cap. IV).
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap3.lugarEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "lugar_entrega" });
+    expect(porRuta["cap3.penalidadMora"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "penalidad_mora" });
+    expect(porRuta["cap3.otrasPenalidades"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "otras_penalidades" });
+    expect(porRuta["cap3.subcontratacion"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "subcontratacion" });
+    expect(porRuta["cap3.formulaReajuste"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "formula_reajuste" });
+    expect(porRuta["cap3.solucionControversias"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "solucion_controversias" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
   });
 
-  it("no fuerza el mapeo del resto de 3.2/3.3.5: su estructura difiere de bienes y no se adivina", () => {
-    // "descripcionRequerimiento"/"modalidadPago"/"sistemaEntrega" son rutas de
-    // bienes (3.3.a-b); consultoría de obra numera distinto (3.3.5.a-b, con
-    // el artículo 161 en vez del 130) y tiene un bloque 3.2 estructurado
-    // propio (proyecto/CUI/ubicación/especialidad/subespecialidad/tipología
-    // + 4 tablas alternativas por sistema de entrega) — no se reutilizan.
+  it("sigue sin forzar 3.2 ni el plazo de prestación: su estructura difiere de bienes y no se adivina", () => {
+    // "descripcionRequerimiento" es la ruta de bienes (3.3.a); consultoría de
+    // obra tiene un bloque 3.2 estructurado propio
+    // (proyecto/CUI/ubicación/especialidad/subespecialidad/tipología + 6
+    // tablas alternativas por sistema de entrega) sin campo ACE equivalente.
+    // El plazo de prestación (3.3.5.c) es también una tabla, no un escalar.
     const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
     expect(rutas).not.toContain("cap3.descripcionRequerimiento");
-    expect(rutas).not.toContain("cap3.modalidadPago");
-    expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.plazoEntrega");
   });
 });
 
@@ -772,14 +789,25 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado para consultoría de o
     expect(plantilla.seccionGeneral).not.toContain("fideicomiso");
   });
 
-  it("el mapeo es PARCIAL a propósito: solo entidad, año fiscal, finalidad pública y CUI", () => {
+  it("reutiliza CAMPOS_CONSULTORIA_OBRA tal cual: mismo mapeo ampliado que la versión sin abreviar", () => {
+    // Confirmado leyendo el PDF completo de la abreviada: comparte con
+    // "Concurso Público para consultoría de obra" el mismo numeral 3.3.5 y
+    // las mismas citas legales (Art. 161/159-160/108/209/120).
+    const sinAbreviar = PLANTILLAS_BASES["Concurso Público para consultoría de obra"];
+    expect(plantilla.seccionEspecifica).toBe(sinAbreviar.seccionEspecifica);
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("sigue sin forzar 3.2 ni el plazo de prestación: su estructura difiere de bienes y no se adivina", () => {
     const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
-    expect(rutas).not.toContain("cap3.modalidadPago");
-    expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.descripcionRequerimiento");
+    expect(rutas).not.toContain("cap3.plazoEntrega");
   });
 
   it("NO está registrada bajo el valor real del catálogo, porque ese valor es ambiguo (agrupa 4 PDFs abreviados)", () => {

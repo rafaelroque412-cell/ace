@@ -2554,6 +2554,37 @@ const CAMPOS_OBRAS_SM: CampoBases[] = [
   { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
 ];
 
+// Campos de la Sección Específica compartidos por "Concurso Público para
+// consultoría de obra" y "Concurso Público abreviado para consultoría de
+// obra": confirmado leyendo ambos PDF completos que comparten la misma
+// estructura de Cap. III (un solo numeral 3.3.5 "Condiciones de
+// contratación", no dos variantes de capítulo como obras) con idénticas
+// citas legales en ambos — ver el comentario junto a "Concurso Público para
+// consultoría de obra" más abajo para el detalle campo por campo.
+const CAMPOS_CONSULTORIA_OBRA: CampoBases[] = [
+  { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
+  { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  // 3.1 Finalidad pública: idéntica en su literal a la de bienes/obras.
+  { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
+  // 3.2 pide "Código Único de Inversión (CUI) o código idea, de
+  // corresponder" — mismo dato que A4 ya captura para inversiones. El resto
+  // de 3.2 (proyecto/ubicación/especialidad/subespecialidad/tipología) y las
+  // seis tablas alternativas por sistema de entrega quedan sin campo ACE
+  // equivalente, igual que en obras.
+  { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
+  { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
+  { ruta: "cap3.sistemaEntrega", label: "Sistema de entrega", origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" },
+  { ruta: "cap3.lugarEntrega", label: "Lugar de prestación del servicio", origen: "literal", hito: "A3", campoHito: "lugar_entrega" },
+  { ruta: "cap3.penalidadMora", label: "Penalidad por mora", origen: "literal", hito: "A3", campoHito: "penalidad_mora" },
+  { ruta: "cap3.otrasPenalidades", label: "Otras penalidades", origen: "literal", hito: "A3", campoHito: "otras_penalidades" },
+  { ruta: "cap3.subcontratacion", label: "Subcontratación", origen: "literal", hito: "A3", campoHito: "subcontratacion" },
+  { ruta: "cap3.formulaReajuste", label: "Fórmulas de reajuste", origen: "literal", hito: "A3", campoHito: "formula_reajuste" },
+  { ruta: "cap3.solucionControversias", label: "Solución de controversias contractuales", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
+  { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
+  { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
+];
+
 export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
   "Licitación Pública para bienes": {
     proceso: "Licitación Pública para bienes",
@@ -2702,39 +2733,39 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     ],
   },
 
-  // "Concurso Público para consultoría de obra" — mapeo PARCIAL, mismo motivo
-  // y mismo alcance que "Licitación Pública de obras": confirmado leyendo el
-  // PDF oficial que su Capítulo III "Requerimiento" NO tiene la estructura
-  // 3.1-3.3(a-j) de bienes/servicios/consultoría en general, sino:
+  // "Concurso Público para consultoría de obra" — mapeo PARCIAL, ahora
+  // sustancialmente ampliado: confirmado leyendo el PDF COMPLETO
+  // (7614342-12-bases-estandar-concurso-publico-para-consultor-a-de-obra.pdf,
+  // el primer pase solo había leído hasta la Sección General) que su
+  // Capítulo III "Requerimiento" NO tiene la estructura 3.1-3.3(a-j) de
+  // bienes/servicios/consultoría en general, sino:
   //
   //   - 3.2 "Descripción general" con un bloque estructurado propio
   //     (proyecto/CUI/ubicación/especialidad/subespecialidad/tipología) MÁS
-  //     cuatro tablas alternativas a., b., c., d. según el sistema de entrega
-  //     (solo formulación / solo diseño / formulación y diseño / supervisión
-  //     de elaboración de expediente técnico) — la entidad usa solo la que
-  //     corresponde.
-  //   - Las "condiciones de contratación" no están en 3.3 sino en 3.3.5, con
-  //     3.3.3 (metodologías colaborativas) y 3.3.4 (gestión de calidad) por
-  //     delante, y "modalidad de pago" cita el artículo 161 (no el 130 de
-  //     bienes/servicios) — es un artículo genuinamente distinto.
+  //     seis tablas alternativas a-f según el sistema de entrega (solo
+  //     formulación / solo diseño / formulación y diseño / supervisión de
+  //     elaboración de expediente técnico / supervisión de ejecución de obra
+  //     / supervisión de diseño y construcción) — la entidad usa solo la que
+  //     corresponde. Sigue sin campo ACE equivalente, igual que en obras.
+  //   - Las "condiciones de contratación" SÍ están en un solo numeral 3.3.5
+  //     (a diferencia de obras, que las repite en cada variante de Cap. III),
+  //     con literales a-n confirmados: a) modalidad de pago (Art. 161, no el
+  //     130 de bienes/servicios); b) sistema de entrega (Art. 159/160 — a
+  //     diferencia de obras, aquí SÍ es un campo de relleno, no la elección
+  //     de un capítulo distinto); e) lugar de prestación del servicio
+  //     (escalar simple, mismo dato que A3.lugar_entrega); g) penalidades
+  //     (mora Art. 120 y otras); h) subcontratación (Art. 108); i) fórmula de
+  //     reajuste (Art. 209); l) solución de controversias contractuales; y
+  //     3.4 requisitos de calificación + Capítulo IV factores de evaluación.
   //
-  // Igual que con obras, mapear estos campos contra el `descripcion`/
-  // `var_h_modalidad_pago` genéricos habría perdido esa estructura o citado
-  // mal la base legal. Se mapea solo lo confirmado con certeza; el resto
-  // queda para un pase dedicado.
+  // Sigue PARCIAL a propósito: además de 3.2, el plazo de prestación del
+  // servicio (c.) es una tabla con contenido distinto según el sistema de
+  // entrega (formulación/diseño/supervisión), no un escalar como
+  // `plazo_dias` de A3 — forzarlo habría perdido esa estructura.
   "Concurso Público para consultoría de obra": {
     proceso: "Concurso Público para consultoría de obra",
     seccionGeneral: SECCION_GENERAL_CONSULTORIA_OBRA,
-    seccionEspecifica: [
-      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
-      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
-      // 3.1 Finalidad pública: idéntica en su literal a la de bienes/obras.
-      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
-      // 3.2 pide "Código Único de Inversión (CUI) o código idea, de
-      // corresponder" — mismo dato que A4 ya captura para inversiones.
-      { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
-    ],
+    seccionEspecifica: CAMPOS_CONSULTORIA_OBRA,
   },
 
   // "Concurso Público para servicio de mantenimiento vial" — mapeo COMPLETO,
@@ -2976,32 +3007,22 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
   },
 
   // "Concurso Público abreviado para consultoría de obra" — mapeo PARCIAL,
-  // mismo motivo y mismo alcance que "Concurso Público para consultoría de
-  // obra": confirmado leyendo el PDF oficial
+  // ahora ampliado igual que su contraparte sin abreviar: confirmado leyendo
+  // el PDF COMPLETO
   // (7614342-13-bases-estandar-concurso-publico-abreviado-para-consultoria-de-obra.pdf)
   // que comparte la MISMA estructura de Sección Específica (bloque 3.2
   // proyecto/CUI/ubicación/especialidad/subespecialidad/tipología + tablas
-  // alternativas por sistema de entrega) — solo cambian los plazos de la
-  // Sección General, no la estructura de la Sección Específica. Tercera de
-  // las CUATRO variantes de VARIANTES_AMBIGUAS["Concurso Público abreviado"]
-  // (ver más abajo).
+  // alternativas por sistema de entrega, condiciones de contratación en un
+  // solo numeral 3.3.5 con idénticas citas legales: Art. 161 modalidad de
+  // pago, 159/160 sistema de entrega, 108 subcontratación, 209 reajuste, 120
+  // penalidad por mora) — solo cambian los plazos de la Sección General, no
+  // la estructura de la Sección Específica. Reutiliza CAMPOS_CONSULTORIA_OBRA
+  // tal cual. Tercera de las CUATRO variantes de
+  // VARIANTES_AMBIGUAS["Concurso Público abreviado"] (ver más abajo).
   "Concurso Público abreviado para consultoría de obra": {
     proceso: "Concurso Público abreviado para consultoría de obra",
     seccionGeneral: SECCION_GENERAL_CONSULTORIA_OBRA_ABREV,
-    seccionEspecifica: [
-      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
-      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
-      // 3.1 Finalidad pública: idéntica en su literal a la de bienes/obras.
-      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
-      // 3.2 pide "Código Único de Inversión (CUI) o código idea, de
-      // corresponder" — mismo dato que A4 ya captura para inversiones.
-      { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
-      // El resto de 3.2 (proyecto/ubicación/especialidad/subespecialidad/
-      // tipología) y las condiciones de contratación quedan sin mapear, mismo
-      // motivo que "Concurso Público para consultoría de obra": no se fuerza
-      // contra campos que no calzan con su estructura real.
-    ],
+    seccionEspecifica: CAMPOS_CONSULTORIA_OBRA,
   },
 
   // "Concurso Público abreviado para servicios de mantenimiento vial" —
