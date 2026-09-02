@@ -2494,13 +2494,41 @@ const CAMPOS_BIENES: CampoBases[] = [
 ];
 
 // Campos de la Sección Específica compartidos por "Licitación Pública de
-// obras" y "Licitación Pública de obras con precalificación": mismo motivo
-// que CAMPOS_BIENES — ambos catálogos apuntan al MISMO `pdfBasesEstandar`
-// (BASES_OBRAS, ver lib/procesos-seleccion.ts). Mapeo PARCIAL: la Sección
-// Específica de obras tiene DOS variantes completas de Cap. III según
-// sistema de entrega, con contenido propio (Art. 154) sin campoHito
-// equivalente hoy — ver el comentario junto a "Licitación Pública de obras"
-// más abajo para el detalle completo de por qué es parcial.
+// obras", "... con precalificación" y "... con negociación": mismo motivo
+// que CAMPOS_BIENES — los tres catálogos apuntan al MISMO `pdfBasesEstandar`
+// (BASES_OBRAS, ver lib/procesos-seleccion.ts).
+//
+// Confirmado leyendo el PDF completo (7614342-5-bases-estandar-licitacion-publica-de-obras.pdf,
+// pases previos habían leído solo hasta la p. 20): las DOS variantes del
+// Cap. III "Requerimiento" (diseño y construcción, p. 32-49; solo
+// construcción, p. 51-65) numeran distinto (3.5.x vs. 3.3.x) pero contienen
+// exactamente el MISMO conjunto de campos de "condiciones de contratación",
+// con la misma base legal en ambas — por eso se mapean aquí una sola vez,
+// sin duplicar por variante:
+//   - Subcontratación (Art. 108) — igual dato que A3.subcontratacion.
+//   - Modalidad de pago (Art. 161, NO el 130 de bienes/servicios — artículo
+//     genuinamente distinto para obras) — igual campoHito que A4 (el dato es
+//     genérico por objeto, solo cambia la cita legal en el texto fijo).
+//   - Fórmulas de reajuste (Art. 209) — igual dato que A3.formula_reajuste.
+//   - Penalidad por mora (Art. 120) — igual dato que A3.penalidad_mora.
+//   - Otras penalidades — igual dato que A3.otras_penalidades.
+//   - Solución de controversias desde el perfeccionamiento del contrato —
+//     igual dato que A3.solucion_controversias (el texto de obras detalla
+//     instituciones arbitrales y el umbral de JPRD, pero el DATO que
+//     completa la entidad es el mismo campo).
+//   - Requisitos de calificación (Cap. 3.6/3.4) — igual campoHito que A4.
+//   - Cap. IV "Evaluación de ofertas" (factores) — igual campoHito que A4,
+//     confirmado que existe UN solo Capítulo IV compartido por ambas
+//     variantes de Cap. III (p. 66).
+//
+// Sigue siendo mapeo PARCIAL a propósito: 3.2 "Descripción general" (nombre
+// del proyecto/ubicación/especialidad/subespecialidad/tipología/nivel de
+// estudios) es un bloque estructurado sin campo ACE equivalente; el "sistema
+// de entrega" no es un campo de relleno sino la elección de CUÁL variante de
+// Cap. III usar (no hay `[...]` que completar); y los plazos (3.4/3.3.12) son
+// una tabla con varias filas (diseño/ejecución/puesta en servicio), no un
+// escalar como `plazo_dias` de A3 — forzar cualquiera de los tres habría
+// perdido su estructura real o citado mal la base legal.
 const CAMPOS_OBRAS_SM: CampoBases[] = [
   { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
   { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
@@ -2515,7 +2543,15 @@ const CAMPOS_OBRAS_SM: CampoBases[] = [
   // subespecialidad, tipología, nivel de estudios de preinversión) es un
   // bloque estructurado propio de obras sin campo equivalente en ACE
   // todavía: no se fuerza contra el `descripcion` genérico de A3, que
-  // perdería esa estructura. Queda para el pase dedicado (Cap. II-IV).
+  // perdería esa estructura.
+  { ruta: "cap3.subcontratacion", label: "Subcontratación", origen: "literal", hito: "A3", campoHito: "subcontratacion" },
+  { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
+  { ruta: "cap3.formulaReajuste", label: "Fórmulas de reajuste", origen: "literal", hito: "A3", campoHito: "formula_reajuste" },
+  { ruta: "cap3.penalidadMora", label: "Penalidad por mora", origen: "literal", hito: "A3", campoHito: "penalidad_mora" },
+  { ruta: "cap3.otrasPenalidades", label: "Otras penalidades", origen: "literal", hito: "A3", campoHito: "otras_penalidades" },
+  { ruta: "cap3.solucionControversias", label: "Solución de controversias contractuales", origen: "literal", hito: "A3", campoHito: "solucion_controversias" },
+  { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
+  { ruta: "cap4.factoresEvaluacion", label: "Factores de evaluación", origen: "literal", hito: "A4", campoHito: "factores_items" },
 ];
 
 export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
@@ -2541,30 +2577,27 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: CAMPOS_BIENES,
   },
 
-  // "Licitación Pública de obras" — mapeo PARCIAL (equivalente al Task 1 de
-  // bienes, no al Task 2): la Sección Específica de obras tiene una
-  // estructura genuinamente distinta a la de bienes, confirmada leyendo el
-  // PDF oficial (7614342-5-bases-estandar-licitacion-publica-de-obras.pdf):
+  // "Licitación Pública de obras" — mapeo PARCIAL, ahora sustancialmente
+  // ampliado: confirmado leyendo el PDF COMPLETO
+  // (7614342-5-bases-estandar-licitacion-publica-de-obras.pdf, no solo la
+  // Sección General como en el primer pase) que:
   //
   //   - Su Capítulo III "Requerimiento" existe en DOS variantes completas
-  //     (una para el sistema de entrega "diseño y construcción", p. 34-52;
-  //     otra para "solo construcción", p. 53-67) — la entidad borra la que no
-  //     aplica. Cada variante numera sus "Condiciones de contratación" como
-  //     3.5.1-3.5.6+ con contenido propio de obras (consideraciones para el
-  //     expediente técnico, responsabilidades del contratista/entidad,
-  //     avances), no como el 3.3.a-j de bienes.
+  //     (una para el sistema de entrega "diseño y construcción", p. 34-49;
+  //     otra para "solo construcción", p. 51-65) — la entidad borra la que no
+  //     aplica. Ambas variantes comparten el MISMO conjunto de campos de
+  //     "condiciones de contratación" (subcontratación Art. 108, modalidad de
+  //     pago Art. 161, fórmulas de reajuste Art. 209, penalidad por mora
+  //     Art. 120, otras penalidades, solución de controversias, requisitos de
+  //     calificación) y un único Capítulo IV "Evaluación de ofertas"
+  //     compartido — ver CAMPOS_OBRAS_SM arriba para el detalle campo por
+  //     campo y por qué 3.2/plazos/sistema de entrega siguen sin mapear.
   //   - Su Sección Específica llega hasta un CAPÍTULO VI "Proforma del
   //     contrato" (no un Capítulo V): hay un capítulo adicional entre
   //     Evaluación y Proforma cuyo contenido no se pudo extraer de forma
   //     fiable del PDF (páginas 69-88 del documento no devolvieron texto con
   //     el extractor del proyecto — probablemente tablas/gráficos de la guía
   //     de puntuación) y por tanto NO se mapea aquí, para no inventar.
-  //
-  // Mapear a ciegas los campos obra_a..obra_i (Art. 154, ya capturados en A4)
-  // contra esta numeración distinta habría sido adivinar la correspondencia
-  // exacta sin haber leído esas páginas con el mismo cuidado que bienes. Se
-  // deja para un pase dedicado (mismo molde del Task 2 de bienes), y aquí solo
-  // van los campos que SÍ se pudieron confirmar con certeza contra el PDF.
   "Licitación Pública de obras": {
     proceso: "Licitación Pública de obras",
     seccionGeneral: SECCION_GENERAL_OBRAS,

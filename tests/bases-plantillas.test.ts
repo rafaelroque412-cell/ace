@@ -135,14 +135,36 @@ describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
     expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
   });
 
-  it("no fuerza el mapeo del resto de 3.2/3.5 de obras: su estructura difiere de bienes y no se adivina", () => {
-    // "descripcionRequerimiento"/"modalidadPago"/"sistemaEntrega" son rutas de
-    // bienes (3.3.a-b); obras numera distinto (3.5.x) y con contenido propio
-    // (expediente técnico, responsabilidades, avances) — no se reutilizan.
+  it("las condiciones de contratación compartidas por ambas variantes de Cap. III salen de A3/A4, confirmadas contra el PDF completo", () => {
+    // Confirmado leyendo el PDF completo (no solo la Sección General): ambas
+    // variantes del Cap. III (diseño y construcción p. 34-49; solo
+    // construcción p. 51-65) numeran distinto (3.5.x vs. 3.3.x) pero
+    // contienen el MISMO conjunto de condiciones de contratación, con la
+    // misma base legal en ambas.
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap3.subcontratacion"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "subcontratacion" });
+    // Modalidad de pago de obras cita el artículo 161, NO el 130 de
+    // bienes/servicios — mismo campoHito (el dato es genérico por objeto).
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.formulaReajuste"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "formula_reajuste" });
+    expect(porRuta["cap3.penalidadMora"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "penalidad_mora" });
+    expect(porRuta["cap3.otrasPenalidades"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "otras_penalidades" });
+    expect(porRuta["cap3.solucionControversias"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "solucion_controversias" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("sigue sin forzar 3.2/plazos/sistema de entrega: no son campos de relleno simples", () => {
+    // "descripcionRequerimiento" (3.2 es un bloque estructurado propio de
+    // obras, no un texto libre), "sistemaEntrega" (no es un campo de relleno:
+    // es la elección de cuál de las dos variantes de Cap. III usar) y
+    // "plazoEntrega"/"lugarEntrega" (los plazos de obras son una tabla con
+    // varias filas, no un escalar) siguen sin mapear a propósito.
     const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
     expect(rutas).not.toContain("cap3.descripcionRequerimiento");
-    expect(rutas).not.toContain("cap3.modalidadPago");
     expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.plazoEntrega");
+    expect(rutas).not.toContain("cap3.lugarEntrega");
   });
 });
 
