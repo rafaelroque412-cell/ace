@@ -62,8 +62,8 @@ export function montoA7(a7: Record<string, unknown>): number {
   return Number(a7.monto);
 }
 
-const estado = (hitos: HitosMap, code: string): HitoStatus => hitos[code]?.status ?? "pendiente";
-const hecho = (hitos: HitosMap, code: string) => estado(hitos, code) === "hecho";
+export const estado = (hitos: HitosMap, code: string): HitoStatus => hitos[code]?.status ?? "pendiente";
+export const hecho = (hitos: HitosMap, code: string) => estado(hitos, code) === "hecho";
 const noAplica = (hitos: HitosMap, code: string) => estado(hitos, code) === "na";
 
 /** Segmentaciones en las que la matriz de riesgos (Art. 44.3) es requisito del expediente. */

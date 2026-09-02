@@ -35,7 +35,7 @@ export const PASOS_F2: Record<string, PasoDetalle> = {
     campos: [
       { name: "cantidad_postores", label: "Número de postores registrados", tipo: "number", required: true },
       { name: "cantidad_admitidos", label: "Número de postores admitidos", tipo: "number", required: true },
-      { name: "relacion_admitidos", label: "Relación de postores admitidos / no admitidos", tipo: "textarea", ancho: "full", required: true },
+      { name: "relacion_admitidos", label: "Relación de postores admitidos / no admitidos", tipo: "postores", ancho: "full", required: true, baseLegal: "Arts. 67-70 del Reglamento" },
       { name: "subsanaciones", label: "¿Se otorgó plazo de subsanación?", tipo: "boolean", baseLegal: "Art. 90.3 Reglamento" },
       { name: "observaciones", label: "Observaciones", tipo: "textarea", ancho: "full" },
     ],
@@ -103,8 +103,7 @@ export const PASOS_F2: Record<string, PasoDetalle> = {
       { name: "acta_evaluacion", label: "Acta/informe de evaluación emitido", tipo: "boolean", required: true },
       { name: "fecha_evaluacion", label: "Fecha de evaluación", tipo: "date", required: true },
       { name: "total_ofertas_validas", label: "Ofertas válidas (que cumplen requisitos)", tipo: "number", required: true },
-      { name: "orden_prelacion", label: "Orden de prelación (primer puesto)", tipo: "text", required: true, baseLegal: "Art. 82 Reglamento" },
-      { name: "puntaje_maximo", label: "Puntaje máximo obtenido", tipo: "number" },
+      { name: "orden_prelacion", label: "Orden de prelación", tipo: "puntajes", ancho: "full", required: true, baseLegal: "Art. 82 Reglamento" },
       { name: "observaciones", label: "Observaciones", tipo: "textarea", ancho: "full" },
     ],
   },

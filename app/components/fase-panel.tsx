@@ -96,6 +96,7 @@ import { camposAplicables } from "@/lib/expediente-copiloto";
 import { filasTextarea } from "@/lib/textarea-alto";
 import { avisoFechaRequerida } from "@/lib/cronograma-fechas";
 import { faltaParaAprobar, montoA7 as coberturaA7 } from "@/lib/expediente-contenido";
+import { faltaParaConsentir, faltaParaOtorgar } from "@/lib/seleccion-contenido";
 import {
   type ActividadCronograma,
   construirCronogramaInicial,
@@ -141,6 +142,8 @@ import { useFeriados } from "./use-feriados";
 import { calcularVencimiento } from "@/lib/cronograma-fechas";
 import { EstrategiaPreviewModal } from "./estrategia-preview-modal";
 import { ProveedoresConsultadosEditor } from "./proveedores-consultados-editor";
+import { PostoresEditor } from "./postores-editor";
+import { PuntajesEditor } from "./puntajes-editor";
 import { RequisitosCalificacionEditor } from "./requisitos-calificacion-editor";
 import { cn } from "@/lib/utils";
 
@@ -184,6 +187,15 @@ const EXPORT_FORMATO: Record<string, FormatoExport[]> = {
   ],
   A9: [{ path: "fase1/export?formato=bases_checklist", label: "Checklist de Bases" }],
   A10: [{ path: "fase1/anuncio-docx", label: "Anuncio de Contratación Futura", word: true }],
+
+  // ── FASE 2 · Selección ────────────────────────────────────────────────────
+  // Mismo mecanismo genérico de arriba: si el paso no está "hecho" todavía,
+  // la ruta responde 409 y el usuario ve el motivo en el toast de error
+  // (mismo patrón que cualquier otro export fallido, no se deshabilita el
+  // botón a ciegas).
+  B1: [{ path: "fase2/convocatoria-docx", label: "Aviso de Convocatoria", word: true }],
+  B7: [{ path: "fase2/buena-pro-docx", label: "Acta de Otorgamiento de la Buena Pro", word: true }],
+  B8: [{ path: "fase2/consentimiento-docx", label: "Declaración de Consentimiento de la Buena Pro", word: true }],
 };
 
 // Resumen "en cristiano" de cada paso de la Fase 1. El label ya es una acción
@@ -829,6 +841,28 @@ function Campo({
           readOnly={disabled}
           value={value}
         />
+        {ayudaConEnlace}
+      </div>
+    );
+  }
+
+  // Tabla de postores del registro de participantes (B2, Arts. 67-70).
+  if (campo.tipo === "postores") {
+    return (
+      <div className={cn(FIELD, full && "col-span-full")}>
+        {labelContent}
+        <PostoresEditor onChange={(next) => onChange(next)} readOnly={disabled} value={value} />
+        {ayudaConEnlace}
+      </div>
+    );
+  }
+
+  // Tabla del orden de prelación de la evaluación (B6, Arts. 78-82).
+  if (campo.tipo === "puntajes") {
+    return (
+      <div className={cn(FIELD, full && "col-span-full")}>
+        {labelContent}
+        <PuntajesEditor onChange={(next) => onChange(next)} readOnly={disabled} value={value} />
         {ayudaConEnlace}
       </div>
     );
@@ -1928,6 +1962,13 @@ function PasoCard({
   const faltaExpediente =
     code === "A8" && hitosTodos ? faltaParaAprobar(hitosTodos, valorEstimado ?? null, pacBienesServicios ?? null) : [];
 
+  // Mismo criterio que A8: no se puede otorgar la buena pro (B7) sin haber
+  // cerrado la evaluación (y las bases integradas, si hubo consultas u
+  // observaciones), ni declarar el consentimiento (B8) sin un otorgamiento
+  // previo. Ver lib/seleccion-contenido.ts.
+  const faltaOtorgar = code === "B7" && hitosTodos ? faltaParaOtorgar(hitosTodos) : [];
+  const faltaConsentir = code === "B8" && hitosTodos ? faltaParaConsentir(hitosTodos) : [];
+
   // A7: la certificación tiene que cubrir el valor estimado. Sin cobertura no
   // procede aprobar el expediente (A8). Con ejecución plurianual ("ambas") la
   // cobertura es CCP + previsión, no `monto` (oculto en ese caso): se lee con el
@@ -2983,6 +3024,52 @@ function PasoCard({
                   ))}
                 </ul>
                 Puedes guardarlo en curso y aprobarlo cuando estén.
+              </div>
+            </div>
+          ) : null}
+
+          {/* Mismo patrón que el aviso de A8 (arriba), para los gates entre
+              pasos de la Fase 2: ver lib/seleccion-contenido.ts. */}
+          {faltaOtorgar.length > 0 ? (
+            <div className={cn(GATING_WARN, "[&>ul]:my-1 [&>ul]:pl-[18px] [&_li]:mb-0.5")}>
+              <Info size={13} />
+              <div>
+                <strong>Todavía no se puede otorgar la buena pro.</strong> Falta:
+                <ul>
+                  {faltaOtorgar.map((f) => (
+                    <li key={`${f.literal}-${f.etiqueta}`}>
+                      <strong>{f.etiqueta}</strong> ({f.literal}). {f.detalle}{" "}
+                      {f.paso && onAbrirPaso ? (
+                        <button className="mt-2.5 inline-flex cursor-pointer items-center gap-[5px] rounded-[7px] border border-dashed border-line px-[9px] py-[5px] !text-[11.5px] text-muted hover:border-brand hover:bg-[color-mix(in_srgb,var(--brand)_5%,transparent)] hover:text-ink" onClick={() => onAbrirPaso(f.paso!)} type="button">
+                          Ir a {f.paso}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                Puedes guardarlo en curso y otorgarlo cuando estén.
+              </div>
+            </div>
+          ) : null}
+
+          {faltaConsentir.length > 0 ? (
+            <div className={cn(GATING_WARN, "[&>ul]:my-1 [&>ul]:pl-[18px] [&_li]:mb-0.5")}>
+              <Info size={13} />
+              <div>
+                <strong>Todavía no se puede declarar consentida la buena pro.</strong> Falta:
+                <ul>
+                  {faltaConsentir.map((f) => (
+                    <li key={`${f.literal}-${f.etiqueta}`}>
+                      <strong>{f.etiqueta}</strong> ({f.literal}). {f.detalle}{" "}
+                      {f.paso && onAbrirPaso ? (
+                        <button className="mt-2.5 inline-flex cursor-pointer items-center gap-[5px] rounded-[7px] border border-dashed border-line px-[9px] py-[5px] !text-[11.5px] text-muted hover:border-brand hover:bg-[color-mix(in_srgb,var(--brand)_5%,transparent)] hover:text-ink" onClick={() => onAbrirPaso(f.paso!)} type="button">
+                          Ir a {f.paso}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                Puedes guardarlo en curso y declararlo consentido cuando esté.
               </div>
             </div>
           ) : null}

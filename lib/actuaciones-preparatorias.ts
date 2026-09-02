@@ -41,7 +41,11 @@ export type TipoCampo =
   // l) Tabla de adelantos: tres filas fijas (marcar, mecanismo de garantía, %).
   | "adelantos"
   // A6) Integrantes del panel evaluador: se eligen del catálogo de usuarios.
-  | "evaluadores";
+  | "evaluadores"
+  // B2) Registro de participantes: RUC, razón social, admitido/no y motivo.
+  | "postores"
+  // B6) Orden de prelación de la evaluación: razón social, puntaje y admitida.
+  | "puntajes";
 
 export type CampoFormulario = {
   name: string;

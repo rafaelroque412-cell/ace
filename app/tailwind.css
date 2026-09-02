@@ -53,6 +53,8 @@
    de clases compartidas (PROV_TABLA…), así que también debe escanearse. */
 @source "./components/tabla-editor-estilos.ts";
 @source "./components/proveedores-consultados-editor.tsx";
+@source "./components/postores-editor.tsx";
+@source "./components/puntajes-editor.tsx";
 @source "./components/evaluadores-editor.tsx";
 @source "./components/cronograma-roles-editor.tsx";
 @source "./components/requisitos-calificacion-editor.tsx";
