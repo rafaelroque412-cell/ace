@@ -596,14 +596,28 @@ describe("PLANTILLAS_BASES · Licitación Pública abreviada de obras", () => {
     expect(plantilla.seccionGeneral).toContain("rehabilitación y reconstrucción");
   });
 
-  it("el mapeo es PARCIAL a propósito: solo entidad, año fiscal, finalidad pública y CUI", () => {
+  it("reutiliza CAMPOS_OBRAS_SM tal cual: mismo mapeo ampliado que obras sin abreviar", () => {
+    // Confirmado leyendo el PDF completo de la abreviada: comparte con
+    // "Licitación Pública de obras" las mismas dos variantes de Cap. III y
+    // las mismas condiciones de contratación, con idénticas citas legales
+    // (Art. 108 subcontratación, 161 modalidad de pago, 209 reajuste, 120
+    // penalidad por mora) en ambas.
+    const obras = PLANTILLAS_BASES["Licitación Pública de obras"];
+    expect(plantilla.seccionEspecifica).toBe(obras.seccionEspecifica);
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("sigue sin forzar 3.2/plazos/sistema de entrega: no son campos de relleno simples", () => {
     const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
-    expect(rutas).not.toContain("cap3.modalidadPago");
+    expect(rutas).not.toContain("cap3.descripcionRequerimiento");
     expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap3.plazoEntrega");
+    expect(rutas).not.toContain("cap3.lugarEntrega");
   });
 });
 

@@ -2896,24 +2896,19 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
 
   // "Licitación Pública abreviada de obras" — mapeo PARCIAL, mismo motivo y
   // mismo alcance que "Licitación Pública de obras": confirmado leyendo el
-  // PDF oficial que comparte la MISMA estructura de Sección Específica (dos
+  // PDF COMPLETO que comparte la MISMA estructura de Sección Específica (dos
   // variantes completas de Cap. III según sistema de entrega, con el bloque
-  // 3.2 estructurado de siempre) — solo cambian los plazos de la Sección
-  // General, no la estructura de la Sección Específica.
+  // 3.2 estructurado de siempre Y las mismas condiciones de contratación —
+  // subcontratación Art. 108, modalidad de pago Art. 161, fórmulas de
+  // reajuste Art. 209, penalidad por mora Art. 120, otras penalidades,
+  // solución de controversias, requisitos de calificación, Cap. IV
+  // evaluación — confirmadas con las mismas citas legales en ambas
+  // variantes) — solo cambian los plazos de la Sección General, no la
+  // estructura de la Sección Específica. Reutiliza CAMPOS_OBRAS_SM tal cual.
   "Licitación Pública abreviada de obras": {
     proceso: "Licitación Pública abreviada de obras",
     seccionGeneral: SECCION_GENERAL_OBRAS_ABREV,
-    seccionEspecifica: [
-      { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
-      { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
-      { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
-      { ruta: "cap3.cui", label: "Código Único de Inversión (CUI)", origen: "literal", hito: "A4", campoHito: "cui" },
-      // El resto de 3.2 (proyecto/ubicación/especialidad/subespecialidad/
-      // tipología) y las condiciones de contratación quedan sin mapear, mismo
-      // motivo que "Licitación Pública de obras": no se fuerza contra campos
-      // que no calzan con su estructura real.
-    ],
+    seccionEspecifica: CAMPOS_OBRAS_SM,
   },
 
   // "Concurso Público abreviado de servicios" — mapeo COMPLETO, mismo alcance
