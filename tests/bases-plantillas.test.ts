@@ -683,6 +683,66 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado para consultoría de o
   });
 });
 
+describe("PLANTILLAS_BASES · Concurso Público abreviado para servicios de mantenimiento vial", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público abreviado para servicios de mantenimiento vial"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("refleja plazos abreviados y los dos métodos de evaluación económica propios de mantenimiento vial", () => {
+    expect(plantilla.seccionGeneral).toContain("no menor a tres días hábiles");
+    expect(plantilla.seccionGeneral).toContain("dentro de los cinco días hábiles siguientes");
+    expect(plantilla.seccionGeneral).toContain("entre el 95% y 110% de la cuantía de la contratación");
+    expect(plantilla.seccionGeneral).toContain("Oferta económica fija al 100%");
+  });
+
+  it("sí incluye fideicomiso como opción de garantía (a diferencia de consultoría de obra)", () => {
+    expect(plantilla.seccionGeneral).toContain("fideicomiso");
+  });
+
+  it("tiene el mismo mapeo completo que mantenimiento vial sin abreviar: la estructura del Capítulo III es idéntica", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap3.plazoEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "plazo_dias" });
+    expect(porRuta["cap3.lugarEntrega"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "lugar_entrega" });
+    expect(porRuta["cap3.penalidadMora"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "penalidad_mora" });
+    expect(porRuta["cap3.otrasPenalidades"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "otras_penalidades" });
+    expect(porRuta["cap3.subcontratacion"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "subcontratacion" });
+    expect(porRuta["cap3.formulaReajuste"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "formula_reajuste" });
+    expect(porRuta["cap3.solucionControversias"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "solucion_controversias" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("el Capítulo V (proforma del contrato) no se mapea aquí", () => {
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
+  });
+
+  it("NO está registrada bajo el valor real del catálogo, porque ese valor es ambiguo (agrupa 4 PDFs abreviados)", () => {
+    expect(PLANTILLAS_BASES["Concurso Público abreviado"]).toBeUndefined();
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
@@ -741,16 +801,14 @@ describe("resolverPlantillaAmbigua", () => {
     expect(r).toEqual({ ok: false, motivo: "variante_invalida", variantes: VARIANTES_AMBIGUAS[AMBIGUO] });
   });
 
-  it("«Concurso Público abreviado» con 3/4 variantes registradas pide elección, no adivina", () => {
-    // Con "servicios", "consultoría en general" y "consultoría de obra" ya
-    // registradas, el atajo de una sola opción ya no aplica (mismo criterio
-    // que el grupo de arriba).
+  it("«Concurso Público abreviado» con las 4 variantes registradas pide elección, no adivina", () => {
     const ABREVIADO = "Concurso Público abreviado";
     expect(esProcesoAmbiguo(ABREVIADO)).toBe(true);
     expect(VARIANTES_AMBIGUAS[ABREVIADO]).toEqual([
       "Concurso Público abreviado de servicios",
       "Concurso Público abreviado para consultoría en general",
       "Concurso Público abreviado para consultoría de obra",
+      "Concurso Público abreviado para servicios de mantenimiento vial",
     ]);
     const r = resolverPlantillaAmbigua(ABREVIADO);
     expect(r).toEqual({ ok: false, motivo: "ambiguo", variantes: VARIANTES_AMBIGUAS[ABREVIADO] });
@@ -773,5 +831,20 @@ describe("resolverPlantillaAmbigua", () => {
     if (consultoriaObra.ok) {
       expect(consultoriaObra.plantilla.proceso).toBe("Concurso Público abreviado para consultoría de obra");
     }
+
+    const mantenimientoVial = resolverPlantillaAmbigua(ABREVIADO, "Concurso Público abreviado para servicios de mantenimiento vial");
+    expect(mantenimientoVial.ok).toBe(true);
+    if (mantenimientoVial.ok) {
+      expect(mantenimientoVial.plantilla.proceso).toBe("Concurso Público abreviado para servicios de mantenimiento vial");
+    }
+  });
+
+  it("las cuatro variantes del grupo «Concurso Público abreviado» están registradas: la brecha de disambiguación queda completa", () => {
+    expect(VARIANTES_AMBIGUAS["Concurso Público abreviado"]).toEqual([
+      "Concurso Público abreviado de servicios",
+      "Concurso Público abreviado para consultoría en general",
+      "Concurso Público abreviado para consultoría de obra",
+      "Concurso Público abreviado para servicios de mantenimiento vial",
+    ]);
   });
 });
