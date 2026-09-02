@@ -68,3 +68,7 @@ docs/requerimientos/
 # Dump de datos con PII y hashes de Auth — NO commitear (migración manual)
 docs/supabase/datos.sql
 docs/supabase/datos/
+
+# Estado local del CLI de Supabase (a qué proyecto está enlazado esta máquina,
+# versión del binario) — se regenera con `supabase link`, no es código.
+supabase/.temp/

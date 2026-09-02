@@ -60,6 +60,18 @@ export type ProcesoSeleccion = {
   precalificacion?: boolean;
   /** Modelos base (nombre EXACTO tal como está en `documents.file_name`). */
   pdfs?: string[];
+  /**
+   * Bases estándar OECE del procedimiento (nombre EXACTO en `documents.file_name`,
+   * indexadas con metadata.kind="modelo_bases" — ver
+   * docs/superpowers/plans para el módulo que las usa). A diferencia de `pdfs`
+   * (el REQUERIMIENTO), esta es la plantilla completa del documento de bases.
+   * No todo procedimiento del Reglamento tiene una bases estándar publicada
+   * (diálogo competitivo, MDA, Compra Pública Precomercial, Asociación para la
+   * Innovación, Concurso de Proyectos Arquitectónicos y el abreviado para
+   * expertos/gerentes de proyecto quedan sin una): ausente aquí no es un
+   * descuido, es que el OECE no publicó una para ese caso.
+   */
+  pdfBasesEstandar?: string[];
 };
 
 const ART_93 = "Reglamento, Art. 93 · licitación pública (Ley 32069, Art. 54.1.a).";
@@ -85,6 +97,28 @@ const MODELOS_CONCURSO_ABREVIADO = [
   "requerimiento CONCURSO PÚBLICO ABREVIADO PARA SERVICIO DE MANTENIMIENTO VIAL.pdf",
 ];
 
+// Bases estándar OECE (R.D. 001-2026-EF/54.01), indexadas en
+// actuaciones-preparatorias/bases/ el 2026-09-01. Nombres EXACTOS de archivo.
+const BASES_BIENES = "7614342-1-bases-estandar-licitacion-publica-para-bienes.pdf";
+const BASES_BIENES_ABREV = "7614342-2-bases-estandar-licitacion-publica-abreviada-para-bienes.pdf";
+const BASES_OBRAS = "7614342-5-bases-estandar-licitacion-publica-de-obras.pdf";
+const BASES_OBRAS_ABREV = "7614342-6-bases-estandar-licitacion-publica-abreviada-de-obras.pdf";
+const BASES_SERVICIOS = "7614342-8-bases-estandar-concurso-publico-de-servicios.pdf";
+const BASES_CONCURSO_ABREVIADO = [
+  "7614342-9-bases-estandar-concurso-publico-abreviado-de-servicios (2).pdf",
+  "7614342-11-bases-estandar-concurso-publico-abreviado-para-consultoria-en-general.pdf",
+  "7614342-13-bases-estandar-concurso-publico-abreviado-para-consultoria-de-obra.pdf",
+  "7614342-15-bases-estandar-concurso-publico-abreviado-para-servicio-de-mantenimiento-vial.pdf",
+];
+const BASES_CONSULTORIA_VIAL = [
+  "7614342-10-bases-estandar-concurso-publico-para-consultoria-en-general.pdf",
+  "7614342-12-bases-estandar-concurso-publico-para-consultor-a-de-obra.pdf",
+  "7614342-14-bases-estandar-concurso-publico-para-servicio-de-mantenimiento-vial.pdf",
+];
+const BASES_SUBASTA_INVERSA = "7614342-17-bases-estandar-subasta-inversa-electronica.pdf";
+const BASES_COMPARACION_PRECIOS = "7614342-18-bases-estandar-comparacion-de-precios.pdf";
+const BASES_NO_COMPETITIVO = "7614342-19-bases-estandar-procedimiento-de-seleccion-no-competitivo.pdf";
+
 export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
   {
     articulo: "",
@@ -101,6 +135,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública para bienes",
     modalidad: "sm",
     objetos: ["bienes"],
+    pdfBasesEstandar: [BASES_BIENES],
     pdfs: [MODELO_BIENES],
     value: "Licitación Pública para bienes",
   },
@@ -111,6 +146,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública para bienes especializados",
     modalidad: "diferenciada",
     objetos: ["bienes"],
+    pdfBasesEstandar: [BASES_BIENES],
     pdfs: [MODELO_BIENES],
     value: "Licitación Pública para bienes especializados",
     precalificacion: true,
@@ -122,6 +158,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública abreviada para bienes",
     modalidad: "abreviada",
     objetos: ["bienes"],
+    pdfBasesEstandar: [BASES_BIENES_ABREV],
     pdfs: [MODELO_BIENES_ABREV],
     value: "Licitación Pública abreviada para bienes",
   },
@@ -132,6 +169,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública de obras",
     modalidad: "sm",
     objetos: ["obras"],
+    pdfBasesEstandar: [BASES_OBRAS],
     pdfs: [MODELO_OBRAS],
     value: "Licitación Pública de obras",
   },
@@ -141,6 +179,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública de obras con precalificación",
     modalidad: "diferenciada",
     objetos: ["obras"],
+    pdfBasesEstandar: [BASES_OBRAS],
     pdfs: [MODELO_OBRAS],
     value: "Licitación Pública de obras con precalificación",
     precalificacion: true,
@@ -152,6 +191,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública abreviada de obras",
     modalidad: "abreviada",
     objetos: ["obras"],
+    pdfBasesEstandar: [BASES_OBRAS_ABREV],
     pdfs: [MODELO_OBRAS_ABREV],
     value: "Licitación Pública abreviada de obras",
   },
@@ -171,6 +211,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Licitación Pública de obras con negociación",
     modalidad: "diferenciada",
     objetos: ["obras"],
+    pdfBasesEstandar: [BASES_OBRAS],
     pdfs: [MODELO_OBRAS],
     value: "Licitación Pública de obras con negociación",
   },
@@ -191,6 +232,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Concurso Público de servicios",
     modalidad: "sm",
     objetos: ["servicios"],
+    pdfBasesEstandar: [BASES_SERVICIOS],
     pdfs: [MODELO_SERVICIOS],
     value: "Concurso Público de servicios",
   },
@@ -201,6 +243,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Concurso Público para consultorías y servicios de mantenimiento vial",
     modalidad: "sm",
     objetos: ["servicios", "consultoria_obra"],
+    pdfBasesEstandar: BASES_CONSULTORIA_VIAL,
     pdfs: MODELOS_CONSULTORIA_VIAL,
     value: "Concurso Público para consultorías y servicios de mantenimiento vial",
   },
@@ -211,6 +254,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Concurso Público abreviado",
     modalidad: "abreviada",
     objetos: ["servicios", "consultoria_obra"],
+    pdfBasesEstandar: BASES_CONCURSO_ABREVIADO,
     pdfs: MODELOS_CONCURSO_ABREVIADO,
     value: "Concurso Público abreviado",
   },
@@ -221,6 +265,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     label: "Concurso Público con precalificación",
     modalidad: "diferenciada",
     objetos: ["servicios", "consultoria_obra"],
+    pdfBasesEstandar: BASES_CONSULTORIA_VIAL,
     pdfs: MODELOS_CONSULTORIA_VIAL,
     value: "Concurso Público con precalificación",
     precalificacion: true,
@@ -267,6 +312,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     condiciones: "Bienes o servicios comunes que cuenten con ficha técnica, con independencia de su cuantía.",
     label: "Subasta Inversa Electrónica",
     objetos: ["bienes", "servicios"],
+    pdfBasesEstandar: [BASES_SUBASTA_INVERSA],
     pdfs: ["REQUERIMIENTO SUBASTA INVERSA ELECTRÓNICA.pdf"],
     value: "Subasta Inversa Electrónica",
   },
@@ -276,6 +322,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
       "Bienes o servicios de oferta estándar entregables en un máximo de cinco días hábiles sin fabricarse a medida, o incluidos en el Listado de la DGA, con cuantía de hasta S/ 100 000,00.",
     label: "Comparación de Precios",
     objetos: ["bienes", "servicios"],
+    pdfBasesEstandar: [BASES_COMPARACION_PRECIOS],
     pdfs: ["REQUERIMIENTO COMPARACIÓN DE PRECIOS.pdf"],
     value: "Comparación de Precios",
   },
@@ -300,6 +347,7 @@ export const PROCESOS_SELECCION: ProcesoSeleccion[] = [
     condiciones: "Alguno de los once supuestos tasados del Art. 55.1 (a-k), debidamente sustentado.",
     label: "Procedimiento de Selección No Competitivo",
     objetos: ["bienes", "servicios", "obras", "consultoria_obra"],
+    pdfBasesEstandar: [BASES_NO_COMPETITIVO],
     pdfs: ["REQUERIMIENTO PROCEDIMIENTO DE SELECCIÓN NO COMPETITIVO.pdf"],
     value: "Procedimiento de Selección No Competitivo",
   },
@@ -403,6 +451,11 @@ export function esNoCompetitivo(tipoProceso: string | null | undefined): boolean
  */
 export function pdfsModeloDeProceso(value: string): string[] {
   return PROCESOS_SELECCION.find((p) => p.value === value)?.pdfs ?? [];
+}
+
+/** Bases estándar OECE del procedimiento (vacío si el OECE no publicó una para ese caso). */
+export function pdfsBasesEstandarDeProceso(value: string): string[] {
+  return PROCESOS_SELECCION.find((p) => p.value === value)?.pdfBasesEstandar ?? [];
 }
 
 /**
