@@ -3310,8 +3310,23 @@ export function FasePanel({
     setAutoridadSugerida(oficinaSuperiorDeLaDec(oficinasCatalogo)?.nombre ?? "");
     setRemitenteSugerido(oficinaEncargadaDeContrataciones(oficinasCatalogo)?.nombre ?? "");
   }, [oficinasCatalogo]);
-  // Tipo de procedimiento: los contratos menores no se segmentan (Art. 42.1).
-  const [procedureType, setProcedureType] = useState<string | null>(null);
+  // Tipo de procedimiento ESPECÍFICO: los contratos menores no se segmentan
+  // (Art. 42.1). Se deriva de `hitos.A4.data.var_a_proceso` — el catálogo de
+  // los Arts. 93-95 (lib/procesos-seleccion.ts), confirmado por la DEC en la
+  // Estrategia — y NO de `proceso.procedure_type`: esa columna la alimenta
+  // lib/expediente-columnas.ts desde `var_a_procedimiento`, el GENÉRICO de 7
+  // valores del Art. 54 (p. ej. "licitacion_publica_abreviada"), que nunca
+  // coincide con un `value` de PROCESOS_SELECCION (rompía tanto el selector
+  // de variantes de A9 —`VARIANTES_AMBIGUAS` usa las etiquetas específicas—
+  // como `bases-docx/route.ts`, ya corregido con el mismo criterio) y que
+  // además, al venir de `proceso` en vez de `hitos`, no se refrescaba en este
+  // panel al guardar A4 (`proceso` viene del contexto compartido y solo se
+  // recarga completo tras A5; `hitos` sí se actualiza en cada guardado).
+  const procedureType = useMemo<string | null>(() => {
+    const varAProceso = hitos.A4?.data?.var_a_proceso;
+    if (typeof varAProceso === "string" && varAProceso.trim()) return varAProceso.trim();
+    return (proceso?.procedure_type as string | null) ?? null;
+  }, [hitos.A4?.data?.var_a_proceso, proceso?.procedure_type]);
   // Propuesta original del área usuaria (Art. 44.2), leída de la Necesidad. No
   // se copia al expediente: mientras está derivada, la ficha está congelada, así
   // que leerla en vivo es estable y no puede quedarse desfasada.
@@ -3637,7 +3652,6 @@ export function FasePanel({
     const raw = proceso.valor_estimado ?? proceso.amount ?? necMonto;
     const n = raw === null || raw === undefined || raw === "" ? null : Number(raw);
     setValorEstimado(n !== null && Number.isFinite(n) && n > 0 ? n : null);
-    setProcedureType((proceso.procedure_type as string | null) ?? null);
   }, [proceso, necesidad]);
 
   useEffect(() => {
