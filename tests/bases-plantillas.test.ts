@@ -176,3 +176,48 @@ describe("PLANTILLAS_BASES · Concurso Público de servicios", () => {
     expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
   });
 });
+
+describe("PLANTILLAS_BASES · Concurso Público para consultoría en general", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público para consultoría en general"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("la Sección General refleja el contenido propio de consultoría en general (evaluadores comité o jurado, sin JPRD)", () => {
+    expect(plantilla.seccionGeneral).toContain("consultoría en general");
+    expect(plantilla.seccionGeneral).toContain("comité o jurado");
+    expect(plantilla.seccionGeneral).not.toContain("Centro de administración de la JPRD");
+  });
+
+  it("tiene el mismo mapeo completo que bienes y servicios: la estructura del Capítulo III es idéntica", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("NO está registrada bajo el valor real del catálogo, porque ese valor es ambiguo (resuelve a 3 PDFs)", () => {
+    // "Concurso Público para consultorías y servicios de mantenimiento vial"
+    // es el value real en lib/procesos-seleccion.ts, y resuelve a 3 PDFs
+    // (BASES_CONSULTORIA_VIAL): esta plantilla es solo uno de los tres, y
+    // registrarla bajo ese value habría fingido resuelta una ambigüedad que
+    // ACE todavía no puede distinguir (ver el comentario junto a
+    // SECCION_GENERAL_CONSULTORIA_GENERAL en lib/bases-plantillas.ts).
+    expect(PLANTILLAS_BASES["Concurso Público para consultorías y servicios de mantenimiento vial"]).toBeUndefined();
+  });
+});
