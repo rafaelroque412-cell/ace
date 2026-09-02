@@ -222,6 +222,58 @@ describe("PLANTILLAS_BASES · Concurso Público para consultoría en general", (
   });
 });
 
+describe("PLANTILLAS_BASES · Concurso Público para consultoría de obra", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público para consultoría de obra"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("la Sección General refleja diferencias reales frente a bienes/servicios: sin fideicomiso ni excepción de 50 UIT", () => {
+    // Confirmado leyendo el PDF: la garantía de fiel cumplimiento de
+    // consultoría de obra NO incluye "fideicomiso" como opción (bienes,
+    // servicios y consultoría en general sí lo tienen), y no trae el párrafo
+    // de "Excepciones" para contratos ≤ 50 UIT que los otros tres sí tienen.
+    expect(plantilla.seccionGeneral).toContain("consultoría de obra");
+    expect(plantilla.seccionGeneral).not.toContain("fideicomiso");
+    expect(plantilla.seccionGeneral).not.toContain("Excepciones:");
+    expect(plantilla.seccionGeneral).not.toContain("Centro de administración de la JPRD");
+  });
+
+  it("el mapeo es PARCIAL a propósito: solo entidad, año fiscal, finalidad pública y CUI", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+  });
+
+  it("no fuerza el mapeo del resto de 3.2/3.3.5: su estructura difiere de bienes y no se adivina", () => {
+    // "descripcionRequerimiento"/"modalidadPago"/"sistemaEntrega" son rutas de
+    // bienes (3.3.a-b); consultoría de obra numera distinto (3.3.5.a-b, con
+    // el artículo 161 en vez del 130) y tiene un bloque 3.2 estructurado
+    // propio (proyecto/CUI/ubicación/especialidad/subespecialidad/tipología
+    // + 4 tablas alternativas por sistema de entrega) — no se reutilizan.
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas).not.toContain("cap3.descripcionRequerimiento");
+    expect(rutas).not.toContain("cap3.modalidadPago");
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
@@ -241,31 +293,28 @@ describe("resolverPlantillaAmbigua", () => {
     expect(esProcesoAmbiguo("Licitación Pública para bienes")).toBe(false);
   });
 
-  it("con exactamente UNA variante registrada, la resuelve automáticamente (no hay elección real)", () => {
-    // Hoy VARIANTES_AMBIGUAS[AMBIGUO] solo tiene "consultoría en general".
-    expect(VARIANTES_AMBIGUAS[AMBIGUO]).toHaveLength(1);
+  it("con 2+ variantes registradas y sin elegir, pide elección en vez de adivinar", () => {
+    // Desde que se transcribió "consultoría de obra" hay dos variantes
+    // registradas: el atajo de "una sola opción" ya no aplica, y sin
+    // `variante` explícita la función debe pedir que se elija, no devolver
+    // cualquiera de las dos al azar.
+    expect(VARIANTES_AMBIGUAS[AMBIGUO].length).toBeGreaterThanOrEqual(2);
     const r = resolverPlantillaAmbigua(AMBIGUO);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.plantilla.proceso).toBe("Concurso Público para consultoría en general");
+    expect(r).toEqual({ ok: false, motivo: "ambiguo", variantes: VARIANTES_AMBIGUAS[AMBIGUO] });
   });
 
-  it("una variante explícita válida se resuelve igual, aunque haya una sola registrada", () => {
-    const r = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría en general");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.plantilla.proceso).toBe("Concurso Público para consultoría en general");
+  it("una variante explícita válida se resuelve a esa plantilla concreta", () => {
+    const general = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría en general");
+    expect(general.ok).toBe(true);
+    if (general.ok) expect(general.plantilla.proceso).toBe("Concurso Público para consultoría en general");
+
+    const obra = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría de obra");
+    expect(obra.ok).toBe(true);
+    if (obra.ok) expect(obra.plantilla.proceso).toBe("Concurso Público para consultoría de obra");
   });
 
   it("una variante que no pertenece a ese procedimiento ambiguo: variante_invalida", () => {
     const r = resolverPlantillaAmbigua(AMBIGUO, "Licitación Pública para bienes");
     expect(r).toEqual({ ok: false, motivo: "variante_invalida", variantes: VARIANTES_AMBIGUAS[AMBIGUO] });
   });
-
-  // La rama "2+ variantes sin elección explícita → motivo: 'ambiguo'" de
-  // resolverPlantillaAmbigua no tiene todavía un caso real que probar: hoy
-  // solo hay una variante registrada (consultoría en general), así que el
-  // atajo del "length === 1" siempre gana primero. En cuanto se transcriba
-  // la segunda variante (consultoría de obra o mantenimiento vial), agregar
-  // aquí el test que confirma que, SIN `variante`, la función pide elegir en
-  // vez de devolver cualquiera de las dos al azar — es la señal correcta de
-  // que la brecha de disambiguación pasó a tener una elección real.
 });
