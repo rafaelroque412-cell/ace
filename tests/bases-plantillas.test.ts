@@ -70,3 +70,55 @@ describe("PLANTILLAS_BASES · Licitación Pública para bienes", () => {
     expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
   });
 });
+
+describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
+  const plantilla = PLANTILLAS_BASES["Licitación Pública de obras"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("la Sección General refleja el contenido propio de obras (dos sistemas de entrega, JPRD y garantías distintas de bienes)", () => {
+    // Estos valores NO son los de bienes (S/ 480 000 / S/ 10 000 000 con otro
+    // texto): confirman que no se copió la Sección General de bienes por error.
+    expect(plantilla.seccionGeneral).toContain("solo construcción");
+    expect(plantilla.seccionGeneral).toContain("diseño y construcción");
+    expect(plantilla.seccionGeneral).toContain("S/ 5 000 000,00");
+    expect(plantilla.seccionGeneral).toContain("Capacidad Técnica y Profesional");
+  });
+
+  it("nombre/RUC de la entidad y el año fiscal siguen el mismo patrón que bienes", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+  });
+
+  it("la finalidad pública y el CUI salen de A3/A4, confirmados contra el PDF de obras", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
+  });
+
+  it("no fuerza el mapeo del resto de 3.2/3.5 de obras: su estructura difiere de bienes y no se adivina", () => {
+    // "descripcionRequerimiento"/"modalidadPago"/"sistemaEntrega" son rutas de
+    // bienes (3.3.a-b); obras numera distinto (3.5.x) y con contenido propio
+    // (expediente técnico, responsabilidades, avances) — no se reutilizan.
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas).not.toContain("cap3.descripcionRequerimiento");
+    expect(rutas).not.toContain("cap3.modalidadPago");
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+  });
+});
