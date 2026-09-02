@@ -141,6 +141,7 @@ import { SustentoIA } from "./sustento-ia";
 import { useFeriados } from "./use-feriados";
 import { calcularVencimiento } from "@/lib/cronograma-fechas";
 import { EstrategiaPreviewModal } from "./estrategia-preview-modal";
+import { ChecklistBasesPreviewModal } from "./checklist-bases-preview-modal";
 import { ProveedoresConsultadosEditor } from "./proveedores-consultados-editor";
 import { PostoresEditor } from "./postores-editor";
 import { PuntajesEditor } from "./puntajes-editor";
@@ -165,7 +166,8 @@ type FormatoExport = {
     | "informe_aprobacion"
     | "anexo2"
     | "evaluadores"
-    | "comite";
+    | "comite"
+    | "bases_checklist";
 };
 
 // Un paso puede exportar VARIOS documentos (A6 genera tres: memorándum de
@@ -185,7 +187,7 @@ const EXPORT_FORMATO: Record<string, FormatoExport[]> = {
     { path: "fase1/informe-aprobacion", label: "Informe de solicitud de aprobación", word: true, previa: "informe_aprobacion" },
     { path: "fase1/export?formato=anexo2", label: "Anexo N° 2 (Aprobación)", previa: "anexo2" },
   ],
-  A9: [{ path: "fase1/export?formato=bases_checklist", label: "Checklist de Bases" }],
+  A9: [{ path: "fase1/export?formato=bases_checklist", label: "Checklist de Bases", previa: "bases_checklist" }],
   A10: [{ path: "fase1/anuncio-docx", label: "Anuncio de Contratación Futura", word: true }],
 
   // ── FASE 2 · Selección ────────────────────────────────────────────────────
@@ -2962,6 +2964,13 @@ function PasoCard({
               label={previaAbierta.label}
               onClose={cerrarPrevia}
               onDescargar={(miembro) => void descargar(previaAbierta, miembro)}
+              processId={processId}
+            />
+          ) : null}
+          {previaAbierta?.previa === "bases_checklist" ? (
+            <ChecklistBasesPreviewModal
+              onClose={cerrarPrevia}
+              onDescargar={() => void descargar(previaAbierta)}
               processId={processId}
             />
           ) : null}

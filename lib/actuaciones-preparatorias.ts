@@ -2258,6 +2258,14 @@ export const PASOS_F1: Record<string, PasoDetalle> = {
           ayuda: "Plazo de ejecución, forma de pago, penalidades, anticipos, garantías, etc."
       },
       {
+          name: "factores_evaluacion_definidos",
+          label: "Factores de evaluación definidos en las bases",
+          tipo: "boolean",
+          required: true,
+          baseLegal: "Bases estándar vigentes",
+          ayuda: "Los factores con los que se calificará la oferta técnica/económica, conforme a la estructura de las bases estándar aplicables."
+      },
+      {
           name: "publicada_seace",
           label: "Bases publicadas en el SEACE/PLADICOP",
           tipo: "boolean",

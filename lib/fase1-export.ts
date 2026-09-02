@@ -1006,6 +1006,7 @@ function llenarEstrategia(
   proceso: ProcesoExport,
   hitos: HitosMap,
   necesidad?: NecesidadExport | null,
+  usuarioDescarga?: string | null,
 ) {
   const a4 = hitos.A4?.data ?? {};
   const a2 = hitos.A2?.data ?? {};
@@ -1442,6 +1443,16 @@ function llenarEstrategia(
   // estaba) caía en la dirección fija C258, que para entonces ya era otra fila, y
   // la casilla real de la fecha se quedaba con el marcador "[Insertar fecha…]".
   setCell(ws, "C258", fechaISOaCorta(str(a4, "fecha_elaboracion")) || hoy());
+
+  // Trazabilidad de quién generó el documento: no viene en la plantilla oficial
+  // (termina en la fila 259, la de la fecha), así que se agrega una fila nueva
+  // justo debajo —fila 260 en la plantilla en blanco—, escrita AQUÍ por la misma
+  // razón que la fecha de arriba: si se escribiera al final, para entonces las
+  // inserciones de f)/g)/o)/p) ya habrían desplazado esta fila a otra dirección.
+  if (usuarioDescarga) {
+    setCell(ws, "B260", `Elaborado por: ${usuarioDescarga}`);
+    ws.getCell("B260").font = { bold: true };
+  }
 
   // o) y p) AL FINAL: insertan filas y desplazan todo lo de debajo. Hacerlo
   // antes invalidaría las direcciones fijas de q), r), s), t) y las de obras.
@@ -2006,6 +2017,13 @@ function pieAnexo1(ws: ExcelJS.Worksheet, a5: Record<string, unknown>, responsab
   setCell(ws, "B33", "Firma del responsable de la DEC");
   ws.getCell("B33").alignment = { horizontal: "center" };
   ws.getCell("B28").font = { bold: true };
+  // Trazabilidad de quién generó el documento (distinto de la firma de arriba:
+  // esa es un rótulo institucional: "Firma del responsable de la DEC"; esta es
+  // el registro literal de quién lo descargó, con nombre y apellido).
+  if (responsable) {
+    setCell(ws, "B35", `Elaborado por: ${responsable}`);
+    ws.getCell("B35").font = { bold: true };
+  }
 }
 
 function llenarAnexo1(
@@ -2174,6 +2192,7 @@ function llenarAnexo2(
   proceso: ProcesoExport,
   hitos: HitosMap,
   necesidad?: NecesidadExport | null,
+  usuarioDescarga?: string | null,
 ) {
   const a1 = hitos.A1?.data ?? {};
   const a2 = hitos.A2?.data ?? {};
@@ -2400,6 +2419,14 @@ function llenarAnexo2(
   ws.mergeCells("B59:J59");
   ajustarAltoFilaAnexo2(ws, "B59", 2, 10);
 
+  // Trazabilidad de quién generó el documento (no es quien firma, arriba): una
+  // fila nueva debajo, con una fila en blanco de separación (60).
+  if (usuarioDescarga) {
+    setCell(ws, "B61", `Elaborado por: ${usuarioDescarga}`);
+    ws.mergeCells("B61:J61");
+    ws.getCell("B61").font = { bold: true };
+  }
+
   // Las celdas que se quedaron con el marcador "[...]" (sin dato) salen con "-",
   // no con la instrucción de la plantilla.
   marcadoresAGuion(ws);
@@ -2504,50 +2531,74 @@ function generarAnexo3(proceso: ProcesoExport, hitos: HitosMap): ExcelJS.Workboo
 }
 
 // ===== Checklist de Bases (A9) =====
-function generarChecklistBases(proceso: ProcesoExport, hitos: HitosMap): ExcelJS.Workbook {
+// Quién elabora las bases (A9): oficial de compra / comité / DEC (si hay jurado).
+const ELABORADO_POR_BASES: Record<string, string> = {
+  oficial_compra: "Oficial de compra",
+  comite: "Comité de selección",
+  dec: "DEC (jurado)",
+};
+
+type FilaChecklist = { celdas: string[]; negrita?: boolean; esSeccion?: boolean };
+
+/**
+ * Filas del Checklist de Bases (A9), COMPARTIDAS por la descarga
+ * (`generarChecklistBases`) y la vista previa (`previewChecklistBases`): así
+ * la previa no puede decir una cosa y el .xlsx otra — mismo principio que
+ * `previewHoja` para los formatos con plantilla.
+ *
+ * Cada casilla `contiene_*`/`factores_evaluacion_definidos` de A9 es required
+ * y se registra: antes "Factores de evaluación" salía siempre en blanco (A9
+ * no tenía un campo propio para eso, ver el fix del 2026-09-01).
+ */
+function filasChecklistBases(
+  proceso: ProcesoExport,
+  hitos: HitosMap,
+  usuarioDescarga?: string | null,
+): FilaChecklist[] {
+  const a9 = hitos.A9?.data ?? {};
+  const elaboradoPor = ELABORADO_POR_BASES[str(a9, "elaborado_por")] ?? str(a9, "elaborado_por");
+
+  const filas: FilaChecklist[] = [
+    { celdas: ["CHECKLIST DE BASES - PROCEDIMIENTO DE SELECCIÓN", "", ""], esSeccion: true, negrita: true },
+    { celdas: ["Expediente", proceso.nomenclature] },
+    { celdas: ["Entidad", proceso.entity ?? ""] },
+    { celdas: ["Tipo de procedimiento", str(a9, "tipo_procedimiento") || (proceso.procedure_type ?? "")] },
+    { celdas: ["Elaborado por", elaboradoPor] },
+    { celdas: ["Fecha de generación", hoy()] },
+    { celdas: [""] },
+    { celdas: ["Requisito", "Cumple", "Detalle"], negrita: true },
+    { celdas: ["Uso de bases estándar vigentes", siNo(a9, "usa_bases_estandar"), str(a9, "version_bases_estandar")] },
+    { celdas: ["Requerimiento incluido según estructura del Capítulo III", siNo(a9, "contiene_requerimiento"), ""] },
+    { celdas: ["Documentos para presentación de ofertas definidos", siNo(a9, "contiene_documentos_oferta"), ""] },
+    {
+      celdas: ["Condiciones para la ejecución contractual establecidas", siNo(a9, "contiene_condiciones_contractuales"), ""],
+    },
+    { celdas: ["Factores de evaluación definidos en bases", siNo(a9, "factores_evaluacion_definidos"), ""] },
+    { celdas: ["Publicación en SEACE/PLADICOP", siNo(a9, "publicada_seace"), fechaISOaCorta(str(a9, "fecha_publicacion"))] },
+    { celdas: [""] },
+    { celdas: ["Observaciones", str(a9, "observaciones")] },
+  ];
+
+  if (usuarioDescarga) {
+    filas.push({ celdas: [""] }, { celdas: [`Elaborado por: ${usuarioDescarga}`] });
+  }
+
+  return filas;
+}
+
+function generarChecklistBases(proceso: ProcesoExport, hitos: HitosMap, usuarioDescarga?: string | null): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Checklist Bases");
 
-  const a9 = hitos.A9?.data ?? {};
+  // Solo anchos, SIN `header:` — con `header` exceljs escribe su propia fila
+  // de encabezado en la 1, duplicando la que ya trae `filasChecklistBases`
+  // (que además es la misma que usa la vista previa: con `header` aquí, la
+  // previa —que no pasa por `ws.columns`— dejaría de coincidir con el .xlsx).
+  ws.columns = [{ width: 50 }, { width: 15 }, { width: 40 }];
 
-  ws.columns = [
-    { header: "Requisito", width: 50 },
-    { header: "Cumple", width: 15 },
-    { header: "Detalle", width: 40 },
-  ];
-
-  // Quién elabora las bases (A9): oficial de compra / comité / DEC (si hay jurado).
-  const ELABORADO_POR: Record<string, string> = {
-    oficial_compra: "Oficial de compra",
-    comite: "Comité de selección",
-    dec: "DEC (jurado)",
-  };
-  const elaboradoPor = ELABORADO_POR[str(a9, "elaborado_por")] ?? str(a9, "elaborado_por");
-
-  ws.addRow(["CHECKLIST DE BASES - PROCEDIMIENTO DE SELECCIÓN", ""]);
-  ws.addRow(["Expediente", proceso.nomenclature]);
-  ws.addRow(["Entidad", proceso.entity ?? ""]);
-  ws.addRow(["Tipo de procedimiento", str(a9, "tipo_procedimiento") || (proceso.procedure_type ?? "")]);
-  ws.addRow(["Elaborado por", elaboradoPor]);
-  ws.addRow(["Fecha de generación", hoy()]);
-  ws.addRow([""]);
-
-  // Cada casilla contiene_* de A9 es required y se registra: aquí se vuelca su
-  // Sí/No, que antes salía en blanco. "Factores de evaluación" no tiene campo
-  // propio en A9, así que queda para llenar a mano en las bases.
-  const items: [string, string, string][] = [
-    ["Uso de bases estándar vigentes", siNo(a9, "usa_bases_estandar"), str(a9, "version_bases_estandar")],
-    ["Requerimiento incluido según estructura del Capítulo III", siNo(a9, "contiene_requerimiento"), ""],
-    ["Documentos para presentación de ofertas definidos", siNo(a9, "contiene_documentos_oferta"), ""],
-    ["Condiciones para la ejecución contractual establecidas", siNo(a9, "contiene_condiciones_contractuales"), ""],
-    ["Factores de evaluación definidos en bases", "", ""],
-    ["Publicación en SEACE/PLADICOP", siNo(a9, "publicada_seace"), fechaISOaCorta(str(a9, "fecha_publicacion"))],
-  ];
-
-  items.forEach(([r, c, d]) => ws.addRow([r, c, d]));
-
-  ws.addRow([""]);
-  ws.addRow(["Observaciones", str(a9, "observaciones")]);
+  for (const fila of filasChecklistBases(proceso, hitos, usuarioDescarga)) {
+    ws.addRow(fila.celdas);
+  }
 
   return wb;
 }
@@ -2633,9 +2684,9 @@ export async function previewHoja(
 
   // Cada formato se llena con SU MISMA función de exportación, así la previa no
   // puede decir una cosa y el .xlsx otra.
-  if (formato === "estrategia") llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad);
+  if (formato === "estrategia") llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
   else if (formato === "anexo1") llenarAnexo1(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
-  else llenarAnexo2(ws, input.proceso, input.hitos, input.necesidad);
+  else llenarAnexo2(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
 
   // Ida y vuelta por el .xlsx real ANTES de leer combinaciones: tras una cadena
   // de `unMergeCells`/`mergeCells` (como la que repara el rótulo de EJECUCIÓN en
@@ -2729,6 +2780,37 @@ export async function previewHoja(
 }
 
 /**
+ * Vista previa del Checklist de Bases (A9).
+ *
+ * A diferencia de estrategia/anexo1/anexo2 (formatos con plantilla .xlsx,
+ * donde la previa se arma leyendo el archivo relleno), el checklist se
+ * construye en código (`filasChecklistBases`), así que aquí no hace falta
+ * cargar ni diferenciar un archivo base: se reusa la MISMA lista de filas que
+ * escribe `generarChecklistBases`, para que la previa no pueda divergir de lo
+ * que se descarga.
+ */
+export function previewChecklistBases(input: {
+  proceso: ProcesoExport;
+  hitos: HitosMap;
+  responsable?: string | null;
+}): { titulo: string; filas: CeldaPreview[][]; anchos: number[] } {
+  const filasDatos = filasChecklistBases(input.proceso, input.hitos, input.responsable);
+  const filas: CeldaPreview[][] = filasDatos.map((fila) =>
+    fila.celdas.map((texto, c) => ({
+      celda: `${String.fromCharCode(65 + c)}`,
+      colspan: 1,
+      esSeccion: fila.esSeccion ?? false,
+      marca: false,
+      negrita: fila.negrita ?? false,
+      relleno: true,
+      rowspan: 1,
+      texto,
+    })),
+  );
+  return { anchos: [50, 15, 40], filas, titulo: "Checklist de Bases" };
+}
+
+/**
  * Vista previa del Formato de Estrategia (A4).
  *
  * Igual que la del Anexo N° 1: sale de `llenarEstrategia`, el mismo código que
@@ -2739,6 +2821,7 @@ export async function previewEstrategia(input: {
   proceso: ProcesoExport;
   hitos: HitosMap;
   necesidad?: NecesidadExport | null;
+  responsable?: string | null;
 }): Promise<{
   marcas: { celda: string; etiqueta: string }[];
   sustentos: { titulo: string; texto: string }[];
@@ -2748,7 +2831,7 @@ export async function previewEstrategia(input: {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load((await readFile(ruta)) as unknown as ArrayBuffer);
   const ws = wb.worksheets[0];
-  llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad);
+  llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
 
   const leer = (addr: string) => leerTexto(ws, addr);
 
@@ -2854,7 +2937,7 @@ export async function generarExcelF1(
     return { buffer: new Uint8Array(out as ArrayBuffer), filename: `Anexo-3-Segmentacion-${safeNom}.xlsx` };
   }
   if (formato === "bases_checklist") {
-    const wb = generarChecklistBases(input.proceso, input.hitos);
+    const wb = generarChecklistBases(input.proceso, input.hitos, input.responsable);
     const out = await wb.xlsx.writeBuffer();
     const safeNom = input.proceso.nomenclature.replace(/[^\w\-]+/g, "_").slice(0, 40);
     return { buffer: new Uint8Array(out as ArrayBuffer), filename: `Checklist-Bases-${safeNom}.xlsx` };
@@ -2873,9 +2956,9 @@ export async function generarExcelF1(
     throw new Error(`La plantilla ${meta.archivo} no tiene la hoja ${meta.hoja}.`);
   }
 
-  if (formato === "estrategia") llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad);
+  if (formato === "estrategia") llenarEstrategia(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
   else if (formato === "anexo1") llenarAnexo1(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
-  else llenarAnexo2(ws, input.proceso, input.hitos, input.necesidad);
+  else llenarAnexo2(ws, input.proceso, input.hitos, input.necesidad, input.responsable);
 
   const out = await wb.xlsx.writeBuffer();
   const safeNom = input.proceso.nomenclature.replace(/[^\w\-]+/g, "_").slice(0, 40);
