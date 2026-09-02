@@ -187,7 +187,15 @@ const EXPORT_FORMATO: Record<string, FormatoExport[]> = {
     { path: "fase1/informe-aprobacion", label: "Informe de solicitud de aprobación", word: true, previa: "informe_aprobacion" },
     { path: "fase1/export?formato=anexo2", label: "Anexo N° 2 (Aprobación)", previa: "anexo2" },
   ],
-  A9: [{ path: "fase1/export?formato=bases_checklist", label: "Checklist de Bases", previa: "bases_checklist" }],
+  A9: [
+    { path: "fase1/export?formato=bases_checklist", label: "Checklist de Bases", previa: "bases_checklist" },
+    // Sin `previa` por ahora: es un documento largo (Sección General + Sección
+    // Específica) y todavía no tiene un modal de vista previa propio — ver
+    // Task 4 del plan docs/superpowers/plans/2026-09-01-a9-elaboracion-bases.md.
+    // 404 (con mensaje) si el tipo de procedimiento del expediente todavía no
+    // tiene plantilla de bases cargada en lib/bases-plantillas.ts.
+    { path: "fase1/bases-docx", label: "Elaborar Bases (Word)", word: true },
+  ],
   A10: [{ path: "fase1/anuncio-docx", label: "Anuncio de Contratación Futura", word: true }],
 
   // ── FASE 2 · Selección ────────────────────────────────────────────────────
