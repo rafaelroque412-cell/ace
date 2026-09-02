@@ -2995,6 +2995,24 @@ export const VARIANTES_AMBIGUAS: Record<string, string[]> = {
     "Concurso Público abreviado para consultoría de obra",
     "Concurso Público abreviado para servicios de mantenimiento vial",
   ],
+
+  // "Concurso Público con precalificación" — confirmado en
+  // lib/procesos-seleccion.ts: su `pdfBasesEstandar` es literalmente
+  // BASES_CONSULTORIA_VIAL, la MISMA constante (mismos 3 archivos PDF) que
+  // usa "Concurso Público para consultorías y servicios de mantenimiento
+  // vial" de arriba. El OECE no publicó una bases estándar propia para la
+  // variante "con precalificación": reutiliza el mismo documento que su
+  // contraparte "sm" (mismo patrón ya establecido para "Licitación Pública
+  // de obras" ↔ "... con precalificación" y "Licitación Pública para
+  // bienes" ↔ "... especializados", que comparten BASES_OBRAS/BASES_BIENES
+  // respectivamente). Por eso este grupo NO necesitó transcribir un PDF
+  // nuevo: reutiliza las tres plantillas YA registradas arriba, sin
+  // duplicar contenido.
+  "Concurso Público con precalificación": [
+    "Concurso Público para consultoría en general",
+    "Concurso Público para consultoría de obra",
+    "Concurso Público para servicio de mantenimiento vial",
+  ],
 };
 
 export function esProcesoAmbiguo(proceso: string): boolean {

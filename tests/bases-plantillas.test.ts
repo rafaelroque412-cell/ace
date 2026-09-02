@@ -759,7 +759,7 @@ describe("resolverPlantillaAmbigua", () => {
     expect(r).toEqual({ ok: false, motivo: "sin_plantilla" });
   });
 
-  it("esProcesoAmbiguo identifica el único procedimiento ambiguo conocido hoy", () => {
+  it("esProcesoAmbiguo identifica este grupo como ambiguo y un procedimiento con plantilla directa como no ambiguo", () => {
     expect(esProcesoAmbiguo(AMBIGUO)).toBe(true);
     expect(esProcesoAmbiguo("Licitación Pública para bienes")).toBe(false);
   });
@@ -846,5 +846,36 @@ describe("resolverPlantillaAmbigua", () => {
       "Concurso Público abreviado para consultoría de obra",
       "Concurso Público abreviado para servicios de mantenimiento vial",
     ]);
+  });
+
+  it("«Concurso Público con precalificación» reutiliza las mismas tres plantillas del grupo sin abreviar", () => {
+    // Confirmado en lib/procesos-seleccion.ts: su pdfBasesEstandar es
+    // literalmente BASES_CONSULTORIA_VIAL, la MISMA constante que usa
+    // "Concurso Público para consultorías y servicios de mantenimiento
+    // vial" — el OECE no publicó una bases estándar propia para la variante
+    // "con precalificación", así que no hizo falta transcribir un PDF nuevo.
+    const PRECALIFICACION = "Concurso Público con precalificación";
+    expect(esProcesoAmbiguo(PRECALIFICACION)).toBe(true);
+    expect(VARIANTES_AMBIGUAS[PRECALIFICACION]).toEqual([
+      "Concurso Público para consultoría en general",
+      "Concurso Público para consultoría de obra",
+      "Concurso Público para servicio de mantenimiento vial",
+    ]);
+    // Sin variante explícita, con 3 variantes registradas pide elección.
+    const r = resolverPlantillaAmbigua(PRECALIFICACION);
+    expect(r).toEqual({ ok: false, motivo: "ambiguo", variantes: VARIANTES_AMBIGUAS[PRECALIFICACION] });
+  });
+
+  it("«Concurso Público con precalificación» con variante explícita resuelve a la MISMA plantilla que su contraparte sin precalificación", () => {
+    const PRECALIFICACION = "Concurso Público con precalificación";
+    const viaPrecalificacion = resolverPlantillaAmbigua(PRECALIFICACION, "Concurso Público para consultoría de obra");
+    const viaSm = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría de obra");
+    expect(viaPrecalificacion.ok).toBe(true);
+    expect(viaSm.ok).toBe(true);
+    if (viaPrecalificacion.ok && viaSm.ok) {
+      // Misma plantilla (mismo objeto, mismo PDF): no hay bases estándar
+      // distinta para la variante "con precalificación".
+      expect(viaPrecalificacion.plantilla).toBe(viaSm.plantilla);
+    }
   });
 });
