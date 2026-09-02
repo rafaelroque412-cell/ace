@@ -168,6 +168,29 @@ describe("PLANTILLAS_BASES · Licitación Pública de obras con precalificación
   });
 });
 
+describe("PLANTILLAS_BASES · Licitación Pública de obras con negociación", () => {
+  const conNegociacion = PLANTILLAS_BASES["Licitación Pública de obras con negociación"];
+  const obras = PLANTILLAS_BASES["Licitación Pública de obras"];
+
+  it("existe y no está vacía", () => {
+    expect(conNegociacion).toBeDefined();
+    expect(conNegociacion.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("reutiliza la MISMA Sección General y los mismos campos que obras sin negociación: mismo pdfBasesEstandar (BASES_OBRAS)", () => {
+    // Confirmado en lib/procesos-seleccion.ts: ambos catálogos apuntan al
+    // mismo PDF — el OECE no publicó una bases estándar propia para la
+    // variante "con negociación". Encontrado en la auditoría de cobertura
+    // (todo `pdfBasesEstandar` del catálogo debe resolver a una plantilla).
+    expect(conNegociacion.seccionGeneral).toBe(obras.seccionGeneral);
+    expect(conNegociacion.seccionEspecifica).toBe(obras.seccionEspecifica);
+  });
+
+  it("el proceso declarado es el propio, no el de obras sin negociación", () => {
+    expect(conNegociacion.proceso).toBe("Licitación Pública de obras con negociación");
+  });
+});
+
 describe("PLANTILLAS_BASES · Concurso Público de servicios", () => {
   const plantilla = PLANTILLAS_BASES["Concurso Público de servicios"];
 

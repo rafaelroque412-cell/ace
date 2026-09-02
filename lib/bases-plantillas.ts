@@ -2587,6 +2587,22 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: CAMPOS_OBRAS_SM,
   },
 
+  // "Licitación Pública de obras con negociación" — mismo `pdfBasesEstandar`
+  // que "Licitación Pública de obras" (BASES_OBRAS, ver
+  // lib/procesos-seleccion.ts): el OECE no publicó una bases estándar propia
+  // para esta variante diferenciada (obras bajo entrega integrada de
+  // proyecto o alianza, gestión del diseño y construcción al riesgo o de
+  // agencia — Art. 93). Mismo patrón de alias directo que
+  // "... con precalificación" arriba: un solo PDF, no es ambiguo. Encontrado
+  // en la auditoría final de cobertura (tests/_auditoria-cobertura.test.ts,
+  // no incluido en el repo): era el único `pdfBasesEstandar` del catálogo sin
+  // su plantilla registrada.
+  "Licitación Pública de obras con negociación": {
+    proceso: "Licitación Pública de obras con negociación",
+    seccionGeneral: SECCION_GENERAL_OBRAS,
+    seccionEspecifica: CAMPOS_OBRAS_SM,
+  },
+
   // "Concurso Público de servicios" — mapeo COMPLETO (mismo alcance que el
   // Task 1+2 de bienes): confirmado leyendo el PDF oficial
   // (7614342-8-bases-estandar-concurso-publico-de-servicios.pdf) que su
