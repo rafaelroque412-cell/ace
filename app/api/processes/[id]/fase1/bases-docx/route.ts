@@ -21,6 +21,27 @@ const SIN_PLANTILLA = "Todavía no hay plantilla de bases para este tipo de proc
 const SIN_TIPO_DEFINIDO =
   "Este expediente todavía no tiene definido el tipo de procedimiento de selección. Complétalo en la Estrategia de contratación (A4) antes de elaborar las Bases.";
 
+// Busca el año fiscal por cualquiera de los dos extremos del vínculo
+// expediente↔necesidad (igual que lib/segmentacion-informe-datos.ts y otros
+// exportables de Fase 1: hay filas con el vínculo cojo, solo un lado apunta
+// al otro). `procurement_processes` no tiene columna `year` propia — no es
+// una de las tablas migradas a año fiscal — así que este es el único origen
+// real del dato.
+async function buscarAnioFiscal(token: string, procesoId: string, necesidadId: string | null): Promise<number | null> {
+  if (necesidadId) {
+    const [porId] = await supabaseUserRest<Array<{ anio_fiscal: number | null }>>(
+      token,
+      `necesidades?id=eq.${necesidadId}&select=anio_fiscal`,
+    ).catch(() => []);
+    if (porId) return porId.anio_fiscal ?? null;
+  }
+  const [porProceso] = await supabaseUserRest<Array<{ anio_fiscal: number | null }>>(
+    token,
+    `necesidades?process_id=eq.${procesoId}&select=anio_fiscal&limit=1`,
+  ).catch(() => []);
+  return porProceso?.anio_fiscal ?? null;
+}
+
 // GET /api/processes/{id}/fase1/bases-docx?variante=<...> → elabora las
 // Bases del procedimiento de selección (A9) en Word, a partir de la
 // plantilla OECE del tipo de procedimiento del expediente
@@ -47,8 +68,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   try {
     const [proceso] = await supabaseUserRest<
-      Array<{ nomenclature: string; procedure_type: string | null; hitos: HitosMap | null }>
-    >(auth.user.accessToken, `procurement_processes?id=eq.${id}&select=nomenclature,procedure_type,hitos`);
+      Array<{ nomenclature: string; procedure_type: string | null; hitos: HitosMap | null; necesidad_id: string | null }>
+    >(auth.user.accessToken, `procurement_processes?id=eq.${id}&select=nomenclature,procedure_type,hitos,necesidad_id`);
     if (!proceso) return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
 
     // El tipo ESPECÍFICO (el catálogo de los Arts. 93-95, el mismo de
@@ -104,10 +125,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       "entity_settings?id=eq.default&select=name,ruc&limit=1",
     ).catch(() => []);
 
-    const valores = resolverBases(plantilla.proceso, proceso.hitos ?? {}, {
-      nombre: entidad?.name ?? "",
-      ruc: entidad?.ruc ?? "",
-    });
+    const anioFiscal = await buscarAnioFiscal(auth.user.accessToken, id, proceso.necesidad_id);
+
+    const valores = resolverBases(
+      plantilla.proceso,
+      proceso.hitos ?? {},
+      { nombre: entidad?.name ?? "", ruc: entidad?.ruc ?? "" },
+      anioFiscal,
+    );
     if (!valores) {
       // No debería ocurrir: `resolverPlantillaAmbigua` ya devolvió `ok: true`
       // con esta misma `plantilla.proceso` arriba. Defensivo, no silencioso.

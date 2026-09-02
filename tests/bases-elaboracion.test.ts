@@ -43,3 +43,25 @@ describe("resolverBases · factores_items (array real, no texto)", () => {
     expect(finalidad.filas).toBeUndefined();
   });
 });
+
+describe("resolverBases · cap1.anioFiscal (de la necesidad de origen, no de un hito)", () => {
+  it("con año fiscal, lo resuelve como texto", () => {
+    const valores = resolverBases("Licitación Pública para bienes", {} as never, entidad, 2026);
+    const anioFiscal = valores!.find((v) => v.ruta === "cap1.anioFiscal")!;
+    expect(anioFiscal.resuelto).toBe(true);
+    expect(anioFiscal.valor).toBe("2026");
+  });
+
+  it("sin año fiscal (expediente sin necesidad enlazada), queda sin resolver", () => {
+    const valores = resolverBases("Licitación Pública para bienes", {} as never, entidad, null);
+    const anioFiscal = valores!.find((v) => v.ruta === "cap1.anioFiscal")!;
+    expect(anioFiscal.resuelto).toBe(false);
+    expect(anioFiscal.valor).toBe("");
+  });
+
+  it("sin pasar el parámetro (llamador que no lo necesita), también queda sin resolver", () => {
+    const valores = resolverBases("Licitación Pública para bienes", {} as never, entidad);
+    const anioFiscal = valores!.find((v) => v.ruta === "cap1.anioFiscal")!;
+    expect(anioFiscal.resuelto).toBe(false);
+  });
+});

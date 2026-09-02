@@ -126,7 +126,7 @@ describe("PLANTILLAS_BASES · Licitación Pública de obras", () => {
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
   });
 
   it("la finalidad pública y el CUI salen de A3/A4, confirmados contra el PDF de obras", () => {
@@ -245,7 +245,7 @@ describe("PLANTILLAS_BASES · Concurso Público de servicios", () => {
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
     expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
@@ -354,7 +354,7 @@ describe("PLANTILLAS_BASES · Concurso Público para consultoría de obra", () =
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.cui"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "cui" });
     expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
@@ -675,7 +675,7 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado de servicios", () => {
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
     expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
@@ -743,7 +743,7 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado para consultoría en g
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
     expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
@@ -849,7 +849,7 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado para servicios de mant
     const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
     expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
     expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
-    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "necesidad" });
     expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
     expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
     expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });

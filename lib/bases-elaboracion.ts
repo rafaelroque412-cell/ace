@@ -43,6 +43,12 @@ export function resolverBases(
   proceso: string,
   hitos: HitosMap,
   entidad: { nombre: string; ruc: string },
+  // Año fiscal de la necesidad de origen (necesidades.anio_fiscal). `null`
+  // cuando el expediente no tiene necesidad enlazada, o esta no lo tiene
+  // registrado — el campo queda sin resolver, igual que cualquier otro dato
+  // ausente. Parámetro opcional (no todos los llamadores lo necesitan, p. ej.
+  // los tests que no ejercitan cap1.anioFiscal).
+  anioFiscal: number | null = null,
 ): ValorBases[] | null {
   const plantilla = plantillaDeProceso(proceso);
   if (!plantilla) return null;
@@ -50,6 +56,13 @@ export function resolverBases(
   return plantilla.seccionEspecifica.map((campo): ValorBases => {
     if (campo.origen === "libre") {
       return { label: campo.label, resuelto: false, ruta: campo.ruta, valor: "" };
+    }
+    if (campo.origen === "necesidad") {
+      // Hoy, solo cap1.anioFiscal. No vive en ningún hito ni en entity_settings,
+      // sino en la necesidad de origen — el llamador la trae y la pasa aquí ya
+      // resuelta (ver la ruta de exportación).
+      const valor = anioFiscal !== null ? String(anioFiscal) : "";
+      return { label: campo.label, resuelto: valor !== "", ruta: campo.ruta, valor };
     }
     if (campo.origen === "entidad") {
       // Nombre/RUC de la entidad contratante: no viven en ningún hito, sino en

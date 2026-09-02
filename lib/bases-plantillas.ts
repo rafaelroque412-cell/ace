@@ -36,10 +36,13 @@ export type CampoBases = {
    * "literal": se resuelve de `hitos[hito].data[campoHito]` sin tocarlo.
    * "entidad": se resuelve de un dato de la entidad contratante (entity_settings),
    *   que no vive en ningún hito de la fase de contratación.
-   * "libre": no hay dato capturado en A1-A9 ni en la entidad; lo completa
-   *   quien elabora las bases.
+   * "necesidad": se resuelve de un dato de la necesidad de origen
+   *   (necesidades.anio_fiscal, vía procurement_processes.necesidad_id) —
+   *   tampoco vive en ningún hito ni en entity_settings.
+   * "libre": no hay dato capturado en A1-A9, ni en la entidad, ni en la
+   *   necesidad; lo completa quien elabora las bases.
    */
-  origen: "literal" | "entidad" | "libre";
+  origen: "literal" | "entidad" | "necesidad" | "libre";
   /** Código del hito de origen (A1..A9), solo si origen === "literal". */
   hito?: string;
   /** Clave dentro de hitos[hito].data, solo si origen === "literal". */
@@ -2465,10 +2468,12 @@ const CAMPOS_BIENES: CampoBases[] = [
   // (ver lib/settings-catalog.ts).
   { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
   { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-  // El año fiscal no tiene campo propio en A1 (no existe "anio_fiscal" en
-  // sus campos); se deja "libre" hasta confirmar en el Task 3 si conviene
-  // derivarlo del año de partición del expediente en vez de inventarlo aquí.
-  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  // El año fiscal no tiene campo propio en A1, ni existe año de partición en
+  // `procurement_processes` (no es una de las tablas migradas a año fiscal:
+  // no tiene columna `year`). Sí vive, obligatorio, en la necesidad de
+  // origen (necesidades.anio_fiscal) — se resuelve desde ahí vía
+  // procurement_processes.necesidad_id (ver la ruta de exportación).
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
   { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
   { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
   // Modalidad de pago y sistema de entrega son los DECIDIDOS por la DEC en
@@ -2532,7 +2537,7 @@ const CAMPOS_BIENES: CampoBases[] = [
 const CAMPOS_OBRAS_SM: CampoBases[] = [
   { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
   { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
   // 3.1 Finalidad pública: idéntica en ambas variantes del Cap. III
   // (diseño y construcción, p. 34; solo construcción, p. 53).
   { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
@@ -2564,7 +2569,7 @@ const CAMPOS_OBRAS_SM: CampoBases[] = [
 const CAMPOS_CONSULTORIA_OBRA: CampoBases[] = [
   { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
   { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+  { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
   // 3.1 Finalidad pública: idéntica en su literal a la de bienes/obras.
   { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
   // 3.2 pide "Código Único de Inversión (CUI) o código idea, de
@@ -2680,7 +2685,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2715,7 +2720,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2781,7 +2786,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2819,7 +2824,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2850,7 +2855,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2884,7 +2889,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.requisitosCalificacion", label: "Requisitos de calificación", origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" },
@@ -2907,7 +2912,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2957,7 +2962,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -2988,7 +2993,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
@@ -3041,7 +3046,7 @@ export const PLANTILLAS_BASES: Record<string, PlantillaBases> = {
     seccionEspecifica: [
       { ruta: "cap1.entidad.nombre", label: "Nombre de la entidad", origen: "entidad" },
       { ruta: "cap1.entidad.ruc", label: "RUC de la entidad", origen: "entidad" },
-      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "libre" },
+      { ruta: "cap1.anioFiscal", label: "Año fiscal", origen: "necesidad" },
       { ruta: "cap3.finalidadPublica", label: "Finalidad pública de la contratación", origen: "literal", hito: "A3", campoHito: "finalidad_publica" },
       { ruta: "cap3.descripcionRequerimiento", label: "Descripción general del requerimiento", origen: "literal", hito: "A3", campoHito: "descripcion" },
       { ruta: "cap3.modalidadPago", label: "Modalidad de pago", origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" },
