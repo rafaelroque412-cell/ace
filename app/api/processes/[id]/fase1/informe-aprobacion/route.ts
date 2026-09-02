@@ -31,7 +31,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       tipo: "INFORME",
     });
 
-    const armado = await armarInformeAprobacion(auth.user, id);
+    const armado = await armarInformeAprobacion(
+      auth.user,
+      id,
+      [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
+    );
     if ("error" in armado) {
       return NextResponse.json({ error: armado.error }, { status: armado.status });
     }

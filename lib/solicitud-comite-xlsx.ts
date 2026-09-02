@@ -54,6 +54,8 @@ export type SolicitudComiteInput = {
   miembrosAreaUsuaria: MiembroComite[];
   /** Sustento del perfil del evaluador (A4 · var_e_perfil_evaluador). Va a Observaciones. */
   sustentoPerfil?: string;
+  /** Nombre completo del usuario en sesión que generó la solicitud. */
+  elaboradoPor?: string | null;
 };
 
 const MESES = [
@@ -288,6 +290,13 @@ function llenar(ws: ExcelJS.Worksheet, input: SolicitudComiteInput) {
     cel.alignment = { horizontal: "left", vertical: "top", wrapText: true };
     cel.font = { name: "Arial", size: 9 };
     ws.getRow(35 + FILAS_CABECERA).height = 60;
+  }
+
+  // Trazabilidad de quién generó el documento: fila nueva, la plantilla termina
+  // en la física 58 (firma del área usuaria) y no trae nada más.
+  if (input.elaboradoPor) {
+    ws.getCell("B60").value = `Elaborado por: ${input.elaboradoPor}`;
+    ws.getCell("B60").font = { name: "Arial", size: 10, bold: true };
   }
 
   // Cabecera de memo (filas 1..N insertadas arriba).

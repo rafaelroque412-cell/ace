@@ -55,6 +55,8 @@ export type SolicitudCertInput = {
   rubro: string;
   metaPresupuestal: string;
   cadenaFuncional: string;
+  /** Nombre completo del usuario en sesión que generó la solicitud. */
+  elaboradoPor?: string | null;
 };
 
 const MESES = [
@@ -269,6 +271,13 @@ function llenarSolicitud(ws: ExcelJS.Worksheet, input: SolicitudCertInput) {
   }
   // 12. Línea de firma: solo "DEC".
   set(ws, "C45", "DEC");
+
+  // Trazabilidad de quién generó el documento: fila nueva, la plantilla termina
+  // en la 48 (nota IMPORTANTE) y no trae nada más.
+  if (input.elaboradoPor) {
+    set(ws, "B50", `Elaborado por: ${input.elaboradoPor}`);
+    ws.getCell("B50").font = { name: "Arial", size: 10, bold: true };
+  }
 
   // Nota "IMPORTANTE" al pie: es la BASE LEGAL de la previsión presupuestal (DL
   // 1440, Art. 41.4) y lo que la sustenta ante Presupuesto. Antes se ocultaba

@@ -93,6 +93,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const buffer = await buildAdministrativeDraftDocx({
       draftKind: payload.data.draftKind as Parameters<typeof buildAdministrativeDraftDocx>[0]["draftKind"],
       documents,
+      elaboradoPor: [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
       evaluation,
       process,
       risks: riskResult,

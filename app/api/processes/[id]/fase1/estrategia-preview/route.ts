@@ -71,10 +71,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     // verificación de ficha técnica: sin leerla, esas casillas salían en blanco.
     const necesidad = await buscarNecesidad(auth.user.accessToken, id, proceso.necesidad_id);
 
+    // Quién genera el documento: el usuario en sesión. La previa muestra lo
+    // mismo que saldrá al exportar (mismo criterio que el Anexo N° 1).
+    const responsable = [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email;
+
     // La hoja tal y como se exporta, para revisarla antes de descargar.
     const hoja = await previewHoja("estrategia", {
       hitos: proceso.hitos ?? {},
       necesidad,
+      responsable,
       proceso: {
         amount: proceso.amount,
         entity: proceso.entity,
@@ -88,6 +93,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const preview = await previewEstrategia({
       hitos: proceso.hitos ?? {},
       necesidad,
+      responsable,
       proceso: {
         amount: proceso.amount,
         entity: proceso.entity,

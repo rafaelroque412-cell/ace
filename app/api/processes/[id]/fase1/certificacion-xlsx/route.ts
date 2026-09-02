@@ -36,7 +36,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     });
 
     const fecha = new URL(request.url).searchParams.get("fecha") ?? undefined;
-    const r = await armarInputCertificacion(auth.user.accessToken, id, { fechaSolicitud: fecha });
+    const r = await armarInputCertificacion(auth.user.accessToken, id, {
+      fechaSolicitud: fecha,
+      elaboradoPor: [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
+    });
     if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
 
     const buffer = await buildSolicitudCertificacion(r.input);

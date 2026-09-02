@@ -74,9 +74,14 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const necesidad = await buscarNecesidad(auth.user.accessToken, id, proceso.necesidad_id);
 
+    // Quién genera el documento: el usuario en sesión. La previa muestra lo
+    // mismo que saldrá al exportar (mismo criterio que el Anexo N° 1).
+    const responsable = [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email;
+
     const hoja = await previewHoja("anexo2", {
       hitos: proceso.hitos ?? {},
       necesidad,
+      responsable,
       proceso: {
         amount: proceso.amount,
         entity: proceso.entity,

@@ -73,7 +73,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       hoy: new Date().toISOString().slice(0, 10),
     });
 
-    const buffer = await buildAnuncioFuturoDocx(input);
+    const buffer = await buildAnuncioFuturoDocx({
+      ...input,
+      elaboradoPor: [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
+    });
     const filename = `Anuncio-Contratacion-Futura-${slugify(proceso.nomenclature || "expediente")}.docx`;
 
     const archivable = FORMATOS_ARCHIVABLES["A10|anuncio"];

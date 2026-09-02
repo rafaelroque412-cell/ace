@@ -39,7 +39,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const { id } = await context.params;
   try {
-    const r = await generarEvaluadorDoc(auth.user, id, kind, miembroIndex);
+    const r = await generarEvaluadorDoc(
+      auth.user,
+      id,
+      kind,
+      miembroIndex,
+      [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
+    );
     if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
 
     const parrafos = await leerDocx(r.buffer);

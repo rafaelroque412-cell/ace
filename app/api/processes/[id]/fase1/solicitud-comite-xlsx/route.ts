@@ -19,7 +19,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
   const { id } = await context.params;
   try {
-    const r = await armarInputComite(auth.user.accessToken, id);
+    const r = await armarInputComite(
+      auth.user.accessToken,
+      id,
+      [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
+    );
     if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
 
     const buffer = await buildSolicitudComite(r.input);

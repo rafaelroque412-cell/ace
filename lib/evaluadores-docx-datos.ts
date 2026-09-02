@@ -53,6 +53,8 @@ export async function generarEvaluadorDoc(
   // fuera de rango), se generan TODOS —una página por miembro (el grupo)—; la
   // jurada y el consentimiento se firman uno por integrante.
   miembroIndex?: number,
+  /** Nombre completo del usuario en sesión que genera el documento. */
+  elaboradoPor?: string | null,
 ): Promise<ResultadoEvaluadorDoc> {
   const rows = await supabaseUserRest<ProcesoRow[]>(
     usuario.accessToken,
@@ -115,6 +117,7 @@ export async function generarEvaluadorDoc(
       grado: (jefe[0]?.grado_academico ?? "").trim(),
       nombre: (jefe[0]?.nombre_completo ?? "").trim(),
     },
+    elaboradoPor,
   });
 
   return { buffer, nomenclatura: proceso.nomenclature, miembros };

@@ -186,6 +186,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       fuenteFinanciamiento: str(necesidad.fuente_financiamiento),
       clasificadorGasto: str(necesidad.clasificador_gasto),
       montoEstimado: str(necesidad.monto_estimado),
+      elaboradoPor: [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
     });
 
     const filename = `Requerimiento-${slugify(str(necesidad.codigo) || "necesidad")}.docx`;

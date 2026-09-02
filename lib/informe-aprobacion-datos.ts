@@ -236,6 +236,8 @@ export type ResultadoInforme =
 export async function armarInformeAprobacion(
   usuario: { accessToken: string },
   id: string,
+  /** Nombre completo del usuario en sesión que genera el informe. */
+  elaboradoPor?: string | null,
 ): Promise<ResultadoInforme> {
   const filas = await supabaseUserRest<ProcesoRow[]>(
     usuario.accessToken,
@@ -528,6 +530,7 @@ export async function armarInformeAprobacion(
         a8.delegacion === true
           ? { resolucion: str(a8, "resolucion_delegacion"), fecha: fechaLarga(str(a8, "fecha_delegacion")) }
           : null,
+      elaboradoPor,
     },
   };
 }

@@ -79,6 +79,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const buffer = await construirCaratula({
       areaUsuaria: necesidad?.area_usuaria ?? null,
       codigoNecesidad: necesidad?.codigo ?? null,
+      elaboradoPor: [auth.user.nombreCompleto, auth.user.cargo].filter(Boolean).join(" — ") || auth.user.email,
       entidad: proceso.entity,
       estado: processStatusLabel(proceso.status),
       fechaEmision: new Date().toLocaleDateString("es-PE", {

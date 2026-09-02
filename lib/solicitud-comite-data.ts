@@ -41,7 +41,12 @@ export type ResultadoComite = { input: SolicitudComiteInput } | { error: string;
  * Reúne el input de la solicitud de comité, o el motivo por el que no procede
  * (contrato sin A6, o tipo de evaluador que no es comité).
  */
-export async function armarInputComite(accessToken: string, id: string): Promise<ResultadoComite> {
+export async function armarInputComite(
+  accessToken: string,
+  id: string,
+  /** Nombre completo del usuario en sesión que genera la solicitud. */
+  elaboradoPor?: string | null,
+): Promise<ResultadoComite> {
   const rows = await supabaseUserRest<ProcesoRow[]>(
     accessToken,
     `procurement_processes?id=eq.${id}&select=id,nomenclature,entity,amount,hitos,necesidad_id`,
@@ -250,6 +255,7 @@ export async function armarInputComite(accessToken: string, id: string): Promise
       miembrosDec,
       miembrosAreaUsuaria,
       sustentoPerfil: str(a4, "var_e_perfil_evaluador") || str(a6, "perfil_evaluador"),
+      elaboradoPor,
     },
   };
 }

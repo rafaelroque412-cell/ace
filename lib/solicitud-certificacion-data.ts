@@ -80,6 +80,8 @@ export type ArmarResult = { input: SolicitudCertInput } | { error: string; statu
 export type ArmarOpts = {
   /** Fecha de la solicitud (editable en A7); por defecto hoy. Va a C12. */
   fechaSolicitud?: string;
+  /** Nombre completo del usuario en sesión que genera la solicitud. */
+  elaboradoPor?: string | null;
 };
 
 export async function armarInputCertificacion(
@@ -290,6 +292,7 @@ export async function armarInputCertificacion(
     rubro: (nec?.rubro ?? "").trim(),
     metaPresupuestal: (nec?.meta_presupuestal ?? "").trim(),
     cadenaFuncional: (nec?.cadena_funcional ?? "").trim(),
+    elaboradoPor: opts.elaboradoPor,
   };
   return { input };
 }
