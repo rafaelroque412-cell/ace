@@ -584,6 +584,57 @@ describe("PLANTILLAS_BASES · Concurso Público abreviado de servicios", () => {
   });
 });
 
+describe("PLANTILLAS_BASES · Concurso Público abreviado para consultoría en general", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público abreviado para consultoría en general"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("refleja plazos abreviados y un alcance propio (sin el listado de 5 supuestos de bienes/obras/servicios)", () => {
+    expect(plantilla.seccionGeneral).toContain("no menor a tres días hábiles");
+    expect(plantilla.seccionGeneral).toContain("dentro de los cinco días hábiles siguientes");
+    expect(plantilla.seccionGeneral).toContain("rehabilitación y reconstrucción");
+    // El alcance de consultoría en general (abreviada o no) tiene solo tres
+    // supuestos, sin homologados ni insumos de empresas del Estado.
+    expect(plantilla.seccionGeneral).not.toContain("homologados");
+  });
+
+  it("la Sección General refleja el contenido propio de consultoría en general (evaluadores oficial de compra, comité o jurado)", () => {
+    expect(plantilla.seccionGeneral).toContain("consultoría en general");
+    expect(plantilla.seccionGeneral).toContain("oficial de compra, comité o jurado");
+    expect(plantilla.seccionGeneral).not.toContain("Centro de administración de la JPRD");
+  });
+
+  it("tiene el mismo mapeo completo que consultoría en general sin abreviar: la estructura del Capítulo III es idéntica", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.entidad.ruc"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap1.anioFiscal"]).toMatchObject({ origen: "libre" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("NO está registrada bajo el valor real del catálogo, porque ese valor es ambiguo (agrupa 4 PDFs abreviados)", () => {
+    expect(PLANTILLAS_BASES["Concurso Público abreviado"]).toBeUndefined();
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
@@ -642,15 +693,29 @@ describe("resolverPlantillaAmbigua", () => {
     expect(r).toEqual({ ok: false, motivo: "variante_invalida", variantes: VARIANTES_AMBIGUAS[AMBIGUO] });
   });
 
-  it("«Concurso Público abreviado» con una sola variante registrada se resuelve sola, sin pedir elección", () => {
-    // Mismo atajo que el grupo de arriba tenía cuando solo "consultoría en
-    // general" estaba registrada: con 1/4 variantes no tiene sentido pedir
-    // que se elija entre una sola opción.
+  it("«Concurso Público abreviado» con 2/4 variantes registradas pide elección, no adivina", () => {
+    // Con "servicios" y "consultoría en general" ya registradas, el atajo de
+    // una sola opción ya no aplica (mismo criterio que el grupo de arriba).
     const ABREVIADO = "Concurso Público abreviado";
     expect(esProcesoAmbiguo(ABREVIADO)).toBe(true);
-    expect(VARIANTES_AMBIGUAS[ABREVIADO]).toEqual(["Concurso Público abreviado de servicios"]);
+    expect(VARIANTES_AMBIGUAS[ABREVIADO]).toEqual([
+      "Concurso Público abreviado de servicios",
+      "Concurso Público abreviado para consultoría en general",
+    ]);
     const r = resolverPlantillaAmbigua(ABREVIADO);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.plantilla.proceso).toBe("Concurso Público abreviado de servicios");
+    expect(r).toEqual({ ok: false, motivo: "ambiguo", variantes: VARIANTES_AMBIGUAS[ABREVIADO] });
+  });
+
+  it("«Concurso Público abreviado» con variante explícita se resuelve a esa plantilla concreta", () => {
+    const ABREVIADO = "Concurso Público abreviado";
+    const servicios = resolverPlantillaAmbigua(ABREVIADO, "Concurso Público abreviado de servicios");
+    expect(servicios.ok).toBe(true);
+    if (servicios.ok) expect(servicios.plantilla.proceso).toBe("Concurso Público abreviado de servicios");
+
+    const consultoriaGeneral = resolverPlantillaAmbigua(ABREVIADO, "Concurso Público abreviado para consultoría en general");
+    expect(consultoriaGeneral.ok).toBe(true);
+    if (consultoriaGeneral.ok) {
+      expect(consultoriaGeneral.plantilla.proceso).toBe("Concurso Público abreviado para consultoría en general");
+    }
   });
 });
