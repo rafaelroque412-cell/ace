@@ -319,6 +319,45 @@ describe("PLANTILLAS_BASES · Concurso Público para servicio de mantenimiento v
   });
 });
 
+describe("PLANTILLAS_BASES · Subasta Inversa Electrónica", () => {
+  const plantilla = PLANTILLAS_BASES["Subasta Inversa Electrónica"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("refleja diferencias reales: apelación en 5 días hábiles (no 8) y sí tiene JPRD", () => {
+    // Confirmado leyendo el PDF: distinto del resto de bases estándar, que
+    // interponen la apelación en 8 días hábiles siempre.
+    expect(plantilla.seccionGeneral).toContain("cinco días hábiles");
+    expect(plantilla.seccionGeneral).toContain("Centro de administración de la JPRD");
+  });
+
+  it("mapea el Capítulo III salvo lo confirmado ausente: sin sistema de entrega ni factores de evaluación", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    // Ausentes a propósito: la ficha técnica fija el sistema de entrega, y
+    // "el único factor de evaluación es el precio" (no hay nada que elegir).
+    expect(rutas).not.toContain("cap3.sistemaEntrega");
+    expect(rutas).not.toContain("cap4.factoresEvaluacion");
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
