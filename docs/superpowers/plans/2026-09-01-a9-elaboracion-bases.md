@@ -393,20 +393,22 @@ Cada tipo nuevo:
 Confirmado con una auditoría de cobertura (cruzando cada `pdfBasesEstandar` del catálogo de `lib/procesos-seleccion.ts` contra `PLANTILLAS_BASES`/`VARIANTES_AMBIGUAS`): **todo tipo de procedimiento con bases estándar publicada por el OECE ya tiene su plantilla registrada.** Task 3 y Task 4 nunca necesitaron tocarse — son genéricos, tal como se anticipó arriba.
 
 **Transcritos desde su propio PDF** (Sección General leída y verificada a mano contra el documento oficial):
-- Licitación Pública de obras (mapeo parcial — Sección Específica con estructura propia por sistema de entrega, no forzada)
-- Licitación Pública abreviada de obras (parcial, mismo motivo)
+- Licitación Pública de obras (parcial ampliado — 12 campos: agrega subcontratación, modalidad de pago, fórmulas de reajuste, penalidad por mora, otras penalidades, solución de controversias, requisitos de calificación y factores de evaluación, confirmados en el PDF completo; 3.2 estructurado y el sistema de entrega —es la elección de qué variante de Cap. III usar, no un campo de relleno— siguen sin mapear)
+- Licitación Pública abreviada de obras (parcial ampliado, mismo alcance)
 - Concurso Público de servicios (completo)
 - Concurso Público para consultoría en general (completo)
-- Concurso Público para consultoría de obra (parcial, mismo motivo que obras)
+- Concurso Público para consultoría de obra (parcial ampliado — 14 campos: además de lo de obras, aquí el sistema de entrega SÍ es un campo de relleno propio, más lugar de prestación del servicio; 3.2 y el plazo de prestación —tabla, no escalar— siguen sin mapear)
 - Concurso Público para servicio de mantenimiento vial (completo)
-- Subasta Inversa Electrónica (parcial — sin sistema de entrega/factores de evaluación, estructura propia por ficha técnica)
-- Comparación de Precios (parcial, mismo motivo)
-- Procedimiento de Selección No Competitivo (parcial — solo entidad/finalidad/descripción/requisitos)
+- Subasta Inversa Electrónica (parcial — YA en su máximo honesto, releído completo y confirmado: sin sistema de entrega/factores de evaluación, estructura propia por ficha técnica; el Cap. IV dice literalmente "el único factor de evaluación es el precio")
+- Comparación de Precios (parcial — YA en su máximo honesto, mismo motivo)
+- Procedimiento de Selección No Competitivo (parcial — YA en su máximo honesto: el 3.3 "Condiciones de contratación" es literalmente un bloque de remisión a las bases estándar del objeto correspondiente, sin sub-campos, y no tiene capítulo de evaluación — releído completo y confirmado)
 - Licitación Pública abreviada para bienes (completo)
 - Concurso Público abreviado de servicios (completo)
 - Concurso Público abreviado para consultoría en general (completo)
-- Concurso Público abreviado para consultoría de obra (parcial, mismo motivo que obras)
+- Concurso Público abreviado para consultoría de obra (parcial ampliado, mismo alcance que su contraparte sin abreviar)
 - Concurso Público abreviado para servicios de mantenimiento vial (completo)
+
+**Pase de profundización (2026-09-02):** a pedido del usuario, se releyeron los PDF COMPLETOS (no solo hasta la Sección General) de los 5 tipos que habían quedado "parcial" en el pase inicial. En obras y consultoría de obra (+ sus 5 alias/abreviadas) se encontraron campos genuinamente mapeables que el primer pase no había leído — el mapeo pasó de ~5 a 12-14 campos. En subasta inversa, comparación de precios y no competitivo, la relectura CONFIRMÓ que ya estaban en su máximo honesto: no había nada más que mapear sin inventar contenido que el propio PDF no tiene como campo de relleno.
 
 **Registrados sin transcribir un PDF nuevo** (su `pdfBasesEstandar` en el catálogo apunta al MISMO documento que un tipo ya transcrito — el OECE no publicó una bases estándar propia para la variante diferenciada/con precalificación):
 - Licitación Pública para bienes especializados → alias de "Licitación Pública para bienes"
