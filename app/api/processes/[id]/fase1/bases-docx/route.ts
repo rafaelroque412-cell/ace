@@ -51,7 +51,22 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     >(auth.user.accessToken, `procurement_processes?id=eq.${id}&select=nomenclature,procedure_type,hitos`);
     if (!proceso) return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
 
-    if (!proceso.procedure_type) {
+    // El tipo ESPECÍFICO (el catálogo de los Arts. 93-95, el mismo de
+    // lib/procesos-seleccion.ts) vive en `hitos.A4.data.var_a_proceso` — lo
+    // trae el área usuaria desde la ficha y la DEC lo confirma en la
+    // Estrategia. La columna `procurement_processes.procedure_type` NO es lo
+    // mismo: `lib/expediente-columnas.ts` la alimenta desde
+    // `var_a_procedimiento`, el genérico de 7 valores del Art. 54 (p. ej.
+    // "licitacion_publica_abreviada"), que sirve para cronograma/carátula
+    // pero JAMÁS coincide con un `value` de `PROCESOS_SELECCION` — usarla
+    // aquí garantizaba un 404 aunque A4 estuviera completo (reporte real,
+    // expediente 03315fbc). Se prioriza el hito y se cae a la columna solo
+    // por si alguna vez se escribió ahí el valor específico correcto.
+    const datosA4 = (proceso.hitos?.A4?.data ?? {}) as Record<string, unknown>;
+    const varAProceso = typeof datosA4.var_a_proceso === "string" ? datosA4.var_a_proceso.trim() : "";
+    const tipoProcedimiento = varAProceso || proceso.procedure_type || null;
+
+    if (!tipoProcedimiento) {
       // No es lo mismo que "sin_plantilla": aquí el expediente ni siquiera
       // tiene un tipo de procedimiento asignado (A4 sin completar), así que
       // no tiene sentido preguntarle a `resolverPlantillaAmbigua` — 409
@@ -60,7 +75,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json({ error: SIN_TIPO_DEFINIDO }, { status: 409 });
     }
 
-    const resolucion = resolverPlantillaAmbigua(proceso.procedure_type, variante);
+    const resolucion = resolverPlantillaAmbigua(tipoProcedimiento, variante);
 
     if (!resolucion.ok) {
       if (resolucion.motivo === "sin_plantilla") {
