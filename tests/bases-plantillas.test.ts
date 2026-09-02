@@ -274,6 +274,51 @@ describe("PLANTILLAS_BASES · Concurso Público para consultoría de obra", () =
   });
 });
 
+describe("PLANTILLAS_BASES · Concurso Público para servicio de mantenimiento vial", () => {
+  const plantilla = PLANTILLAS_BASES["Concurso Público para servicio de mantenimiento vial"];
+
+  it("existe y no está vacía", () => {
+    expect(plantilla).toBeDefined();
+    expect(plantilla.seccionGeneral.length).toBeGreaterThan(500);
+  });
+
+  it("la Sección General incluye los 4 capítulos confirmados", () => {
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO I");
+    expect(plantilla.seccionGeneral).toContain("ASPECTOS GENERALES");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO II");
+    expect(plantilla.seccionGeneral).toContain("DESARROLLO DEL PROCEDIMIENTO DE SELECCIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO III");
+    expect(plantilla.seccionGeneral).toContain("RECURSO DE APELACIÓN");
+    expect(plantilla.seccionGeneral).toContain("CAPÍTULO IV");
+    expect(plantilla.seccionGeneral).toContain("DEL CONTRATO");
+  });
+
+  it("la Sección General refleja contenido propio: fideicomiso Y excepción de 50 UIT, a diferencia de consultoría de obra", () => {
+    // Mantenimiento vial SÍ tiene ambas (como bienes/servicios); consultoría
+    // de obra no tiene ninguna de las dos — confirma que no se confundió la
+    // transcripción entre las tres variantes del mismo grupo.
+    expect(plantilla.seccionGeneral).toContain("mantenimiento vial");
+    expect(plantilla.seccionGeneral).toContain("fideicomiso");
+    expect(plantilla.seccionGeneral).toContain("Excepciones:");
+  });
+
+  it("tiene el mismo mapeo completo que bienes/servicios/consultoría en general: modalidad de pago cita el artículo 130", () => {
+    const porRuta = Object.fromEntries(plantilla.seccionEspecifica.map((c) => [c.ruta, c]));
+    expect(porRuta["cap1.entidad.nombre"]).toMatchObject({ origen: "entidad" });
+    expect(porRuta["cap3.finalidadPublica"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "finalidad_publica" });
+    expect(porRuta["cap3.descripcionRequerimiento"]).toMatchObject({ origen: "literal", hito: "A3", campoHito: "descripcion" });
+    expect(porRuta["cap3.modalidadPago"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_h_modalidad_pago" });
+    expect(porRuta["cap3.sistemaEntrega"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_i_sistema_entrega" });
+    expect(porRuta["cap3.requisitosCalificacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "var_f_requisitos_calificacion" });
+    expect(porRuta["cap4.factoresEvaluacion"]).toMatchObject({ origen: "literal", hito: "A4", campoHito: "factores_items" });
+  });
+
+  it("el Capítulo V (proforma del contrato) no se mapea aquí", () => {
+    const rutas = plantilla.seccionEspecifica.map((c) => c.ruta);
+    expect(rutas.some((r) => r.startsWith("cap5."))).toBe(false);
+  });
+});
+
 describe("resolverPlantillaAmbigua", () => {
   const AMBIGUO = "Concurso Público para consultorías y servicios de mantenimiento vial";
 
@@ -311,6 +356,18 @@ describe("resolverPlantillaAmbigua", () => {
     const obra = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para consultoría de obra");
     expect(obra.ok).toBe(true);
     if (obra.ok) expect(obra.plantilla.proceso).toBe("Concurso Público para consultoría de obra");
+
+    const vial = resolverPlantillaAmbigua(AMBIGUO, "Concurso Público para servicio de mantenimiento vial");
+    expect(vial.ok).toBe(true);
+    if (vial.ok) expect(vial.plantilla.proceso).toBe("Concurso Público para servicio de mantenimiento vial");
+  });
+
+  it("las tres variantes del grupo están registradas: la brecha de disambiguación queda completa", () => {
+    expect(VARIANTES_AMBIGUAS[AMBIGUO]).toEqual([
+      "Concurso Público para consultoría en general",
+      "Concurso Público para consultoría de obra",
+      "Concurso Público para servicio de mantenimiento vial",
+    ]);
   });
 
   it("una variante que no pertenece a ese procedimiento ambiguo: variante_invalida", () => {
