@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { resolverBases } from "@/lib/bases-elaboracion";
 import { generarBasesDocx } from "@/lib/bases-docx";
+import { leerPlantillaDocx } from "@/lib/bases-docx-plantilla";
+import { construirSustituciones, rellenarBasesDocx } from "@/lib/bases-docx-relleno";
 import { resolverPlantillaAmbigua } from "@/lib/bases-plantillas";
 import type { HitosMap } from "@/lib/procurement-fases";
 import { slugify } from "@/lib/slugify";
@@ -139,7 +141,24 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json({ error: SIN_PLANTILLA }, { status: 404 });
     }
 
-    const buffer = await generarBasesDocx(plantilla.proceso, valores, plantilla.seccionGeneral);
+    // Vía preferida: rellenar el .docx OFICIAL del OECE (respeta páginas,
+    // tipografía, Proforma y Anexos). Solo se sustituyen los marcadores "[...]"
+    // que tienen dato en A1-A8; el resto queda intacto. Si no hay .docx para
+    // este tipo, se cae al generador estructural (borrador recompuesto).
+    const plantillaDocx = await leerPlantillaDocx(plantilla.proceso);
+    const buffer = plantillaDocx
+      ? (
+          await rellenarBasesDocx(
+            plantillaDocx,
+            construirSustituciones({
+              hitos: proceso.hitos ?? {},
+              entidad: entidad?.name ?? "",
+              anioFiscal: anioFiscal !== null ? String(anioFiscal) : "",
+              nomenclaturaProceso: proceso.nomenclature ?? "",
+            }),
+          )
+        ).buffer
+      : await generarBasesDocx(plantilla.proceso, valores, plantilla.seccionGeneral);
     const filename = `Bases-${slugify(proceso.nomenclature || "expediente")}.docx`;
     return new Response(new Uint8Array(buffer), {
       headers: {
