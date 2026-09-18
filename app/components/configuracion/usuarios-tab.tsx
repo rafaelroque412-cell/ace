@@ -92,7 +92,7 @@ type Props = {
   }) => Promise<void>;
   onSeedRoleUsers: () => void;
   onSaveUser: (user: UserSetting) => Promise<void>;
-  onResetPassword: (user: UserSetting) => Promise<void>;
+  onResetPassword: (user: UserSetting, password?: string) => Promise<void>;
   onDeleteUser: (user: UserSetting) => Promise<void>;
   onToggleActivo: (user: UserSetting) => Promise<void>;
   onReloadOficinas?: () => void | Promise<void>;
@@ -150,6 +150,9 @@ export function UsuariosTab({
   const [newUserGrado, setNewUserGrado] = useState("");
   const [pendingDelete, setPendingDelete] = useState<UserSetting | null>(null);
   const [pendingReset, setPendingReset] = useState<UserSetting | null>(null);
+  const [assignPassword, setAssignPassword] = useState("");
+  const [assignPassword2, setAssignPassword2] = useState("");
+  const [verAssignPassword, setVerAssignPassword] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -219,6 +222,25 @@ export function UsuariosTab({
   useEffect(() => {
     setPage(0);
   }, [userSearch, userRoleFilter]);
+
+  // Limpia el campo al cambiar de usuario o cerrar el panel: sin esto, la
+  // contraseña tecleada para uno se quedaba en el formulario del siguiente.
+  useEffect(() => {
+    setAssignPassword("");
+    setAssignPassword2("");
+    setVerAssignPassword(false);
+  }, [expandedId]);
+
+  const assignPasswordOk =
+    assignPassword.length >= PASSWORD_MINIMO && assignPassword === assignPassword2;
+
+  async function handleAssignPassword() {
+    if (!editingUser || !assignPasswordOk) return;
+    await onResetPassword(editingUser, assignPassword);
+    setAssignPassword("");
+    setAssignPassword2("");
+    setVerAssignPassword(false);
+  }
 
   function roleLabel(roleValue: string) {
     return roles.find((role) => role.value === roleValue)?.label ?? roleValue;
@@ -1061,6 +1083,72 @@ export function UsuariosTab({
                 </label>
               </label>
             </div>
+            <div className="mt-4 grid gap-2 rounded-lg border border-line bg-white p-3 pt-2.5">
+              <span className="text-sm font-semibold text-slate-700">Asignar contraseña específica</span>
+              <p className="m-0 text-xs leading-snug text-muted">
+                Para cuando la temporal aleatoria no sirve — p. ej. hay que dictarla por
+                teléfono. La contraseña actual del usuario deja de funcionar de inmediato.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  autoComplete="new-password"
+                  className={inputBase}
+                  minLength={PASSWORD_MINIMO}
+                  onChange={(event) => setAssignPassword(event.target.value)}
+                  placeholder={`Mínimo ${PASSWORD_MINIMO} caracteres`}
+                  type={verAssignPassword ? "text" : "password"}
+                  value={assignPassword}
+                />
+                <input
+                  autoComplete="new-password"
+                  className={inputBase}
+                  onChange={(event) => setAssignPassword2(event.target.value)}
+                  placeholder="Repetir contraseña"
+                  type={verAssignPassword ? "text" : "password"}
+                  value={assignPassword2}
+                />
+              </div>
+              {assignPassword && assignPassword.length < PASSWORD_MINIMO ? (
+                <small className="text-xs leading-snug text-warning">
+                  Muy corta: mínimo {PASSWORD_MINIMO} caracteres.
+                </small>
+              ) : null}
+              {assignPassword2 && assignPassword !== assignPassword2 ? (
+                <small className="text-xs leading-snug text-warning">No coinciden.</small>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className={`${btnSecCompact} text-xs`}
+                  onClick={() => setVerAssignPassword((v) => !v)}
+                  type="button"
+                >
+                  {verAssignPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {verAssignPassword ? "Ocultar" : "Ver"}
+                </button>
+                <button
+                  className={`${btnSecCompact} text-xs`}
+                  onClick={() => {
+                    const generada = generarPassword();
+                    setAssignPassword(generada);
+                    setAssignPassword2(generada);
+                    setVerAssignPassword(true);
+                  }}
+                  type="button"
+                >
+                  <KeyRound size={14} /> Generar una
+                </button>
+                <button
+                  className={`${btnSec} ml-auto`}
+                  disabled={savingUserId === editingUser.id || !assignPasswordOk}
+                  onClick={handleAssignPassword}
+                  title={assignPasswordOk ? undefined : `Escribe la misma contraseña dos veces (mínimo ${PASSWORD_MINIMO} caracteres)`}
+                  type="button"
+                >
+                  <KeyRound size={15} />
+                  {savingUserId === editingUser.id ? "Asignando..." : "Asignar contraseña"}
+                </button>
+              </div>
+            </div>
             <div className="mt-4 flex flex-wrap items-center gap-2.5 pt-4 border-t border-line">
               <button
                 className={btnPrimary}
@@ -1076,7 +1164,7 @@ export function UsuariosTab({
                 disabled={savingUserId === editingUser.id}
                 onClick={() => setPendingReset(editingUser)}
                 type="button"
-                title="Genera una contraseña temporal nueva para este usuario"
+                title="Genera una contraseña temporal aleatoria para este usuario"
               >
                 <KeyRound size={15} /> Restablecer contraseña
               </button>

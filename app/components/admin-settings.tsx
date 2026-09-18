@@ -302,17 +302,26 @@ export function AdminSettings({
   }
 
   /**
-   * Restablece la contraseña de un usuario y muestra la temporal en el panel de
+   * Restablece la contraseña de un usuario y muestra la nueva en el panel de
    * credenciales. Es la única vía de recuperación: las cuentas usan correos
    * @ace.local, que no reciben el email de recuperación de Supabase.
+   *
+   * Sin `password`, el servidor genera una temporal (botón "Restablecer
+   * contraseña"). Con `password`, se fija ese valor exacto (botón "Asignar
+   * contraseña") — para cuando la temporal aleatoria no sirve, p. ej. hay que
+   * dictarla por teléfono.
    */
-  async function resetPassword(user: UserSetting) {
+  async function resetPassword(user: UserSetting, password?: string) {
     setSavingUserId(user.id);
     setError(null);
 
     const response = await fetch(
       `/api/configuracion/users/${encodeURIComponent(user.id)}/password`,
-      { method: "POST" },
+      {
+        body: JSON.stringify(password ? { password } : {}),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
     );
     const payload = (await response.json().catch(() => ({}))) as {
       usuario?: string;
