@@ -877,7 +877,7 @@ async function ocrPageImage(
       max_output_tokens: 4000,
       model: pdfOcrModel,
       temperature: 0,
-    });
+    }, { timeout: 45_000, maxRetries: 0 });
     inputTokens += response.usage?.input_tokens ?? 0;
     outputTokens += response.usage?.output_tokens ?? 0;
     lastText = normalizeText(response.output_text ?? "");
@@ -888,8 +888,8 @@ async function ocrPageImage(
   return { text: looksLikeOcrRefusal(lastText) ? "" : lastText, inputTokens, outputTokens };
 }
 
-async function extractPdfTextWithOpenAI(file: File, pageCount: number): Promise<ExtractedPdfText> {
-  const maxPages = getOcrMaxPages();
+async function extractPdfTextWithOpenAI(file: File, pageCount: number, pageLimit?: number): Promise<ExtractedPdfText> {
+  const maxPages = Math.min(getOcrMaxPages(), pageLimit ?? Infinity);
   const buffer = await readFileBytes(file);
   const images = await rasterizePdfPages(buffer, maxPages);
 
@@ -939,7 +939,7 @@ async function extractPdfTextWithOpenAI(file: File, pageCount: number): Promise<
 // capa de texto) y el OCR es el camino normal, no una excepción experimental.
 export async function extractPdfText(
   file: File,
-  options: { forceOcr?: boolean } = {},
+  options: { forceOcr?: boolean; ocrMaxPages?: number } = {},
 ): Promise<ExtractedPdfText> {
   const buffer = await readFileBytes(file);
   const pageTexts: Array<{ pageNumber: number; text: string }> = [];
@@ -989,14 +989,14 @@ export async function extractPdfText(
     );
   }
 
-  return extractPdfTextWithOpenAI(file, pdf.numpages);
+  return extractPdfTextWithOpenAI(file, pdf.numpages, options.ocrMaxPages);
 }
 
 // Extrae solo el texto plano de un PDF (para analisis sin indexar). Reusa el
 // extractor con el fix de buffer y el OCR opcional.
 export async function extractPdfPlainText(
   file: File,
-  options: { forceOcr?: boolean } = {},
+  options: { forceOcr?: boolean; ocrMaxPages?: number } = {},
 ): Promise<{ pageCount: number; text: string }> {
   const extracted = await extractPdfText(file, options);
   return { pageCount: extracted.pageCount, text: extracted.text };
@@ -1007,7 +1007,7 @@ export async function extractPdfPlainText(
 // cada apartado. Funciona tanto con texto seleccionable como con OCR.
 export async function extractPdfPagedText(
   file: File,
-  options: { forceOcr?: boolean } = {},
+  options: { forceOcr?: boolean; ocrMaxPages?: number } = {},
 ): Promise<{ pageCount: number; text: string }> {
   const extracted = await extractPdfText(file, options);
   const text =

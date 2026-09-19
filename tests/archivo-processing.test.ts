@@ -19,6 +19,15 @@ beforeEach(() => {
   mocks.remove.mockResolvedValue(undefined);
 });
 describe("autocompletado honesto", () => {
+  it("limita el OCR inicial y no guarda esa lectura abreviada en la caché del índice", async () => {
+    mocks.extract.mockResolvedValue({ text: "contenido ".repeat(40), pages: [{ pageNumber: 1, text: "contenido" }], pageCount: 30, ocrPartial: true, extractionMethod: "openai-ocr" });
+    const result = await extractExpedienteInventory(file);
+    expect(mocks.extract).toHaveBeenCalledWith(file, expect.objectContaining({ ocrMaxPages: 3 }));
+    expect(mocks.rest.mock.calls.some(([path, init]) => path === "expedientes_ocr_cache" && init?.method === "POST")).toBe(false);
+    expect(result.nroFolios).toBe(30);
+    expect(result.ocrPartial).toBe(true);
+    expect(mocks.ai).toHaveBeenCalledWith(expect.any(Object), { timeout: 45_000, maxRetries: 0 });
+  });
   it("propaga el fallo de IA sin perder datos básicos", async () => {
     mocks.ai.mockRejectedValue(new Error("provider unavailable"));
     const result = await extractExpedienteInventory(file);

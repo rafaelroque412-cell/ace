@@ -82,14 +82,14 @@ function toChatParams(params: Record<string, unknown>): Record<string, unknown> 
 }
 
 /** Shim de `responses.create` sobre `chat.completions` para Z.ai. */
-function zaiResponsesCreate(client: OpenAI, params: Record<string, unknown>): unknown {
+function zaiResponsesCreate(client: OpenAI, params: Record<string, unknown>, options?: OpenAI.RequestOptions): unknown {
   const chatParams = toChatParams(params);
   if (params.stream) {
     // Devuelve un async-iterable de eventos con la MISMA forma que Responses:
     // { type: "response.output_text.delta", delta }.
     return (async function* () {
       const stream = (await client.chat.completions.create(
-        chatParams as unknown as OpenAI.Chat.ChatCompletionCreateParamsStreaming,
+        chatParams as unknown as OpenAI.Chat.ChatCompletionCreateParamsStreaming, options,
       )) as AsyncIterable<OpenAI.Chat.ChatCompletionChunk>;
       for await (const chunk of stream) {
         const delta = chunk.choices?.[0]?.delta?.content;
@@ -99,7 +99,7 @@ function zaiResponsesCreate(client: OpenAI, params: Record<string, unknown>): un
     })();
   }
   return client.chat.completions
-    .create(chatParams as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming)
+    .create(chatParams as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, options)
     .then((resp) => ({
       // La forma que consume el proyecto: `.output_text`.
       output_text: resp.choices?.[0]?.message?.content ?? "",
@@ -109,7 +109,7 @@ function zaiResponsesCreate(client: OpenAI, params: Record<string, unknown>): un
 
 /** Envuelve el cliente para que `.responses.create` funcione vía chat.completions. */
 function withChatShim(client: OpenAI): OpenAI {
-  const responsesShim = { create: (params: Record<string, unknown>) => zaiResponsesCreate(client, params) };
+  const responsesShim = { create: (params: Record<string, unknown>, options?: OpenAI.RequestOptions) => zaiResponsesCreate(client, params, options) };
   return new Proxy(client, {
     get(target, prop, receiver) {
       if (prop === "responses") return responsesShim;

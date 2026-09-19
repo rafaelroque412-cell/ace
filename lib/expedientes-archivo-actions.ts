@@ -169,11 +169,20 @@ export async function autoFillFromPdf(
   formData.append("file", file);
   formData.append("title", title);
   if (forceRefresh) formData.append("forceRefresh", "true");
-  await prepareArchivoUpload(formData);
-  const res = await fetch("/api/expedientes-archivo/extract", {
-    method: "POST",
-    body: formData,
-  });
+  let res: Response;
+  try {
+    await prepareArchivoUpload(formData);
+    res = await fetch("/api/expedientes-archivo/extract", {
+      signal: AbortSignal.timeout(240_000),
+      method: "POST",
+      body: formData,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error("La lectura del PDF superó el tiempo de espera. Puedes volver a analizarlo o completar los campos manualmente; los datos ingresados se conservan.");
+    }
+    throw error;
+  }
   if (!res.ok) {
     if (res.status === 422) {
       throw await parseError(res, "El PDF no se pudo procesar con OCR");

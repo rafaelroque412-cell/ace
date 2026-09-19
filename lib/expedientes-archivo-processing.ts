@@ -44,7 +44,7 @@ async function extractPdfTextCached(
   // sueltos). Ese resultado malo, si superaba el umbral de caracteres, quedaba
   // cacheado PARA SIEMPRE y ningún reintento manual lo podía superar. El botón
   // "Volver a analizar" pasa `skipCache: true` para forzar una lectura fresca.
-  options: { forceOcr?: boolean; skipCache?: boolean } = {},
+  options: { forceOcr?: boolean; skipCache?: boolean; ocrMaxPages?: number } = {},
 ): Promise<ExtractedPdfText> {
   const bytes = Buffer.from(new Uint8Array(await file.arrayBuffer()));
   const hash = createHash("sha256").update(bytes).digest("hex");
@@ -72,7 +72,7 @@ async function extractPdfTextCached(
 
   const extracted = await extractPdfText(file, options);
 
-  if (extracted.extractionMethod === "openai-ocr" && extracted.text.length >= minExtractedTextLength) {
+  if (!options.ocrMaxPages && extracted.extractionMethod === "openai-ocr" && extracted.text.length >= minExtractedTextLength) {
     await supabaseRest("expedientes_ocr_cache", {
       body: JSON.stringify({
         extracted,
@@ -182,7 +182,7 @@ ${text.slice(0, analysisTextLimit)}`,
       max_output_tokens: 700,
       model: legalAnswerModel,
       temperature: 0,
-    });
+    }, { timeout: 45_000, maxRetries: 0 });
     usage.inputTokens = response.usage?.input_tokens ?? 0;
     usage.outputTokens = response.usage?.output_tokens ?? 0;
     const parsed = parseJsonObject(response.output_text);
@@ -508,9 +508,9 @@ export async function extractExpedienteInventory(
   let extracted;
   try {
     // forceOcr: ver nota en processExpedienteDocument (expedientes escaneados).
-    // Con cache: el OCR de aquí se reutiliza luego al indexar (no se paga 2 veces),
-    // salvo que el llamador pida saltarla (reintento manual tras un mal resultado).
-    extracted = await extractPdfTextCached(file, { forceOcr: true, skipCache: options.skipCache });
+    // Reutiliza una lectura previa si existe. Para identificar el documento basta
+    // una lectura inicial acotada; no se almacena en la caché usada por el índice.
+    extracted = await extractPdfTextCached(file, { forceOcr: true, skipCache: options.skipCache, ocrMaxPages: 3 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[expedientes] extractPdfText fallo: ${message}`);
