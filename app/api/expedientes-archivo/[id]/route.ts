@@ -1,3 +1,5 @@
+import { PdfReadError } from "@/lib/pdf-read-error";
+import { readArchivoFile } from "@/lib/archivo-upload-server";
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { canAccessArchivoRow, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
@@ -9,7 +11,7 @@ import {
   normalizeContenedorTipo,
   normalizePersonaTipo,
 } from "@/lib/expedientes-archivo";
-import { processExpedienteDocument } from "@/lib/expedientes-archivo-processing";
+import { processExpedienteDocument, reportArchivoProcessingFailure } from "@/lib/expedientes-archivo-processing";
 import { deleteRecords } from "@/lib/pinecone";
 import {
   deleteStorageObjects,
@@ -32,7 +34,7 @@ function safeName(name: string) {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const SELECT =
   "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,oficina_id,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at,expediente_id,numero_folio";
@@ -109,7 +111,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo abrir el expediente" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }
@@ -142,17 +144,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
     }
 
-    await supabaseRest(`expedientes_archivo?id=eq.${id}`, {
-      body: JSON.stringify({ error_message: null, status: "processing" }),
-      method: "PATCH",
-    }).catch(() => undefined);
-
     after(async () => {
       try {
-        const namespace = getExpedientesNamespace();
-        const vectorIds = await getVectorIds(id);
-        await deleteRecords(vectorIds, namespace);
-        await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${id}`, { method: "DELETE" });
 
         const blob = await downloadStorageObject(expediente.storage_bucket, expediente.storage_path);
         const file = new File([blob], expediente.file_name, {
@@ -167,8 +160,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
           entityType: "expediente_archivo",
           module: "expedientes",
         });
-      } catch {
-        // processExpedienteDocument ya persiste el error.
+      } catch (error) {
+        await reportArchivoProcessingFailure(expediente, error);
       }
     });
 
@@ -176,7 +169,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo reindexar el expediente" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }
@@ -218,7 +211,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo eliminar el expediente" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }
@@ -293,7 +286,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo actualizar el expediente" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }
@@ -316,7 +309,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const { id } = await context.params;
 
     const formData = await request.formData();
-    const file = formData.get("file");
+    const file = await readArchivoFile(formData, auth.user.id);
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Debes adjuntar un archivo PDF" }, { status: 400 });
     }
@@ -341,17 +334,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const newPath = `expedientes/${randomUUID()}-${safeName(file.name)}`;
     await uploadPdfToStorage(newPath, file);
 
-    await supabaseRest(`expedientes_archivo?id=eq.${id}`, {
-      body: JSON.stringify({
-        file_name: file.name,
-        file_size: file.size,
-        mime_type: file.type || "application/pdf",
-        storage_path: newPath,
-        status: "processing",
-        error_message: null,
-      }),
-      method: "PATCH",
-    });
+    const replacement = { ...expediente, file_name: file.name, file_size: file.size, mime_type: "application/pdf", storage_path: newPath };
 
     await writeAuditLog({
       action: "expedientes.replaceFile",
@@ -364,23 +347,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     after(async () => {
       try {
-        const namespace = getExpedientesNamespace();
-        const vectorIds = await getVectorIds(id);
-        await deleteRecords(vectorIds, namespace).catch(() => undefined);
-        await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${id}`, { method: "DELETE" });
-        if (oldPath && oldPath !== newPath) {
-          await deleteStorageObjects(storageBucket, [oldPath]).catch(() => undefined);
-        }
-        const [full] = await supabaseRest<ExpedienteArchivo[]>(
-          `expedientes_archivo?id=eq.${id}&select=${SELECT}`,
-        );
         const blob = await downloadStorageObject(storageBucket, newPath);
         const pdfFile = new File([blob], file.name, { type: "application/pdf" });
-        if (full) {
-          await processExpedienteDocument(full, pdfFile);
-        }
-      } catch {
-        // processExpedienteDocument ya persiste el error en el expediente.
+        await processExpedienteDocument(replacement, pdfFile);
+        if (oldPath && oldPath !== newPath) await deleteStorageObjects(storageBucket, [oldPath]).catch((error) => console.error("[archivo] limpieza PDF anterior", error));
+      } catch (error) {
+        await reportArchivoProcessingFailure(expediente, error);
       }
     });
 
@@ -388,7 +360,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo reemplazar el PDF" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }

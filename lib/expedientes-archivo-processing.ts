@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { classifyPdfError } from "./pdf-read-error";
+import { createHash, randomUUID } from "node:crypto";
 import { normalizeEntity } from "./entity-utils";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { estimateCostUsd, roundCostUsd } from "./openai-cost";
@@ -19,7 +20,6 @@ import {
   getExpedientesNamespace,
 } from "./expedientes-archivo";
 
-const chunkInsertBatchSize = 100;
 const minExtractedTextLength = 120;
 const analysisTextLimit = 14000;
 
@@ -140,7 +140,7 @@ function asText(value: unknown): string | null {
 // interesada). Devuelve nulls si falla (los datos del usuario y los extractores
 // deterministas mandan).
 type AnalysisUsage = { model: string; inputTokens: number; outputTokens: number };
-type AnalysisResult = { insights: ExpedienteInsights; usage: AnalysisUsage };
+type AnalysisResult = { insights: ExpedienteInsights; usage: AnalysisUsage; warning?: string };
 
 const emptyInsights: ExpedienteInsights = {
   asunto: null,
@@ -187,9 +187,7 @@ ${text.slice(0, analysisTextLimit)}`,
     usage.outputTokens = response.usage?.output_tokens ?? 0;
     const parsed = parseJsonObject(response.output_text);
     if (Object.keys(parsed).length === 0) {
-      console.warn(
-        `[expedientes] analyzeExpedienteWithAi: respuesta vacia o sin JSON. output_text len=${response.output_text?.length ?? 0}`,
-      );
+      throw new Error("La IA no devolvió JSON válido");
     }
     const personaTipo =
       parsed.personaTipo === "natural" || parsed.personaTipo === "juridica"
@@ -213,6 +211,7 @@ ${text.slice(0, analysisTextLimit)}`,
     console.error(`[expedientes] analyzeExpedienteWithAi fallo: ${message}`);
     return {
       insights: { ...emptyInsights },
+      warning: "La IA no pudo analizar el documento. Se muestran solo los datos básicos detectados; puedes reintentar.",
       usage,
     };
   }
@@ -248,33 +247,15 @@ function buildExpedienteEmbeddingText(input: {
   return `${header.join("\n")}\n\nTexto del expediente:\n${input.content}`;
 }
 
-async function insertChunksInBatches(rows: ExpedienteChunkInsert[]) {
-  const inserted: Array<ExpedienteChunkInsert & { id: string }> = [];
-  for (let index = 0; index < rows.length; index += chunkInsertBatchSize) {
-    const batch = rows.slice(index, index + chunkInsertBatchSize);
-    const result = await supabaseRest<Array<ExpedienteChunkInsert & { id: string }>>(
-      "expedientes_archivo_chunks",
-      {
-        body: JSON.stringify(batch),
-        method: "POST",
-      },
-    );
-    inserted.push(...result);
-  }
-  return inserted;
-}
-
 // Procesa un expediente archivado: extrae texto (OCR vía extractPdfText), detecta
 // número/fecha/asunto, fragmenta por páginas, indexa en el namespace AISLADO de
 // expedientes en Pinecone y persiste chunks + metadata. Estado: processing -> indexed/error.
 export async function processExpedienteDocument(expediente: ExpedienteArchivo, file: File) {
   const namespace = getExpedientesNamespace();
   let insertedVectorIds: string[] = [];
-
-  await supabaseRest(`expedientes_archivo?id=eq.${expediente.id}`, {
-    body: JSON.stringify({ error_message: null, status: "processing" }),
-    method: "PATCH",
-  });
+  let published = false;
+  let publicationAttempted = false;
+  const generation = randomUUID();
 
   try {
     // forceOcr: los expedientes archivados suelen ser escaneados sin capa de texto;
@@ -365,16 +346,17 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
       },
       page_end: chunk.pageEnd,
       page_start: chunk.pageStart,
-      pinecone_vector_id: `expediente::${expediente.id}::${chunk.index}`,
+      pinecone_vector_id: `expediente::${expediente.id}::${generation}::${chunk.index}`,
     }));
 
-    const insertedChunks = await insertChunksInBatches(chunkRows);
+    const insertedChunks = chunkRows.map((chunk) => ({ ...chunk, id: randomUUID() }));
 
     const records: PineconeRecord[] = insertedChunks.map((chunk) => ({
       _id: chunk.pinecone_vector_id,
       chunk_id: chunk.id,
       chunk_index: chunk.chunk_index,
       document_id: expediente.id,
+      index_generation: generation,
       document_number: serieDocumento ?? undefined,
       document_type: "expediente",
       page_end: chunk.page_end ?? undefined,
@@ -403,6 +385,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     const upsert = await upsertTextRecords(records, namespace);
     const verification = await verifyDocumentIndexedInPinecone({
       documentId: expediente.id,
+      indexGeneration: generation,
       expectedMinRecords: records.length,
       namespace,
       query: [expediente.title, serieDocumento, sgdExpediente, asunto, materia]
@@ -410,8 +393,10 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
         .join(" "),
     });
 
-    await supabaseRest(`expedientes_archivo?id=eq.${expediente.id}`, {
-      body: JSON.stringify({
+    if (!verification.verified) throw new Error("No se pudo verificar el índice nuevo. Se conserva la versión anterior.");
+    const patch = {
+        file_name: expediente.file_name, file_size: expediente.file_size,
+        mime_type: expediente.mime_type, storage_bucket: expediente.storage_bucket, storage_path: expediente.storage_path,
         anio: Number.isFinite(anio) ? anio : null,
         asunto,
         body_text: text.slice(0, 200000),
@@ -441,9 +426,14 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
         serie_documento: serieDocumento,
         resumen,
         status: "indexed",
-      }),
-      method: "PATCH",
+      };
+    publicationAttempted = true;
+    const result = await supabaseRest<{ oldVectorIds: string[] }>("rpc/archivo_publicar_indice", {
+      method: "POST",
+      body: JSON.stringify({ p_id: expediente.id, p_base: expediente.updated_at, p_chunks: insertedChunks, p_patch: patch }),
     });
+    published = true;
+    await deleteRecords(result.oldVectorIds, namespace).catch((error) => console.error("[archivo] limpieza de índice anterior", error));
 
     // Registro de consumo de IA (para agregar gasto por periodo si se necesita).
     await writeAuditLog({
@@ -463,14 +453,9 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Error procesando expediente";
-    await deleteRecords(insertedVectorIds, namespace).catch(() => undefined);
-    await supabaseRest(`expedientes_archivo_chunks?documento_id=eq.${expediente.id}`, {
-      method: "DELETE",
-    }).catch(() => undefined);
-    await supabaseRest(`expedientes_archivo?id=eq.${expediente.id}`, {
-      body: JSON.stringify({ error_message: errorMessage, status: "error" }),
-      method: "PATCH",
-    });
+    // Un fallo de red al publicar puede ocurrir después del commit. No borrar a ciegas.
+    if (!published && !publicationAttempted) await deleteRecords(insertedVectorIds, namespace).catch(() => undefined);
+    if (!published) await reportArchivoProcessingFailure(expediente, errorMessage);
     throw error;
   }
 }
@@ -479,6 +464,9 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
 // del archivo fisico. No guarda nada ni indexa; solo devuelve los datos
 // detectados (numero/fecha/asunto/materia/remitente/destinatario/resumen/folios).
 export type ExpedienteInventory = {
+  warnings?: string[];
+  ocrPartial?: boolean;
+  analysisPartial?: boolean;
   numeroExpediente: string | null;
   numeroDocumento: string | null;
   serieDocumental: string | null;
@@ -526,12 +514,15 @@ export async function extractExpedienteInventory(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[expedientes] extractPdfText fallo: ${message}`);
-    throw new Error(
-      `No se pudo leer el PDF. Verifica que no esté dañado o protegido con contraseña. (${message})`,
-    );
+    throw classifyPdfError(err);
   }
 
   const text = extracted.text ?? "";
+  inventory.ocrPartial = extracted.ocrPartial;
+  inventory.analysisPartial = text.length > analysisTextLimit;
+  inventory.warnings = [];
+  if (extracted.ocrPartial) inventory.warnings.push(`Lectura parcial: se procesaron ${extracted.pages.length} de ${extracted.pageCount} páginas.`);
+  if (inventory.analysisPartial) inventory.warnings.push(`El análisis usa los primeros ${analysisTextLimit} caracteres del texto.`);
 
   // Folios = nº de páginas del PDF subido (no el "nº de folios" que pudiera
   // mencionar el texto). Se conoce del parseo del PDF aunque el OCR falle.
@@ -545,7 +536,7 @@ export async function extractExpedienteInventory(
   // escáner) quedaba invisible: la IA corría, no encontraba nada útil y el
   // usuario solo veía "sin datos" sin ninguna pista de por qué.
   console.info(
-    `[expedientes] extractExpedienteInventory: método=${extracted.extractionMethod}, texto=${text.length} chars, folios=${extracted.pageCount}, preview="${text.slice(0, 300).replace(/\s+/g, " ")}"`,
+    `[expedientes] extractExpedienteInventory: método=${extracted.extractionMethod}, texto=${text.length} chars, folios=${extracted.pageCount}, lecturaParcial=${extracted.ocrPartial}`,
   );
 
   if (text.length < 50) {
@@ -593,7 +584,8 @@ export async function extractExpedienteInventory(
   }
 
   // IA para campos semanticos
-  const { insights } = await analyzeExpedienteWithAi(text);
+  const { insights, warning } = await analyzeExpedienteWithAi(text);
+  if (warning) inventory.warnings.push(warning);
   if (!inventory.asunto && insights.asunto) inventory.asunto = insights.asunto;
   if (insights.materia) inventory.materia = insights.materia;
   if (!inventory.tipoDocumento && insights.tipoDocumento) inventory.tipoDocumento = insights.tipoDocumento;
@@ -608,4 +600,12 @@ export async function extractExpedienteInventory(
   }
 
   return inventory;
+}
+
+export async function reportArchivoProcessingFailure(expediente: ExpedienteArchivo, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  // CAS: un trabajo viejo no puede marcar como fallido un índice recién publicado.
+  await supabaseRest(`expedientes_archivo?id=eq.${expediente.id}&updated_at=eq.${encodeURIComponent(expediente.updated_at)}`, {
+    method: "PATCH", body: JSON.stringify({ error_message: message, status: expediente.status === "indexed" ? "indexed" : "error" }),
+  });
 }

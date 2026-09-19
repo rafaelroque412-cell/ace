@@ -188,7 +188,9 @@ export async function searchExpedientes(
     }
 
     const chunkId = asString(record.chunk_id);
-    const content = chunkId ? contentById.get(chunkId) ?? "" : "";
+    // No mostrar generaciones preparadas ni vectores antiguos sin chunk vigente.
+    if (!exp || !chunkId || !contentById.has(chunkId)) continue;
+    const content = contentById.get(chunkId)!;
     const pageStart = asNumber(record.page_start);
     const pageEnd = asNumber(record.page_end);
     const serie = hitNumber ?? exp?.serie_documento ?? null;

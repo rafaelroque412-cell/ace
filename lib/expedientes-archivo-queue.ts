@@ -1,9 +1,7 @@
 import {
   type ExpedienteArchivo,
-  getExpedientesNamespace,
 } from "@/lib/expedientes-archivo";
-import { processExpedienteDocument } from "@/lib/expedientes-archivo-processing";
-import { deleteRecords } from "@/lib/pinecone";
+import { processExpedienteDocument, reportArchivoProcessingFailure } from "@/lib/expedientes-archivo-processing";
 import {
   downloadStorageObject,
   supabaseRest,
@@ -25,7 +23,7 @@ const staleMinutes = Number.parseInt(process.env.EXPEDIENTES_STALE_MINUTES ?? "1
 const claimSeconds = Number.parseInt(process.env.EXPEDIENTES_CLAIM_SECONDS ?? "120", 10);
 
 const EXP_SELECT =
-  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at";
+  "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at,expediente_id";
 
 // Expedientes pendientes (su `after()` nunca arrancó) o atascados (processing muerto).
 // No reintenta los 'error' (son terminales: requieren reindex manual) para no
@@ -39,23 +37,6 @@ export async function findStuckExpedientes(limit = 2): Promise<ExpedienteArchivo
   );
 }
 
-// Borra los restos (chunks + vectores) de un intento anterior fallido para que el
-// reprocesado sea idempotente (la tabla de chunks tiene unique(expediente_id,chunk_index),
-// así que reinsertar sin limpiar reventaría).
-async function cleanupExpedienteIndex(expedienteId: string): Promise<void> {
-  const chunks = await supabaseRest<Array<{ pinecone_vector_id: string | null }>>(
-    `expedientes_archivo_chunks?expediente_id=eq.${expedienteId}&select=pinecone_vector_id`,
-  ).catch(() => []);
-  const vectorIds = chunks
-    .map((chunk) => chunk.pinecone_vector_id)
-    .filter((id): id is string => Boolean(id));
-  if (vectorIds.length > 0) {
-    await deleteRecords(vectorIds, getExpedientesNamespace()).catch(() => undefined);
-  }
-  await supabaseRest(`expedientes_archivo_chunks?expediente_id=eq.${expedienteId}`, {
-    method: "DELETE",
-  }).catch(() => undefined);
-}
 
 // Procesa hasta `limit` expedientes atascados. Cada uno en su try/catch para que
 // uno con error no aborte el resto. Pensado para correr acotado por invocación.
@@ -65,7 +46,6 @@ export async function drainStuckExpedientes(limit = 2): Promise<DrainSummary> {
 
   for (const expediente of expedientes) {
     try {
-      await cleanupExpedienteIndex(expediente.id);
       const blob = await downloadStorageObject(
         expediente.storage_bucket,
         expediente.storage_path,
@@ -82,7 +62,7 @@ export async function drainStuckExpedientes(limit = 2): Promise<DrainSummary> {
         ok: false,
         title: expediente.title,
       });
-      // processExpedienteDocument ya marca el expediente en 'error'.
+      await reportArchivoProcessingFailure(expediente, error);
     }
   }
 

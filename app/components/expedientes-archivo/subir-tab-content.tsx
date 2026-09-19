@@ -585,6 +585,11 @@ export function SubirTabContent({
                   protagonista de esta pantalla: es lo único que la IA hace
                   por ti, así que se trata distinto del resto del formulario
                   (barra superior en degradado, ícono con halo). */}
+              {extractedData?.warnings?.length ? (
+                <div role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  {extractedData.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+                </div>
+              ) : null}
               {extractedData ? (
                 <div
                   className="relative mt-3.5 animate-exp-fade-in overflow-hidden rounded-exp border border-exp-brand/40 bg-[linear-gradient(135deg,var(--color-exp-brand-soft)_0%,var(--color-exp-panel)_55%)] p-3.5 shadow-[0_1px_2px_rgba(15,118,110,0.06),0_12px_28px_-10px_rgba(15,118,110,0.35)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(90deg,var(--color-exp-brand)_0%,#5eead4_50%,var(--color-exp-brand)_100%)] before:content-['']"

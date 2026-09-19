@@ -1,3 +1,4 @@
+import { loadServerPdfJs } from "./pdf-server";
 import pdfParse from "pdf-parse/lib/pdf-parse";
 import { createHash } from "crypto";
 import { getOpenAIClient, legalAnswerModel, pdfOcrModel } from "./openai-server";
@@ -787,7 +788,7 @@ async function rasterizePdfPages(
   buffer: Buffer,
   maxPages: number,
 ): Promise<{ pageNumber: number; base64: string }[]> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadServerPdfJs();
   const { createCanvas } = await import("@napi-rs/canvas");
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),

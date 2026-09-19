@@ -204,6 +204,9 @@ export type LegajoDetalle = {
 
 /** Resultado de autocompletar PDF con IA / extractores deterministas */
 export type PdfInventory = {
+  warnings?: string[];
+  ocrPartial?: boolean;
+  analysisPartial?: boolean;
   numeroExpediente?: string | null;
   numeroDocumento?: string | null;
   // Denominación oficial literal del documento (ej. "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A").

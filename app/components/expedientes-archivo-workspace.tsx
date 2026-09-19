@@ -1,4 +1,5 @@
 ﻿"use client";
+import { prepareArchivoUpload } from "@/lib/archivo-upload-client";
 
 import dynamic from "next/dynamic";
 import { SkeletonList } from "./expedientes-archivo/skeleton";
@@ -795,9 +796,10 @@ export function ExpedientesArchivoWorkspace({
       // malo ya cacheado. La carga automática al arrastrar el PDF sí usa cache
       // (rápida y barata para el caso normal, que acierta a la primera).
       const data = await autoFillFromPdfAction(target, form.title, !opts?.auto);
+      const notices = data.warnings ?? [];
       const fieldsFound = Object.entries(data).filter(
         ([key, value]) =>
-          key !== "extractionMethod" && value !== null && value !== "" && value !== undefined,
+          !["extractionMethod", "warnings", "ocrPartial", "analysisPartial", "nroFolios"].includes(key) && value !== null && value !== "" && value !== undefined,
       ).length;
 
       if (fieldsFound === 0) {
@@ -807,18 +809,19 @@ export function ExpedientesArchivoWorkspace({
             ? "El PDF no tiene texto legible (posible escaneado sin OCR)."
             : method === "deterministic"
               ? "Solo se detectaron datos básicos. La IA no devolvió campos semánticos."
-              : "La IA no devolvió campos. Verifica tu API key de OpenAI o intenta con otro PDF.";
-        showToast(reason, "warning");
-        if (!opts?.auto) setExtractedData(data);
+              : "La IA no devolvió campos. Intenta nuevamente o revisa el documento.";
+        showToast([...notices, reason].join(" "), "warning");
+        setExtractedData(data);
         return;
       }
 
       if (opts?.auto) {
         // Auto: aplicar directamente para que el usuario solo confirme.
         const applied = applyInventory(data);
+        if (notices.length) setExtractedData(data);
         showToast(
-          `Analizado con IA: ${applied} campo${applied === 1 ? "" : "s"} autocompletado${applied === 1 ? "" : "s"}. Revisa y ajusta.`,
-          "success",
+          `${data.extractionMethod === "ai" || data.extractionMethod === "hybrid" ? "Analizado con IA" : "Datos básicos detectados"}: ${applied} campos autocompletados. ${notices.join(" ")} Revisa y ajusta.`,
+          notices.length ? "warning" : "success",
         );
         void checkDuplicatesFor({
           title: data.numeroExpediente ?? target.name,
@@ -831,7 +834,7 @@ export function ExpedientesArchivoWorkspace({
       } else {
         // Manual: mostrar preview editable (comportamiento previo).
         setExtractedData(data);
-        showToast(`Se detectaron ${fieldsFound} campos. Revisa y aplica los datos.`, "success");
+        showToast(`Se detectaron ${fieldsFound} campos. ${notices.join(" ")} Revisa y aplica los datos.`, notices.length ? "warning" : "success");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "No se pudo extraer datos del PDF";
@@ -903,6 +906,7 @@ export function ExpedientesArchivoWorkspace({
     setUploadProgress(0);
 
     try {
+      await prepareArchivoUpload(formData);
       const xhr = new XMLHttpRequest();
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {

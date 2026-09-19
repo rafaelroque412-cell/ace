@@ -1,3 +1,5 @@
+import { readArchivoFile } from "@/lib/archivo-upload-server";
+import { classifyPdfError } from "@/lib/pdf-read-error";
 import { NextResponse } from "next/server";
 import { requireDecOrAreaUsuaria } from "@/lib/auth";
 import { extractExpedienteInventory } from "@/lib/expedientes-archivo-processing";
@@ -6,7 +8,7 @@ import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // Lee el PDF cargado y devuelve los datos detectados (numero/fecha/asunto/materia/
 // remitente/destinatario/resumen/folios) para autocompletar el formulario de
@@ -19,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const file = formData.get("file");
+    const file = await readArchivoFile(formData, auth.user.id);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Debes adjuntar un archivo PDF" }, { status: 400 });
@@ -50,13 +52,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ inventory });
   } catch (error) {
-    // Errores operacionales (PDF no procesable, OCR no útil) → 422 Unprocessable Entity
-    // No son errores del servidor, son del input
-    const message = error instanceof Error ? error.message : "No se pudo extraer la informacion del PDF";
-    const isOperational = /ocr|texto|escaneado|legible|pdf/i.test(message);
+    const failure = classifyPdfError(error);
+    console.error("[archivo/extract]", error);
     return NextResponse.json(
-      { error: message, retryable: !isOperational },
-      { status: isOperational ? 422 : 500 },
+      { error: failure.message, retryable: failure.retryable },
+      { status: failure.status },
     );
   }
 }

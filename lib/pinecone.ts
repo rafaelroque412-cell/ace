@@ -9,6 +9,7 @@ type PineconeIndexInfo = {
 };
 
 export type PineconeRecord = {
+  index_generation?: string;
   _id: string;
   text: string;
   document_id: string;
@@ -83,6 +84,7 @@ const upsertRetryDelayMs = 65000;
 const maxUpsertRetries = 3;
 
 export type SearchFilters = {
+  indexGeneration?: string;
   article?: string;
   documentId?: string;
   /** Varios documentos a la vez ($in). Un procedimiento puede tener varios modelos. */
@@ -102,6 +104,8 @@ export function compactFilter(filters?: SearchFilters) {
   }
 
   const clauses: Record<string, { $eq: string | number } | { $in: string[] }> = {};
+
+  if (filters.indexGeneration) clauses.index_generation = { $eq: filters.indexGeneration };
 
   if (filters.article) {
     clauses.article = { $eq: filters.article };
@@ -227,6 +231,7 @@ function buildVectorMetadata(record: PineconeRecord): Record<string, string | nu
   const metadata: Record<string, string | number> = {};
   const entries: Array<[string, string | number | undefined]> = [
     ["document_id", record.document_id],
+    ["index_generation", record.index_generation],
     ["chunk_id", record.chunk_id],
     ["chunk_index", record.chunk_index],
     ["document_type", record.document_type],
@@ -425,6 +430,7 @@ export async function upsertTextRecords(records: PineconeRecord[], namespaceOver
 }
 
 export async function verifyDocumentIndexedInPinecone(input: {
+  indexGeneration?: string;
   documentId: string;
   expectedMinRecords: number;
   query: string;
@@ -437,7 +443,7 @@ export async function verifyDocumentIndexedInPinecone(input: {
     const hits = await searchTextRecords(
       input.query,
       Math.min(10, Math.max(1, input.expectedMinRecords)),
-      { documentId: input.documentId },
+      { documentId: input.documentId, indexGeneration: input.indexGeneration },
       input.namespace,
     ).catch(() => []);
 

@@ -47,7 +47,7 @@ El drenado se dispara desde:
 - **Local/dev**: `npm run worker:indexing` (o `:once`) drena ambas colas en bucle.
 
 Autorización del endpoint: `Authorization: Bearer CRON_SECRET` o sesión editor/admin.
-El drainer es **idempotente** (limpia chunks/vectores previos antes de reprocesar) y
+El drainer conserva el índice anterior hasta publicar el nuevo con la transacción `archivo_publicar_indice` y
 **no reintenta** los `error` (terminales; requieren reindex manual). Variables:
 `EXPEDIENTES_STALE_MINUTES` (10), `EXPEDIENTES_CLAIM_SECONDS` (120),
 `EXPEDIENTES_DRAIN_BATCH` (2).
@@ -138,3 +138,6 @@ loadExpedientes(): Promise<ExpedienteItem[]>
 - **Performance**: useDeferredValue para el input de búsqueda, useMemo para filtros costosos
 - **Persistencia**: URL sync con filtros, localStorage para borradores
 - **Mensajes de error** accionables en español
+
+
+La corrección de subida directa, worker PDF y publicación del índice se activa siguiendo `docs/ARCHIVO-PDF-DESPLIEGUE.md`.

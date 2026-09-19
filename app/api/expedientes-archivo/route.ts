@@ -1,3 +1,5 @@
+import { PdfReadError } from "@/lib/pdf-read-error";
+import { readArchivoFile } from "@/lib/archivo-upload-server";
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { getArchivoScopeLevel, canAccessArchivoRow, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
@@ -10,7 +12,7 @@ import {
   normalizeContenedorTipo,
   normalizePersonaTipo,
 } from "@/lib/expedientes-archivo";
-import { processExpedienteDocument } from "@/lib/expedientes-archivo-processing";
+import { processExpedienteDocument, reportArchivoProcessingFailure } from "@/lib/expedientes-archivo-processing";
 import {
   downloadStorageObject,
   getSupabaseServerConfig,
@@ -28,7 +30,7 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const SELECT =
   "id,sgd_expediente,serie_documento,anio,tipo_documento,asunto,materia,resumen,title,oficina,tipo_almacenamiento,nro_archivador,nro_paquete,empastado,color_archivador,nro_estante,nro_piso,nro_local,folio,observaciones,persona_tipo,persona_documento,persona_nombre,file_name,file_size,mime_type,storage_bucket,storage_path,status,error_message,metadata,uploaded_by,created_at,updated_at,expediente_id,numero_folio";
@@ -170,7 +172,7 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const file = formData.get("file");
+    const file = await readArchivoFile(formData, auth.user.id);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Debes adjuntar un archivo PDF" }, { status: 400 });
@@ -354,8 +356,8 @@ export async function POST(request: Request) {
         if (full) {
           await processExpedienteDocument(full, pdfFile);
         }
-      } catch {
-        // processExpedienteDocument ya persiste el error en el expediente.
+      } catch (error) {
+        await reportArchivoProcessingFailure(expediente, error);
       }
     });
 
@@ -363,7 +365,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "No se pudo subir el expediente" },
-      { status: 500 },
+      { status: error instanceof PdfReadError ? error.status : 500 },
     );
   }
 }

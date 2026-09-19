@@ -1,3 +1,4 @@
+import { prepareArchivoUpload } from "./archivo-upload-client";
 /**
  * Acciones de negocio del módulo /expedientes-archivo
  *
@@ -168,6 +169,7 @@ export async function autoFillFromPdf(
   formData.append("file", file);
   formData.append("title", title);
   if (forceRefresh) formData.append("forceRefresh", "true");
+  await prepareArchivoUpload(formData);
   const res = await fetch("/api/expedientes-archivo/extract", {
     method: "POST",
     body: formData,
@@ -219,6 +221,7 @@ export async function fetchUbicacionSugerida(params: {
 
 /** Sube un nuevo expediente */
 export async function uploadExpediente(formData: FormData, onProgress?: (loaded: number, total: number) => void): Promise<{ expediente: unknown; processing: boolean }> {
+  await prepareArchivoUpload(formData);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     if (onProgress) {
@@ -281,6 +284,7 @@ export async function replaceExpedienteFile(id: string, file: File): Promise<voi
   }
   const formData = new FormData();
   formData.append("file", file);
+  await prepareArchivoUpload(formData);
   const res = await fetch(`/api/expedientes-archivo/${id}`, { method: "PUT", body: formData });
   if (!res.ok) throw await parseError(res, "No se pudo reemplazar el PDF");
 }
