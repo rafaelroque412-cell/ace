@@ -36,7 +36,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  ARCHIVO_AMBIENTES,
   ARCHIVO_COLORES,
   CONTENEDOR_TIPOS,
   CONTENEDOR_TIPO_LABELS,
@@ -1161,24 +1160,32 @@ export function SubirTabContent({
                   ))}
                 </select>
               </div>
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Nº de archivador{autoBadge("nroArchivador")}</label>
-                <input
-                  value={form.nroArchivador}
-                  onChange={(e) => setField("nroArchivador", e.target.value)}
-                  placeholder="Ej. 12"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Nº de paquete{autoBadge("nroPaquete")}</label>
-                <input
-                  value={form.nroPaquete}
-                  onChange={(e) => setField("nroPaquete", e.target.value)}
-                  placeholder="Opcional"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
+              {/* Un solo campo "Nº de <tipo>", no uno fijo por cada tipo posible:
+                  el número solo tiene sentido para el contenedor que se eligió
+                  arriba, y antes se pedían archivador Y paquete a la vez aunque
+                  el documento estuviera en uno solo. */}
+              {form.tipoAlmacenamiento === "archivador" ? (
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Nº de archivador{autoBadge("nroArchivador")}</label>
+                  <input
+                    value={form.nroArchivador}
+                    onChange={(e) => setField("nroArchivador", e.target.value)}
+                    placeholder="Ej. 12"
+                    className={EXP_FIELD_CONTROL}
+                  />
+                </div>
+              ) : null}
+              {form.tipoAlmacenamiento === "paquete" ? (
+                <div className={EXP_FIELD}>
+                  <label className={EXP_FIELD_LABEL}>Nº de paquete{autoBadge("nroPaquete")}</label>
+                  <input
+                    value={form.nroPaquete}
+                    onChange={(e) => setField("nroPaquete", e.target.value)}
+                    placeholder="Opcional"
+                    className={EXP_FIELD_CONTROL}
+                  />
+                </div>
+              ) : null}
               <div className={EXP_FIELD}>
                 <label className={EXP_FIELD_LABEL}>Empastado{autoBadge("empastado")}</label>
                 <select
@@ -1214,30 +1221,6 @@ export function SubirTabContent({
                   placeholder="Ej. 3"
                   className={EXP_FIELD_CONTROL}
                 />
-              </div>
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Piso{autoBadge("nroPiso")}</label>
-                <input
-                  value={form.nroPiso}
-                  onChange={(e) => setField("nroPiso", e.target.value)}
-                  placeholder="Ej. 2"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
-              <div className={cn(EXP_FIELD, "col-span-full")}>
-                <label className={EXP_FIELD_LABEL}>Local / ambiente{autoBadge("nroLocal")}</label>
-                <select
-                  value={form.nroLocal}
-                  onChange={(e) => setField("nroLocal", e.target.value)}
-                  className={EXP_FIELD_CONTROL}
-                >
-                  <option value="">— Sin ambiente —</option>
-                  {ARCHIVO_AMBIENTES.map((amb) => (
-                    <option key={amb} value={amb}>
-                      {amb}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
           </div>
