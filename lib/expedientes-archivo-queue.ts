@@ -29,7 +29,7 @@ const EXP_SELECT =
 // Expedientes pendientes (su `after()` nunca arrancó) o atascados (processing muerto).
 // No reintenta los 'error' (son terminales: requieren reindex manual) para no
 // entrar en bucle con PDF genuinamente ilegibles.
-export async function findStuckExpedientes(limit = 2): Promise<ExpedienteArchivo[]> {
+export async function findStuckExpedientes(limit = 20): Promise<ExpedienteArchivo[]> {
   const staleThreshold = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString();
   const claimThreshold = new Date(Date.now() - claimSeconds * 1000).toISOString();
   const filter = `or=(and(status.eq.uploaded,created_at.lt.${claimThreshold}),and(status.eq.processing,updated_at.lt.${staleThreshold}))`;
@@ -38,17 +38,46 @@ export async function findStuckExpedientes(limit = 2): Promise<ExpedienteArchivo
   );
 }
 
+// Presupuesto de tiempo de una corrida del drainer, con margen bajo el tope real
+// de 60 s del plan Hobby de Vercel (aunque la ruta declare `maxDuration = 300`,
+// Hobby lo recorta igual). Sin este margen, una invocación que se pasa de rosca
+// muere a mitad de un PATCH y puede dejar una fila en 'processing' hasta que el
+// guard de `staleMinutes` la libere.
+const drainTimeBudgetMs = 50_000;
 
-// Procesa hasta `limit` expedientes atascados. Cada uno en su try/catch para que
-// uno con error no aborte el resto. Pensado para correr acotado por invocación.
-export async function drainStuckExpedientes(limit = 2): Promise<DrainSummary> {
+// Procesa expedientes atascados hasta agotar `limit` candidatos o el presupuesto
+// de tiempo. Cada uno en su try/catch para que uno con error no aborte el resto.
+//
+// Los de la carpeta RAG (`uploadSource: "rag-folder"`) se leen por BLOQUES de 3
+// páginas (ver advanceRagDocument): antes esta función le daba una sola pasada
+// por invocación, y como el cron de expedientes en Vercel corre UNA VEZ AL DÍA
+// (plan Hobby: no admite crons más frecuentes), un documento de varios bloques
+// —o un lote de varios documentos— podía tardar semanas en completarse por la
+// vía automática. Ahora se insiste en el MISMO documento, bloque a bloque, hasta
+// que termina o se acaba el presupuesto de la invocación, antes de pasar al
+// siguiente — así una sola corrida diaria aprovecha los ~50 s enteros en vez de
+// gastarlos en un bloque y parar.
+export async function drainStuckExpedientes(limit = 20): Promise<DrainSummary> {
+  const startedAt = Date.now();
   const expedientes = await findStuckExpedientes(limit);
   const items: DrainSummary["items"] = [];
 
   for (const expediente of expedientes) {
+    if (Date.now() - startedAt > drainTimeBudgetMs) break;
     try {
       if (expediente.metadata?.uploadSource === "rag-folder") {
-        await advanceRagDocument(expediente);
+        let current: ExpedienteArchivo | null = expediente;
+        while (
+          current &&
+          current.status !== "indexed" &&
+          current.status !== "error" &&
+          Date.now() - startedAt < drainTimeBudgetMs
+        ) {
+          await advanceRagDocument(current);
+          [current] = await supabaseRest<ExpedienteArchivo[]>(
+            `expedientes_archivo?id=eq.${expediente.id}&select=${EXP_SELECT}`,
+          );
+        }
         items.push({ id: expediente.id, ok: true, title: expediente.title });
         continue;
       }

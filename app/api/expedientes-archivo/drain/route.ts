@@ -8,9 +8,14 @@ export const runtime = "nodejs";
 // que topa las funciones en 60 s (en Pro se puede subir a 300).
 export const maxDuration = 300;
 
-// OCR pesado: 1 por invocación para caber en los 60 s del Hobby. En Pro se sube
-// con EXPEDIENTES_DRAIN_BATCH.
-const batchSize = Number.parseInt(process.env.EXPEDIENTES_DRAIN_BATCH ?? "1", 10);
+// Tamaño del POOL de candidatos atascados a considerar, no cuántos se procesan
+// de verdad: drainStuckExpedientes ahora reparte un presupuesto de ~50 s entre
+// ellos (ver su comentario), así que un pool generoso solo cuesta una consulta
+// más grande, no más tiempo de OCR. Antes esto SÍ limitaba el trabajo real
+// (1 = un solo bloque de un solo documento por corrida), y con el cron de
+// expedientes corriendo una vez al día en Hobby, un lote grande tardaba semanas
+// en completarse por la vía automática.
+const batchSize = Number.parseInt(process.env.EXPEDIENTES_DRAIN_BATCH ?? "20", 10);
 
 // Autoriza al scheduled function / cron (Authorization: Bearer CRON_SECRET) o a un
 // editor/admin/area_usuaria que dispare el drenado manualmente.
