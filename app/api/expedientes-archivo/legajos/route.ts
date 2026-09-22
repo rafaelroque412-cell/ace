@@ -22,7 +22,10 @@ export async function GET(request: Request) {
       return auth.error;
     }
 
-    const rl = checkRateLimit(getRateLimitKey(request, auth.user.id, "list"), RATE_LIMITS.search);
+    // Clave propia ("legajos-list"), no genérica "list": esa cadena la
+    // comparte GET /api/expedientes-archivo, y sin distinguirlas ambas rutas
+    // gastaban del mismo contador de rate limit sin que ninguna lo supiera.
+    const rl = checkRateLimit(getRateLimitKey(request, auth.user.id, "legajos-list"), RATE_LIMITS.search);
     if (!rl.allowed) {
       return rateLimitResponse(rl);
     }

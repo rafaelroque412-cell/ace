@@ -446,27 +446,21 @@ export function ExpedientesArchivoWorkspace({
     void loadExpedientes();
   }, [loadExpedientes]);
 
-  useEffect(() => {
-    if (!hasPending) return;
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (attempts > 75) {
-        clearInterval(timer);
-        return;
-      }
-      void loadExpedientes();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [hasPending, loadExpedientes]);
-
   // Polling de la lista de recientes cuando hay items pendientes
   const hasRecentPending = useMemo(
     () => recentUploads.some((exp) => exp.status === "uploaded" || exp.status === "processing"),
     [recentUploads],
   );
+
+  // UN solo temporizador para las dos listas (antes eran dos efectos
+  // independientes, cada uno con su propio setInterval de 4 s): con un
+  // expediente recién subido, `hasPending` y `hasRecentPending` se ponen en
+  // true casi a la vez (el upload refresca ambas listas), así que los dos
+  // sondeos corrían en paralelo y por sí solos agotaban el límite de la ruta
+  // ("Indexando con Pinecone..." se quedaba pegado porque el sondeo que iba a
+  // detectar "ya terminó" era justo el que estaba recibiendo 429).
   useEffect(() => {
-    if (!hasRecentPending) return;
+    if (!hasPending && !hasRecentPending) return;
     let attempts = 0;
     const timer = setInterval(() => {
       attempts += 1;
@@ -474,10 +468,11 @@ export function ExpedientesArchivoWorkspace({
         clearInterval(timer);
         return;
       }
-      void refreshRecentUploads();
+      if (hasPending) void loadExpedientes();
+      if (hasRecentPending) void refreshRecentUploads();
     }, 4000);
     return () => clearInterval(timer);
-  }, [hasRecentPending, refreshRecentUploads]);
+  }, [hasPending, hasRecentPending, loadExpedientes, refreshRecentUploads]);
 
   // Auto-guardado del borrador del wizard (el debounce vive en el hook). Nunca
   // durante la subida: si esta termina bien, el borrador se limpia explícito;

@@ -132,6 +132,13 @@ export const RATE_LIMITS = {
   aiSearch: { max: 15, windowMs: 60_000 },
   /** Búsqueda keyword: barato */
   search: { max: 30, windowMs: 60_000 },
+  /** Listar (auto-refresh en segundo plano, no una acción del usuario): la
+   *  pestaña Subir de expedientes-archivo sondea la lista completa Y la de
+   *  "recientes" cada 4 s mientras algo está "procesando" — 30/min lo dejaba
+   *  saturado por ese solo sondeo, sin margen para nada más, y los 429
+   *  resultantes dejaban el banner "Indexando..." pegado para siempre (el
+   *  sondeo nunca llegaba a ver el cambio a "indexado"). */
+  list: { max: 60, windowMs: 60_000 },
   /** Subir PDF: costoso (storage + OCR) */
   upload: { max: 5, windowMs: 60_000 },
   /** Bulk operations: requiere queries */

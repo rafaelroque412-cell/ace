@@ -66,9 +66,12 @@ export async function GET(request: Request) {
       return auth.error;
     }
 
+    // Clave propia ("expedientes-list"), no genérica "list": esa cadena
+    // también la usaba /api/expedientes-archivo/legajos, así que ambas rutas
+    // compartían el mismo contador sin querer y se saturaban entre sí.
     const rl = checkRateLimit(
-      getRateLimitKey(request, auth.user.id, "list"),
-      RATE_LIMITS.search,
+      getRateLimitKey(request, auth.user.id, "expedientes-list"),
+      RATE_LIMITS.list,
     );
     if (!rl.allowed) {
       return rateLimitResponse(rl);
