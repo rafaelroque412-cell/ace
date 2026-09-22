@@ -842,10 +842,25 @@ function looksLikeOcrRefusal(text: string) {
   return text.length < 100 && ocrRefusalPatterns.some((pattern) => normalized.includes(pattern));
 }
 
+// Umbral de "esta página salió mal" para reintentar, aparte del rechazo
+// explícito. Verificado en vivo: una lectura de un INFORME de 3 páginas densas
+// (varios párrafos, base legal, tabla) dio 7000+ caracteres en corridas buenas
+// y solo 418 en una mala — sin que el modelo se disculpara ni rechazara nada,
+// solo transcribió mucho menos de lo que había. Una página realmente casi en
+// blanco (solo firma) también puede caer bajo este umbral y reintentar de
+// más: es aceptable, el costo de un reintento de más es mínimo comparado con
+// perder la mayoría del contenido en silencio.
+const ocrSuspiciouslyShortLength = 150;
+function looksLikeOcrFailure(text: string) {
+  return looksLikeOcrRefusal(text) || text.length < ocrSuspiciouslyShortLength;
+}
+
 // OCR de una pagina ya rasterizada (imagen). Devuelve el texto transcrito.
-// Reintenta si el modelo devuelve un rechazo (raro con la instruccion de sistema,
-// pero la variabilidad existe); tras agotar reintentos devuelve "" para que esa
-// pagina cuente como vacia sin envenenar el texto con la disculpa del modelo.
+// Reintenta si el modelo devuelve un rechazo O si transcribe sospechosamente
+// poco (looksLikeOcrFailure) — la visión no es 100% determinista y una misma
+// imagen puede leerse bien una vez y a medias otra; tras agotar reintentos
+// devuelve lo último que haya salido, salvo que sea un rechazo puro, que se
+// descarta para no envenenar el texto con la disculpa del modelo.
 async function ocrPageImage(
   base64: string,
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
@@ -880,9 +895,13 @@ async function ocrPageImage(
     }, { timeout: 45_000, maxRetries: 0 });
     inputTokens += response.usage?.input_tokens ?? 0;
     outputTokens += response.usage?.output_tokens ?? 0;
-    lastText = normalizeText(response.output_text ?? "");
-    if (!looksLikeOcrRefusal(lastText)) {
-      return { text: lastText, inputTokens, outputTokens };
+    const attemptText = normalizeText(response.output_text ?? "");
+    // Se conserva el intento MÁS LARGO visto hasta ahora (no siempre el
+    // último): un reintento que sale igual de corto no debe pisar uno previo
+    // que sí trajo algo de contenido.
+    if (attemptText.length > lastText.length) lastText = attemptText;
+    if (!looksLikeOcrFailure(attemptText)) {
+      return { text: attemptText, inputTokens, outputTokens };
     }
   }
   return { text: looksLikeOcrRefusal(lastText) ? "" : lastText, inputTokens, outputTokens };
