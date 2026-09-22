@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getArchivoScopeLevel, getOfficeFilter, requireUser } from "@/lib/auth";
+import { canAccessArchivoRow, getArchivoScopeLevel, getOfficeFilter, requireUser } from "@/lib/auth";
 import { expedienteSearchSchema } from "@/lib/expedientes-archivo-schema";
 import { searchExpedientes } from "@/lib/expedientes-archivo-search";
-import { writeAuditLog } from "@/lib/supabase-server";
+import { supabaseRest, writeAuditLog } from "@/lib/supabase-server";
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,11 @@ export async function POST(request: Request) {
         { error: "Solicitud invalida", details: payload.error.flatten() },
         { status: 400 },
       );
+    }
+
+    if (payload.data.documentId) {
+      const [row] = await supabaseRest<Array<{ oficina: string | null; oficina_id: string | null; uploaded_by: string | null }>>(`expedientes_archivo?id=eq.${payload.data.documentId}&select=oficina,oficina_id,uploaded_by`);
+      if (!row || !canAccessArchivoRow(auth.user, { oficina: row.oficina, oficinaId: row.oficina_id, owner: row.uploaded_by })) return NextResponse.json({ error: "Documento no disponible" }, { status: 404 });
     }
 
     // Scope: admin busca en todo; jefe en su oficina; el resto solo en lo suyo.

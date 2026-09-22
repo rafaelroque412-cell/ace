@@ -92,6 +92,8 @@ import {
 //
 // `ssr: false` porque ninguno aporta nada al HTML inicial: todos exigen una
 // interaccion previa.
+const BuscarRagTab = dynamic(() => import("./expedientes-archivo/buscar-rag-tab").then(m => m.BuscarRagTab));
+const SubirRagTab = dynamic(() => import("./expedientes-archivo/subir-rag-tab").then(m => m.SubirRagTab));
 const importarSubir = () => import("./expedientes-archivo/subir-tab-content");
 const SubirTabContent = dynamic(() => importarSubir().then((m) => m.SubirTabContent), {
   loading: () => <SkeletonList count={4} />,
@@ -258,8 +260,8 @@ export function ExpedientesArchivoWorkspace({
   // Sin permiso de gestión solo se muestra "Buscar": las flechas deben recorrer
   // lo que hay en pantalla, no las tres de siempre.
   const pestanasArchivo: WorkspaceTab[] = canManage
-    ? ["buscar", "subir", "responder"]
-    : ["buscar"];
+    ? ["buscar", "subir", "responder", "buscar-rag", "subir-rag"]
+    : ["buscar", "buscar-rag"];
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 50,
@@ -1549,6 +1551,8 @@ export function ExpedientesArchivoWorkspace({
               <FileSignature size={15} /> Responder
             </button>
           ) : null}
+          <button type="button" {...propsPestana(BASE_PESTANAS, "buscar-rag", tab)} className={cn(EXP_TAB, tab === "buscar-rag" ? EXP_TAB_ACTIVE : EXP_TAB_INACTIVE)} onClick={() => setTab("buscar-rag")}><Search size={15} /> Buscar RAG</button>
+          {canManage && <button type="button" {...propsPestana(BASE_PESTANAS, "subir-rag", tab)} className={cn(EXP_TAB, tab === "subir-rag" ? EXP_TAB_ACTIVE : EXP_TAB_INACTIVE)} onClick={() => setTab("subir-rag")}><UploadCloud size={15} /> Subir RAG</button>}
         </div>
         <button
           type="button"
@@ -1564,6 +1568,8 @@ export function ExpedientesArchivoWorkspace({
           Lleva el destino del enlace de salto, que antes vivía dentro de
           BuscarTabContent y por eso solo funcionaba en esa pestaña. */}
       <div {...propsPanel(BASE_PESTANAS, tab)}>
+      {tab === "buscar-rag" && <BuscarRagTab canManage={canManage} openDocument={openExpedienteById} />}
+      {canManage && <div hidden={tab !== "subir-rag"}><SubirRagTab oficina={userOficina} /></div>}
       {tab === "buscar" ? (
         <BuscarTabContent
           mode={mode}

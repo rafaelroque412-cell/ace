@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 // El OCR de un expediente escaneado es pesado. Ajustado al plan Hobby de Vercel,
 // que topa las funciones en 60 s (en Pro se puede subir a 300).
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // OCR pesado: 1 por invocación para caber en los 60 s del Hobby. En Pro se sube
 // con EXPEDIENTES_DRAIN_BATCH.

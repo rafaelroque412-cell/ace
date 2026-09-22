@@ -1,3 +1,4 @@
+import { advanceRagDocument } from "./archivo-rag-worker";
 import {
   type ExpedienteArchivo,
 } from "@/lib/expedientes-archivo";
@@ -46,6 +47,11 @@ export async function drainStuckExpedientes(limit = 2): Promise<DrainSummary> {
 
   for (const expediente of expedientes) {
     try {
+      if (expediente.metadata?.uploadSource === "rag-folder") {
+        await advanceRagDocument(expediente);
+        items.push({ id: expediente.id, ok: true, title: expediente.title });
+        continue;
+      }
       const blob = await downloadStorageObject(
         expediente.storage_bucket,
         expediente.storage_path,

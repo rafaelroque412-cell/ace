@@ -157,11 +157,11 @@ export function useExpedientesPreferences() {
     false,
   );
 
-  const [tab, setTab, resetTab] = useLocalStorage<"buscar" | "subir" | "responder">(
+  const [tab, setTab, resetTab] = useLocalStorage<"buscar" | "subir" | "responder" | "buscar-rag" | "subir-rag">(
     "exp:lastTab",
     "buscar",
-    (v): v is "buscar" | "subir" | "responder" =>
-      v === "buscar" || v === "subir" || v === "responder",
+    (v): v is "buscar" | "subir" | "responder" | "buscar-rag" | "subir-rag" =>
+      v === "buscar" || v === "subir" || v === "responder" || v === "buscar-rag" || v === "subir-rag",
   );
 
   // Analizar el PDF con IA automáticamente al cargarlo (sin pulsar un botón).

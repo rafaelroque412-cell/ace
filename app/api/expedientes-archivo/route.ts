@@ -1,6 +1,8 @@
 import { PdfReadError } from "@/lib/pdf-read-error";
 import { readArchivoFile } from "@/lib/archivo-upload-server";
-import { randomUUID } from "node:crypto";
+import { parseRagPath, restLiteral } from "@/lib/archivo-rag";
+import { advanceRagDocument } from "@/lib/archivo-rag-worker";
+import { createHash, randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { getArchivoScopeLevel, canAccessArchivoRow, requireDecOrAreaUsuaria, requireUser } from "@/lib/auth";
 import { entitiesMatch } from "@/lib/entity-utils";
@@ -184,6 +186,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `El PDF supera el limite de ${maxPdfSizeLabel}` }, { status: 400 });
     }
 
+    const relativePath = formText(formData, "relativePath", 1000);
+    const rag = relativePath ? parseRagPath(relativePath) : null;
+    let contentHash: string | undefined;
+    if (rag) {
+      // Explicit corrections win over filename inference; never use CP as SGD.
+      rag.type = formText(formData, "tipoDocumento", 60) ?? rag.type;
+      rag.cabinet = formText(formData, "nroArchivador", 60) ?? rag.cabinet;
+      rag.cp = formText(formData, "ragCp", 30) ?? rag.cp;
+      rag.siaf = formText(formData, "ragSiaf", 30) ?? rag.siaf;
+      rag.date = formText(formData, "ragDate", 10) ?? rag.date;
+      rag.year = String(formInt(formData, "anio") ?? rag.year);
+      if (!rag.type || !rag.cabinet || !/^CP\d+$/i.test(rag.cp) || (rag.siaf && !/^\d+$/.test(rag.siaf))) return NextResponse.json({ error: "Revisa tipo, archivador, CP y SIAF" }, { status: 400 });
+      contentHash = createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex");
+      const [existing] = await supabaseRest<ExpedienteArchivo[]>(`expedientes_archivo?metadata->>contentHash=eq.${contentHash}&uploaded_by=eq.${restLiteral(auth.user.id)}&select=id&limit=1`);
+      if (existing) return NextResponse.json({ expediente: existing, duplicate: true }, { status: 200 });
+    }
     const { storageBucket } = getSupabaseServerConfig();
     const title = formText(formData, "title", 300) ?? file.name;
 
@@ -283,7 +301,7 @@ export async function POST(request: Request) {
       storage_path: storagePath,
       status: "uploaded",
       uploaded_by: auth.user.id,
-      metadata: { uploadSource: "web" },
+      metadata: rag ? { uploadSource: "rag-folder", rag, contentHash } : { uploadSource: "web" },
       expediente_id: legajoId,
     };
 
@@ -348,13 +366,16 @@ export async function POST(request: Request) {
     // File del request tras la respuesta da bytes corruptos para archivos pequenos).
     after(async () => {
       try {
-        const blob = await downloadStorageObject(storageBucket, storagePath);
-        const pdfFile = new File([blob], file.name, { type: "application/pdf" });
         const [full] = await supabaseRest<ExpedienteArchivo[]>(
           `expedientes_archivo?id=eq.${expediente.id}&select=${SELECT}`,
         );
         if (full) {
-          await processExpedienteDocument(full, pdfFile);
+          if (rag) await advanceRagDocument(full);
+          else {
+            const blob = await downloadStorageObject(storageBucket, storagePath);
+            const pdfFile = new File([blob], file.name, { type: "application/pdf" });
+            await processExpedienteDocument(full, pdfFile);
+          }
         }
       } catch (error) {
         await reportArchivoProcessingFailure(expediente, error);

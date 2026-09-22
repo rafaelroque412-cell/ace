@@ -121,6 +121,7 @@ export async function searchExpedientes(
 ): Promise<ExpedienteSearchResult[]> {
   const namespace = getExpedientesNamespace();
   const filters: SearchFilters = {};
+  if (input.documentId) filters.documentId = input.documentId;
   if (input.anio) filters.year = input.anio;
   const normalizedOficina = normalizeEntity(input.oficina);
   if (normalizedOficina) filters.sourceEntity = normalizedOficina;
@@ -187,6 +188,7 @@ export async function searchExpedientes(
       continue;
     }
 
+    if (input.documentId && expedienteId !== input.documentId) continue;
     const chunkId = asString(record.chunk_id);
     // No mostrar generaciones preparadas ni vectores antiguos sin chunk vigente.
     if (!exp || !chunkId || !contentById.has(chunkId)) continue;
@@ -257,6 +259,7 @@ export async function answerExpedienteQuestion(
 ): Promise<ExpedienteAnswer> {
   const sources = await searchExpedientes({
     query: input.query,
+    documentId: input.documentId,
     anio: input.anio,
     oficina: input.oficina,
     uploadedBy: input.uploadedBy,

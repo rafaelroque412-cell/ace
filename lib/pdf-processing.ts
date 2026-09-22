@@ -787,6 +787,7 @@ async function getPdfjsAssetOptions(): Promise<Record<string, unknown>> {
 async function rasterizePdfPages(
   buffer: Buffer,
   maxPages: number,
+  startPage = 1,
 ): Promise<{ pageNumber: number; base64: string }[]> {
   const pdfjs = await loadServerPdfJs();
   const { createCanvas } = await import("@napi-rs/canvas");
@@ -797,9 +798,9 @@ async function rasterizePdfPages(
   const doc = await loadingTask.promise;
 
   try {
-    const count = Math.min(doc.numPages, maxPages);
+    const count = Math.min(doc.numPages, startPage + maxPages - 1);
     const images: { pageNumber: number; base64: string }[] = [];
-    for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
+    for (let pageNumber = startPage; pageNumber <= count; pageNumber += 1) {
       const page = await doc.getPage(pageNumber);
       // scale 3.0 ≈ 300dpi. Antes 2.0 (~200dpi): verificado con un escaneo
       // real de baja calidad que a 200dpi el OCR de visión leía bien una
@@ -1640,4 +1641,16 @@ export async function processPdfForSearch(document: DocumentRecord, file: File) 
 
     throw error;
   }
+}
+
+/** One resumable OCR block; page numbers refer to the original PDF. */
+export async function extractPdfOcrBlock(file: File, startPage: number): Promise<ExtractedPdfText> {
+  const buffer = await readFileBytes(file);
+  const info = await pdfParse(Buffer.from(buffer));
+  const images = await rasterizePdfPages(buffer, 3, startPage);
+  const outputs = await Promise.all(images.map(async (image) => ({ ...await ocrPageImage(image.base64), pageNumber: image.pageNumber })));
+  const pages = outputs.map(({ pageNumber, text }) => ({ pageNumber, text }));
+  return { extractionMethod: "openai-ocr", pageCount: info.numpages, ocrPartial: startPage + pages.length - 1 < info.numpages, pages,
+    text: pages.map(p => `=== PAGINA ${p.pageNumber} ===\n${p.text}`).join("\n\n"),
+    usage: { model: pdfOcrModel, inputTokens: outputs.reduce((sum, p) => sum + p.inputTokens, 0), outputTokens: outputs.reduce((sum, p) => sum + p.outputTokens, 0) } };
 }

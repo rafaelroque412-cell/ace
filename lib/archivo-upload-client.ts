@@ -1,8 +1,8 @@
 /** Evita enviar archivos grandes a la función (límite de Vercel: 4,5 MB). */
-export async function prepareArchivoUpload(form: FormData): Promise<void> {
+export async function prepareArchivoUpload(form: FormData, request: typeof fetch = fetch): Promise<void> {
   const file = form.get("file");
   if (!(file instanceof File) || file.size < 3 * 1024 * 1024) return;
-  const response = await fetch("/api/expedientes-archivo/upload", {
+  const response = await request("/api/expedientes-archivo/upload", {
     signal: AbortSignal.timeout(30_000),
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: file.name, size: file.size, type: file.type }),

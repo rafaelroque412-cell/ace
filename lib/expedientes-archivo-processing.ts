@@ -250,7 +250,7 @@ function buildExpedienteEmbeddingText(input: {
 // Procesa un expediente archivado: extrae texto (OCR vía extractPdfText), detecta
 // número/fecha/asunto, fragmenta por páginas, indexa en el namespace AISLADO de
 // expedientes en Pinecone y persiste chunks + metadata. Estado: processing -> indexed/error.
-export async function processExpedienteDocument(expediente: ExpedienteArchivo, file: File) {
+export async function processExpedienteDocument(expediente: ExpedienteArchivo, file: File, prepared?: ExtractedPdfText) {
   const namespace = getExpedientesNamespace();
   let insertedVectorIds: string[] = [];
   let published = false;
@@ -262,7 +262,7 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     // el OCR es el camino normal aquí (no depende del flag global del corpus legal).
     // extractPdfTextCached reusa el OCR si este PDF ya se procesó (autocompletar,
     // indexado previo, reindex) en vez de volver a gastar gpt-4o.
-    const extracted = await extractPdfTextCached(file, { forceOcr: true });
+    const extracted = prepared ?? await extractPdfTextCached(file, { forceOcr: true });
     const text = extracted.text;
 
     if (text.length < minExtractedTextLength) {

@@ -9,6 +9,7 @@ import { z } from "zod";
 
 // ── Esquemas de consulta ──────────────────────────────────────────────────────
 export const expedienteSearchSchema = z.object({
+  documentId: z.string().uuid().optional(),
   query: z.string().trim().min(2, "Escribe al menos 2 caracteres").max(500),
   serieDocumento: z.string().trim().optional(),
   oficina: z.string().trim().max(200).optional(),
@@ -18,6 +19,7 @@ export const expedienteSearchSchema = z.object({
 });
 export type ExpedienteSearchInput = z.infer<typeof expedienteSearchSchema>;
 export const expedienteChatSchema = z.object({
+  documentId: z.string().uuid().optional(),
   query: z.string().trim().min(3, "Escribe una pregunta").max(800),
   anio: z.coerce.number().int().min(1900).max(2200).optional(),
   oficina: z.string().trim().max(200).optional(),

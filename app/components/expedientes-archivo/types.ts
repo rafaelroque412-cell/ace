@@ -94,7 +94,7 @@ export type ChatAnswer = {
 export type SearchMode = "buscar" | "preguntar";
 
 /** Tab principal del workspace */
-export type WorkspaceTab = "buscar" | "subir" | "responder";
+export type WorkspaceTab = "buscar" | "subir" | "responder" | "buscar-rag" | "subir-rag";
 
 /** Paso del wizard de subida (0..2) */
 export type WizardStep = 0 | 1 | 2;
