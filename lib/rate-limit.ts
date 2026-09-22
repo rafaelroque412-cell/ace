@@ -141,6 +141,14 @@ export const RATE_LIMITS = {
   list: { max: 60, windowMs: 60_000 },
   /** Subir PDF: costoso (storage + OCR) */
   upload: { max: 5, windowMs: 60_000 },
+  /** Subir RAG (carga masiva desde carpeta, Subir RAG): sin OCR síncrono —
+   *  el análisis se difiere a advanceRagDocument —, así que cada subida es
+   *  mucho más barata que una del wizard normal. Un lote real es de decenas o
+   *  cientos de archivos seguidos; con el límite de `upload` (5/min, pensado
+   *  para una persona subiendo un documento a la vez) los últimos del lote
+   *  fallaban en firme —el backoff de fetchRagRequest solo reintenta 2 veces—
+   *  en vez de solo ir más lento. */
+  uploadBulk: { max: 60, windowMs: 60_000 },
   /** Bulk operations: requiere queries */
   bulk: { max: 5, windowMs: 60_000 },
   /** Export: lectura pero pesado */

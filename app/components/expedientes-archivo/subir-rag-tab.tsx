@@ -28,7 +28,20 @@ export function SubirRagTab({ oficina }: { oficina: string | null }) {
   function choose(files: FileList | null) {
     const all = Array.from(files ?? []);
     const pdfs = all.filter(f => /\.pdf$/i.test(f.name));
-    setEntries(pdfs.map(file => ({ file, data: parseRagPath(file.webkitRelativePath || file.name), selected: file.size <= maxPdfSizeBytes, state: file.size > maxPdfSizeBytes ? "Supera el límite de tamaño" : "Por revisar", saved: false })));
+    // Si vuelves a seleccionar la MISMA carpeta (para reintentar los que
+    // fallaron en un lote parcial), los que ya se guardaron conservan su
+    // estado en vez de reconstruirse en blanco: si no, reintentar los que
+    // fallaron también resucitaba a los que ya estaban guardados, listos para
+    // subirse (y gastar OCR) otra vez.
+    setEntries(prev => {
+      const previouslySaved = new Map(prev.filter(e => e.saved).map(e => [e.data.path, e]));
+      return pdfs.map(file => {
+        const data = parseRagPath(file.webkitRelativePath || file.name);
+        const anterior = previouslySaved.get(data.path);
+        if (anterior) return { ...anterior, file, data };
+        return { file, data, selected: file.size <= maxPdfSizeBytes, state: file.size > maxPdfSizeBytes ? "Supera el límite de tamaño" : "Por revisar", saved: false };
+      });
+    });
     setReviewed(false);
     setNotice(`${pdfs.length} PDF encontrados. ${all.length - pdfs.length} archivos de otros formatos omitidos.`);
   }

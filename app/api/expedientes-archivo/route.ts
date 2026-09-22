@@ -168,15 +168,19 @@ export async function POST(request: Request) {
       return auth.error;
     }
 
+    const formData = await request.formData();
+    // Subir RAG manda `relativePath` (la subida normal nunca lo hace): un lote
+    // de carga masiva usa el límite generoso de `uploadBulk`, no el de `upload`
+    // pensado para una persona subiendo un documento a la vez.
+    const relativePath = formText(formData, "relativePath", 1000);
     const rl = checkRateLimit(
-      getRateLimitKey(request, auth.user.id, "upload"),
-      RATE_LIMITS.upload,
+      getRateLimitKey(request, auth.user.id, relativePath ? "upload-rag" : "upload"),
+      relativePath ? RATE_LIMITS.uploadBulk : RATE_LIMITS.upload,
     );
     if (!rl.allowed) {
       return rateLimitResponse(rl);
     }
 
-    const formData = await request.formData();
     const file = await readArchivoFile(formData, auth.user.id);
 
     if (!(file instanceof File)) {
@@ -189,7 +193,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `El PDF supera el limite de ${maxPdfSizeLabel}` }, { status: 400 });
     }
 
-    const relativePath = formText(formData, "relativePath", 1000);
     const rag = relativePath ? parseRagPath(relativePath) : null;
     let contentHash: string | undefined;
     if (rag) {
