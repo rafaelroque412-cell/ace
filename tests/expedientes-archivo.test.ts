@@ -98,6 +98,15 @@ describe("extractSerieDocumental", () => {
       anio: 2026,
     });
   });
+
+  it("tolera un punto pegado al simbolo de grado (\"N°.\"), no solo antes", () => {
+    // Cabecera real de Challhuahuacho: sin el `\.?` tras [°ºª], esta serie no
+    // matcheaba y la deteccion se colaba desde otra mencion del documento
+    // (p. ej. la de "REF.") en vez de la propia.
+    expect(
+      extractSerieDocumental("INFORME N°. 0849-2026-OP-OGPP/MDCH/MAH\n\nA : ...")?.serie,
+    ).toBe("INFORME N°. 0849-2026-OP-OGPP/MDCH/MAH");
+  });
 });
 
 describe("extractAsunto", () => {
@@ -123,6 +132,10 @@ describe("extractFecha", () => {
 
   it("reconoce fecha numerica dd/mm/yyyy", () => {
     expect(extractFecha("Emitido el 03/02/2023.")).toBe("2023-02-03");
+  });
+
+  it("reconoce fecha textual sin el \"de\" entre dia y mes (plantilla de Challhuahuacho)", () => {
+    expect(extractFecha("Challhuahuacho,17 setiembre del 2026")).toBe("2026-09-17");
   });
 
   it("devuelve null si no hay fecha valida", () => {

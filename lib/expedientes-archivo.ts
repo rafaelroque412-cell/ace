@@ -202,10 +202,15 @@ function normalizeForMatch(text: string) {
 
 // Detecta la fecha de emisión: "15 de enero de 2024" (con/sin tildes) o dd/mm/yyyy.
 // Devuelve ISO (YYYY-MM-DD) o null.
+//
+// El "de" entre el día y el mes es OPCIONAL: la plantilla municipal de
+// Challhuahuacho firma "Challhuahuacho,17 setiembre del 2026" (sin "de" ahí,
+// solo "del" antes del año), y con el "de" obligatorio la fecha no se
+// detectaba nunca en esos documentos.
 export function extractFecha(text: string): string | null {
   const source = normalizeForMatch(text.slice(0, 6000));
 
-  const textual = source.match(/\b(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+|del\s+)?(\d{4})\b/);
+  const textual = source.match(/\b(\d{1,2})\s+(?:de\s+)?([a-z]+)\s+(?:de\s+|del\s+)?(\d{4})\b/);
   if (textual) {
     const day = Number.parseInt(textual[1], 10);
     const month = monthIndex[textual[2]];
@@ -288,10 +293,16 @@ const SERIE_TIPO_LABEL: Record<string, string> = {
 // HORIZONTALES entre separadores ([ \t], no \s): con \s, un punto final de
 // cabecera ("...RTC.") seguido de salto de línea se comía la primera palabra
 // de la línea siguiente (el "AL :" del destinatario) porque \s incluye \n.
+//
+// El `\.?` final (tras el símbolo °/º/ª) cubre "N°." —cabecera real vista en
+// Challhuahuacho ("INFORME N°. 0849-2026-...")—: antes el punto solo se
+// toleraba ANTES del símbolo de grado, nunca después, así que esa cabecera no
+// matcheaba y la serie se colaba desde otra mención del documento (p. ej. la
+// de "REF.") en vez de la propia.
 const seriePattern = new RegExp(
   "\\b(RESOLUCI[ÓO]N|DECRETO|ORDENANZA|INFORME|MEMOR[ÁA]NDUM|MEMORANDO|OFICIO|CARTA)" +
     "((?:\\s+[A-ZÁÉÍÓÚÑ]{2,}){0,5})" +
-    "\\s*N(?:RO|ro)?\\.?\\s*[°ºª]?\\s*" +
+    "\\s*N(?:RO|ro)?\\.?\\s*[°ºª]?\\.?\\s*" +
     "(\\d{1,6})\\s*[-–]\\s*(\\d{4})" +
     "((?:[ \\t]*[-/.][ \\t]*[A-ZÑ][A-ZÑ0-9]*(?:[-/.][A-ZÑ0-9]+)*)*)",
 );
