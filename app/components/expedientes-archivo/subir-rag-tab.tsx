@@ -49,8 +49,14 @@ export function SubirRagTab({ oficina }: { oficina: string | null }) {
     if (busy) return;
     const pending = entries.filter(e => e.selected && !e.saved);
     if (!pending.length) return;
-    if (pending.some(e => !e.data.type.trim() || !e.data.cabinet.trim() || !/^CP\d+$/i.test(e.data.cp) || (e.data.siaf && !/^\d+$/.test(e.data.siaf)))) {
-      setNotice("Revisa los datos: tipo y archivador son obligatorios; CP debe ser CP seguido de números y SIAF solo números."); return;
+    // Tipo, archivador y CP ya NO son obligatorios: solo se sube el PDF y el
+    // contenido queda disponible para buscar/preguntar en Buscar RAG/Buscar.
+    // Se valida el FORMATO únicamente de lo que sí se haya escrito (si hay CP,
+    // que se vea "CP1234"; si hay SIAF, solo números) para no rebotar en el
+    // backend por una entrada suelta cuando esos datos sí importan (p. ej.
+    // notas de pago con su código contable).
+    if (pending.some(e => (e.data.cp.trim() && !/^CP\d+$/i.test(e.data.cp)) || (e.data.siaf.trim() && !/^\d+$/.test(e.data.siaf)))) {
+      setNotice("Revisa los datos: si escribes CP debe verse como CP1234; SIAF solo números."); return;
     }
     setBusy(true); stop.current = false;
     try {
@@ -75,19 +81,19 @@ export function SubirRagTab({ oficina }: { oficina: string | null }) {
     } finally { setBusy(false); }
   }
   return <section className="space-y-5 p-5 text-exp-ink" aria-labelledby="rag-upload-title">
-    <div><h2 id="rag-upload-title" className="text-xl font-semibold">Subir RAG</h2><p className="mt-1 text-sm text-exp-muted">Selecciona la carpeta de tipo documental. Por ejemplo: NOTAS DE PAGO → archivador → expedientes PDF.</p></div>
+    <div><h2 id="rag-upload-title" className="text-xl font-semibold">Subir RAG</h2><p className="mt-1 text-sm text-exp-muted">Selecciona uno o varios PDF y súbelos. El contenido queda disponible para buscar y preguntar en Buscar RAG/Buscar. Los datos de tipo, archivador, CP y SIAF son opcionales — se detectan solos si vienen en el nombre del archivo (p. ej. carpetas de notas de pago), o los completas abajo si los tienes.</p></div>
     <label className="block rounded-xl border border-dashed border-exp-brand bg-exp-brand-soft p-5">
-      <span className="mb-2 block font-semibold">Seleccionar carpeta</span>
-      <input type="file" multiple disabled={busy} ref={el => { el?.setAttribute("webkitdirectory", ""); }} onChange={e => choose(e.target.files)} className="max-w-full text-sm" />
+      <span className="mb-2 block font-semibold">Seleccionar PDF</span>
+      <input type="file" multiple accept="application/pdf" disabled={busy} onChange={e => choose(e.target.files)} className="max-w-full text-sm" />
     </label>
-    <p className="text-sm text-exp-muted">La selección prepara una revisión; todavía no sube archivos. Mantén esta página abierta hasta que termine la subida. El código del archivador se conserva completo. La carga puede hacer pausas breves para respetar el límite del servidor.</p>
+    <p className="text-sm text-exp-muted">La selección prepara una revisión; todavía no sube archivos. Mantén esta página abierta hasta que termine la subida. La carga puede hacer pausas breves para respetar el límite del servidor.</p>
     <fieldset disabled={busy} className="grid gap-3 rounded-xl border border-exp-line p-4 md:grid-cols-3">
       <legend className="px-2 text-sm font-semibold">Ubicación común del lote (opcional)</legend>
       {([['local','Local'],['estante','Estante'],['piso','Piso']] as const).map(([key,label]) => <label key={key} className="text-sm">{label}<input className={control} value={location[key]} maxLength={60} onChange={e => setLocation({ ...location, [key]: e.target.value })} /></label>)}
     </fieldset>
     {entries.length > 0 && <>
       <p className="text-sm">{entries.length} PDF · {(entries.reduce((n,e) => n + e.file.size, 0) / 1_000_000).toFixed(1)} MB · {entries.filter(e => e.saved).length} guardados</p>
-      <div className="overflow-x-auto rounded-xl border border-exp-line"><table className="w-full text-left text-sm"><caption className="p-3 text-left">Revisa los datos obtenidos de los nombres. No se consideran datos confirmados por OCR.</caption><thead><tr>{["Incluir", "Archivo / estado", "Tipo", "Archivador", "CP", "SIAF", "Fecha", "Año"].map(h => <th key={h} className="p-3">{h}</th>)}</tr></thead><tbody>
+      <div className="overflow-x-auto rounded-xl border border-exp-line"><table className="w-full text-left text-sm"><caption className="p-3 text-left">Datos opcionales detectados de los nombres de archivo/carpeta (si venían); no son datos confirmados por OCR ni hace falta completarlos para subir.</caption><thead><tr>{["Incluir", "Archivo / estado", "Tipo (opcional)", "Archivador (opcional)", "CP (opcional)", "SIAF (opcional)", "Fecha (opcional)", "Año (opcional)"].map(h => <th key={h} className="p-3">{h}</th>)}</tr></thead><tbody>
         {entries.map((entry, i) => <tr key={entry.data.path} className="border-t border-exp-line"><td className="p-3"><input type="checkbox" aria-label={`Incluir ${entry.file.name}`} checked={entry.selected} disabled={busy || entry.saved || entry.file.size > maxPdfSizeBytes} onChange={e => patch(i, { selected: e.target.checked })} /></td><td className="min-w-64 p-3"><p>{entry.file.name}</p><p className="mt-1 text-xs text-exp-muted">{entry.state}</p></td>
           {(["type", "cabinet", "cp", "siaf", "date", "year"] as const).map(key => <td key={key} className="min-w-32 p-2"><input aria-label={`${key} de ${entry.file.name}`} className={control} disabled={busy || entry.saved} type={key === "date" ? "date" : "text"} value={entry.data[key]} maxLength={key === "type" || key === "cabinet" ? 60 : 30} onChange={e => { patch(i, { data: { ...entry.data, [key]: e.target.value } }); setReviewed(false); }} /></td>)}
         </tr>)}

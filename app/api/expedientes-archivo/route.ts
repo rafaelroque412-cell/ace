@@ -203,7 +203,10 @@ export async function POST(request: Request) {
       rag.siaf = formText(formData, "ragSiaf", 30) ?? rag.siaf;
       rag.date = formText(formData, "ragDate", 10) ?? rag.date;
       rag.year = String(formInt(formData, "anio") ?? rag.year);
-      if (!rag.type || !rag.cabinet || !/^CP\d+$/i.test(rag.cp) || (rag.siaf && !/^\d+$/.test(rag.siaf))) return NextResponse.json({ error: "Revisa tipo, archivador, CP y SIAF" }, { status: 400 });
+      // Tipo, archivador y CP ya no son obligatorios (Subir RAG simplificado a
+      // "solo sube el PDF"): se valida el FORMATO únicamente de lo que sí
+      // llegó con valor, no que exista.
+      if ((rag.cp && !/^CP\d+$/i.test(rag.cp)) || (rag.siaf && !/^\d+$/.test(rag.siaf))) return NextResponse.json({ error: "Si hay CP debe verse como CP1234; SIAF solo números" }, { status: 400 });
       contentHash = createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex");
       const [existing] = await supabaseRest<ExpedienteArchivo[]>(`expedientes_archivo?metadata->>contentHash=eq.${contentHash}&uploaded_by=eq.${restLiteral(auth.user.id)}&select=id&limit=1`);
       if (existing) return NextResponse.json({ expediente: existing, duplicate: true }, { status: 200 });
