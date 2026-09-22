@@ -1213,15 +1213,6 @@ export function SubirTabContent({
                   ))}
                 </select>
               </div>
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Estante{autoBadge("nroEstante")}</label>
-                <input
-                  value={form.nroEstante}
-                  onChange={(e) => setField("nroEstante", e.target.value)}
-                  placeholder="Ej. 3"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
             </div>
           </div>
         ) : null}
