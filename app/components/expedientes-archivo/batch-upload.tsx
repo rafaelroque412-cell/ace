@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -21,8 +21,11 @@ import {
 import { maxPdfSizeBytes, maxPdfSizeLabel } from "@/lib/upload-limits";
 import {
   autoFillFromPdf as autoFillFromPdfAction,
+  detectDuplicates as detectDuplicatesAction,
   uploadExpediente as uploadExpedienteAction,
 } from "@/lib/expedientes-archivo-actions";
+import { firmaDuplicados } from "./duplicados";
+import type { DuplicateMatch } from "./types";
 import type { LastUbicacion } from "./use-preferences";
 import {
   EXP_FIELD,
@@ -54,6 +57,10 @@ type BatchItem = {
   file: File;
   status: ItemStatus;
   error?: string;
+  // Posibles duplicados ya indexados (aviso no bloqueante) y la firma de la
+  // comprobación que los produjo (para no repetir la llamada al endpoint).
+  duplicates?: DuplicateMatch[];
+  dupSignature?: string;
   // Campos editables por fila
   title: string;
   sgdExpediente: string;
@@ -227,6 +234,46 @@ export function BatchUpload({
 
   const analyzing = items.some((it) => it.status === "analyzing");
   const uploadable = items.filter((it) => it.status === "ready" || it.status === "error");
+
+  // Detección de duplicados por fila, con firma + debounce (mismo criterio que
+  // el wizard individual, ver checkDuplicatesFor en el workspace). Con un solo
+  // mecanismo cubre los dos orígenes del dato: el análisis IA (la serie
+  // detectada cambia la firma) y la edición manual de SGD/serie en la tabla.
+  // Nunca bloquea la subida: es una ayuda para no indexar dos veces lo mismo.
+  useEffect(() => {
+    if (items.length === 0) return;
+    const timer = setTimeout(() => {
+      for (const it of items) {
+        if (it.status === "done" || it.status === "uploading") continue;
+        const sgd = it.sgdExpediente.trim();
+        const serie = it.serieDocumento.trim();
+        if (sgd.length < 3 && serie.length < 3) {
+          // Sin criterio suficiente: quitar un aviso viejo para que no mienta
+          // sobre un SGD/serie que el usuario ya borró o recortó.
+          if (it.duplicates && it.duplicates.length > 0) {
+            setItems((prev) =>
+              prev.map((p) => (p.id === it.id ? { ...p, duplicates: [], dupSignature: "" } : p)),
+            );
+          }
+          continue;
+        }
+        const firma = firmaDuplicados({ sgd, serie });
+        if (firma === it.dupSignature) continue;
+        // Se marca la firma ANTES de la llamada: sin esto, cada rerender durante
+        // la petición en curso re-dispararía la comprobación.
+        setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, dupSignature: firma } : p)));
+        void detectDuplicatesAction({ sgd: sgd || undefined, serie: serie || undefined })
+          .then(({ duplicates }) => {
+            setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, duplicates } : p)));
+          })
+          .catch(() => {
+            // La detección es una ayuda; nunca debe romper el lote.
+            setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, duplicates: [] } : p)));
+          });
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [items]);
 
   async function uploadAll() {
     if (running) return;
@@ -464,7 +511,8 @@ export function BatchUpload({
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id} className="border-t border-exp-line">
+                    <Fragment key={it.id}>
+                    <tr className="border-t border-exp-line">
                       <td className="max-w-[180px] px-2 py-1.5">
                         <span title={it.file.name} className="block overflow-hidden text-ellipsis whitespace-nowrap">
                           {it.file.name}
@@ -549,6 +597,32 @@ export function BatchUpload({
                         ) : null}
                       </td>
                     </tr>
+                    {it.duplicates && it.duplicates.length > 0 ? (
+                      <tr aria-label={`Posibles duplicados de ${it.file.name}`}>
+                        <td colSpan={8} className="border-t-0 px-2 pb-2.5 pt-0">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] border border-[rgba(234,179,8,0.4)] bg-[rgba(234,179,8,0.08)] px-2.5 py-1.5 text-xs text-[#92400e]">
+                            <AlertCircle size={13} className="shrink-0" />
+                            <strong className="font-semibold">
+                              Posible duplicado{it.duplicates.length === 1 ? "" : "s"} (
+                              {it.duplicates.length}):
+                            </strong>
+                            {it.duplicates.slice(0, 3).map((d) => (
+                              <span key={d.id}>
+                                {d.title}
+                                {d.anio ? ` · ${d.anio}` : ""} · {d.status}
+                              </span>
+                            ))}
+                            {it.duplicates.length > 3 ? (
+                              <span>+{it.duplicates.length - 3} más</span>
+                            ) : null}
+                            <span className="italic">
+                              Se subirá igual; quita la fila si es el mismo documento.
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

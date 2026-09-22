@@ -96,8 +96,8 @@ export type SearchMode = "buscar" | "preguntar";
 /** Tab principal del workspace */
 export type WorkspaceTab = "buscar" | "subir" | "responder";
 
-/** Paso del wizard de subida (0..3) */
-export type WizardStep = 0 | 1 | 2 | 3;
+/** Paso del wizard de subida (0..2) */
+export type WizardStep = 0 | 1 | 2;
 
 /** Filtro de status para la lista */
 export type StatusFilter = "todos" | "pendientes" | "indexados" | "error";

@@ -53,6 +53,7 @@ import type {
 } from "./types";
 import type { UbicacionSugerida } from "@/lib/expedientes-archivo-actions";
 import type { LastUbicacion } from "./use-preferences";
+import type { BorradorSubir } from "./borrador-subir";
 import { BatchUpload } from "./batch-upload";
 import { LegajoPicker } from "./legajo-picker";
 import { SkeletonList } from "./skeleton";
@@ -175,6 +176,13 @@ export type SubirTabContentProps = {
   lastUbicacion: LastUbicacion;
   setLastUbicacion: (u: LastUbicacion) => void;
 
+  // Borrador del wizard (localStorage): banner de recuperación arriba del todo
+  // y limpieza cuando el usuario cancela la subida a propósito.
+  borradorPendiente: BorradorSubir | null;
+  onRecuperarBorrador: () => void;
+  onDescartarBorrador: () => void;
+  onLimpiarBorrador: () => void;
+
   // Batch upload callback
   onUploaded: () => void;
 };
@@ -182,8 +190,7 @@ export type SubirTabContentProps = {
 const WIZARD_STEPS = [
   { id: 0, label: "Documento", hint: "Sube el PDF e identifica el documento" },
   { id: 1, label: "Contenido", hint: "Describe el contenido del expediente" },
-  { id: 2, label: "Persona", hint: "Quién lo presenta o solicita" },
-  { id: 3, label: "Ubicación", hint: "Dónde se encuentra en papel" },
+  { id: 2, label: "Ubicación", hint: "Dónde se encuentra en papel" },
 ] as const;
 
 /**
@@ -314,10 +321,54 @@ export function SubirTabContent({
   setAutoExtract,
   lastUbicacion,
   setLastUbicacion,
+  borradorPendiente,
+  onRecuperarBorrador,
+  onDescartarBorrador,
+  onLimpiarBorrador,
   onUploaded,
 }: SubirTabContentProps) {
   return canManage ? (
     <div className={cn("tw", EXP_TAB_CONTENT)}>
+      {/* Borrador sin terminar guardado en este navegador (TTL 24 h). Ámbar
+          deliberadamente más suave que el aviso de duplicados: no es un
+          problema, es una oportunidad de no repetir el trabajo. */}
+      {borradorPendiente ? (
+        <div
+          role="status"
+          className="mb-4 flex flex-col gap-2 rounded-[10px] border border-[rgba(234,179,8,0.4)] bg-[rgba(234,179,8,0.08)] p-3.5"
+        >
+          <div className="flex flex-wrap items-center gap-2 font-semibold text-[13px] text-[#92400e]">
+            <AlertCircle size={15} className="shrink-0" />
+            Borrador sin terminar · guardado a las{" "}
+            {new Date(borradorPendiente.savedAt).toLocaleTimeString("es-PE", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </div>
+          <span className={cn(EXP_HELP_TEXT, "mt-0")}>
+            Tienes una subida a medias guardada en este navegador
+            {borradorPendiente.fileName ? ` (PDF: ${borradorPendiente.fileName})` : ""}. El PDF
+            no se guarda: tendrás que volver a seleccionarlo.
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={expBtnClass("secondary", "small")}
+              onClick={onRecuperarBorrador}
+            >
+              <History size={13} /> Recuperar
+            </button>
+            <button
+              type="button"
+              className={expBtnClass("ghost", "small")}
+              onClick={onDescartarBorrador}
+            >
+              <X size={13} /> Descartar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Selector de modo: uno por uno vs por lotes */}
       {/* Estas SÍ son pestañas: cada una monta un panel completamente distinto
           (el formulario paso a paso o la carga por lotes). */}
@@ -1026,53 +1077,6 @@ export function SubirTabContent({
           <div className={EXP_FORM_SECTION}>
             <div className={EXP_FORM_SECTION_HEADER}>
               <h3 className={EXP_FORM_SECTION_TITLE}>
-                <Info size={16} /> Persona
-                <span className={EXP_FORM_SECTION_HINT}>
-                  Quién presenta o solicita este documento
-                </span>
-              </h3>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Tipo de persona</label>
-                <select
-                  value={form.personaTipo}
-                  onChange={(e) =>
-                    setField("personaTipo", e.target.value as SubirForm["personaTipo"])
-                  }
-                  className={EXP_FIELD_CONTROL}
-                >
-                  <option value="">— Sin persona —</option>
-                  <option value="natural">Persona natural</option>
-                  <option value="juridica">Persona jurídica</option>
-                </select>
-              </div>
-              <div className={EXP_FIELD}>
-                <label className={EXP_FIELD_LABEL}>Documento</label>
-                <input
-                  value={form.personaDocumento}
-                  onChange={(e) => setField("personaDocumento", e.target.value)}
-                  placeholder="DNI o RUC"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
-              <div className={cn(EXP_FIELD, "col-span-full")}>
-                <label className={EXP_FIELD_LABEL}>Nombre{autoBadge("personaNombre")}</label>
-                <input
-                  value={form.personaNombre}
-                  onChange={(e) => setField("personaNombre", e.target.value)}
-                  placeholder="Razón social o nombre completo"
-                  className={EXP_FIELD_CONTROL}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {wizardStep === 3 ? (
-          <div className={EXP_FORM_SECTION}>
-            <div className={EXP_FORM_SECTION_HEADER}>
-              <h3 className={EXP_FORM_SECTION_TITLE}>
                 <MapPin size={16} /> Ubicación física
                 <span className={EXP_FORM_SECTION_HINT}>
                   Dónde se encuentra el expediente en papel
@@ -1269,6 +1273,10 @@ export function SubirTabContent({
                     setSelectedLegajo(null);
                     lastDupSignatureRef.current = "";
                     setWizardStep(0);
+                    // Cancelar a propósito descarta también el borrador: si lo
+                    // conserváramos, el banner volvería a ofrecer lo que acaba
+                    // de decidir tirar.
+                    onLimpiarBorrador();
                     showToast("Subida cancelada", "info");
                   },
                 });
@@ -1277,7 +1285,7 @@ export function SubirTabContent({
               <X size={14} /> Cancelar
             </button>
           </div>
-          {wizardStep < 3 ? (
+          {wizardStep < WIZARD_STEPS.length - 1 ? (
             <div className="flex gap-2.5">
               {file && !extracting ? (
                 <button

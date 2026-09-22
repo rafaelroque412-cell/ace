@@ -67,6 +67,9 @@ import { cn } from "@/lib/utils";
 import { useToasts } from "./expedientes-archivo/use-toasts";
 import { useExpedienteSearch } from "./expedientes-archivo/use-expediente-search";
 import { useExpedientesPreferences } from "./expedientes-archivo/use-preferences";
+import { useBorradorSubir } from "./expedientes-archivo/use-borrador-subir";
+import { EMPTY_SUBIR_FORM, type BorradorSubir } from "./expedientes-archivo/borrador-subir";
+import { firmaDuplicados } from "./expedientes-archivo/duplicados";
 import { useDebouncedValue } from "@/app/hooks/use-debounced-value";
 import { useTheme } from "@/app/hooks/use-theme";
 import { useDensity } from "@/app/hooks/use-density";
@@ -135,31 +138,9 @@ function adjustCounts(c: ExpedienteCounts, exp: ExpedienteItem, delta: number): 
   return next;
 }
 
-const EMPTY_FORM: SubirForm = {
-  title: "",
-  sgdExpediente: "",
-  serieDocumento: "",
-  tipoDocumento: "",
-  tipoDocumentoCustom: "",
-  anio: "",
-  folio: "",
-  oficina: "",
-  materia: "",
-  asunto: "",
-  resumen: "",
-  observaciones: "",
-  personaTipo: "",
-  personaDocumento: "",
-  personaNombre: "",
-  tipoAlmacenamiento: "",
-  nroArchivador: "",
-  nroPaquete: "",
-  empastado: "",
-  colorArchivador: "",
-  nroEstante: "",
-  nroPiso: "",
-  nroLocal: "",
-};
+// El formulario vacío vive en borrador-subir.ts (compartido con la validación
+// de shape del borrador).
+const EMPTY_FORM: SubirForm = EMPTY_SUBIR_FORM;
 
 // La SERIE DOCUMENTAL se arma con el tipo de documento + el numero detectado
 // (ej. "Resolución 004-2024-MDCH-A"). El SGD NO se autocompleta: es el N° de
@@ -267,6 +248,7 @@ export function ExpedientesArchivoWorkspace({
   userOficina?: string | null;
 }) {
   const prefs = useExpedientesPreferences();
+  const borradorSubir = useBorradorSubir();
   const { stack: undoStack, push: pushUndo, execute: executeUndo, dismiss: dismissUndo } =
     useUndoStack();
   const { resolved: resolvedTheme, toggle: toggleTheme } = useTheme();
@@ -494,6 +476,20 @@ export function ExpedientesArchivoWorkspace({
     }, 4000);
     return () => clearInterval(timer);
   }, [hasRecentPending, refreshRecentUploads]);
+
+  // Auto-guardado del borrador del wizard (el debounce vive en el hook). Nunca
+  // durante la subida: si esta termina bien, el borrador se limpia explícito;
+  // si falla, el efecto vuelve a correr con uploading=false y lo reagenda.
+  useEffect(() => {
+    if (!canManage || uploading) return;
+    borradorSubir.programarGuardado({
+      form,
+      wizardStep,
+      legajo: selectedLegajo,
+      fileName: file?.name ?? null,
+      fileSize: file?.size ?? null,
+    });
+  }, [canManage, uploading, form, wizardStep, selectedLegajo, file, borradorSubir]);
 
   // Refs estables para evitar memory leak en el keyboard listener
   const tourOpenRef = useRef(tour.open);
@@ -728,11 +724,7 @@ export function ExpedientesArchivoWorkspace({
   const checkDuplicatesFor = useCallback(
     async (params: { title?: string; sgd?: string; serie?: string }) => {
       if (!params.title && !params.sgd && !params.serie) return;
-      // Clave por SGD/serie cuando los hay (así la comprobación al teclear y la de
-      // la extracción comparten firma y no se duplican); si no, por título.
-      const sgd = (params.sgd ?? "").trim();
-      const serie = (params.serie ?? "").trim();
-      const signature = sgd || serie ? `k:${sgd}|${serie}` : `t:${(params.title ?? "").trim()}`;
+      const signature = firmaDuplicados(params);
       if (signature === lastDupSignatureRef.current) return;
       lastDupSignatureRef.current = signature;
       setCheckingDuplicates(true);
@@ -958,6 +950,8 @@ export function ExpedientesArchivoWorkspace({
       lastDupSignatureRef.current = "";
       setWizardStep(0);
       setUploadProgress(0);
+      // La subida terminó: el borrador ya cumplió su función.
+      borradorSubir.limpiar();
       showToast(
         `Expediente "${uploadedTitle}" subido. Se está procesando con OCR e indexando.`,
         "success",
@@ -1361,6 +1355,24 @@ export function ExpedientesArchivoWorkspace({
 
   // Punto único de entrada al cargar un PDF (selección o drag&drop): valida,
   // precarga la última ubicación y, si está activo, lo analiza con IA al instante.
+  // Aplica el borrador guardado: form (fusionado sobre baseForm para que un
+  // campo nuevo de SubirForm quede con su default y no en undefined), paso del
+  // wizard y legajo. El PDF hay que recargarlo: un File no es serializable.
+  function recuperarBorradorSubir() {
+    const b: BorradorSubir | null = borradorSubir.borrador;
+    if (!b) return;
+    setForm({ ...baseForm, ...b.form });
+    setWizardStep(b.wizardStep);
+    setSelectedLegajo(b.legajo);
+    borradorSubir.recuperar();
+    showToast(
+      b.fileName
+        ? `Borrador recuperado. Vuelve a cargar el PDF (era "${b.fileName}"${b.fileSize ? `, ${formatBytes(b.fileSize)}` : ""}).`
+        : "Borrador recuperado.",
+      "info",
+    );
+  }
+
   function handleNewFile(f: File | null) {
     if (!f) return;
     if (f.type !== "application/pdf") {
@@ -1673,6 +1685,10 @@ export function ExpedientesArchivoWorkspace({
           setAutoExtract={prefs.setAutoExtract}
           lastUbicacion={prefs.lastUbicacion}
           setLastUbicacion={prefs.setLastUbicacion}
+          borradorPendiente={borradorSubir.borrador}
+          onRecuperarBorrador={recuperarBorradorSubir}
+          onDescartarBorrador={borradorSubir.descartar}
+          onLimpiarBorrador={borradorSubir.limpiar}
           onUploaded={() => { void Promise.all([loadExpedientes(), refreshRecentUploads()]); }}
         />
       ) : null}
