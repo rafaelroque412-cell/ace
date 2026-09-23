@@ -113,6 +113,15 @@ function buildUbicacion(exp?: ExpRow): { ubicacion: ExpedienteUbicacion; resumen
   return { ubicacion, resumen: resumen || "Ubicación física no registrada" };
 }
 
+// Códigos EXACTOS mencionados en la consulta (3+ dígitos seguidos — "2956" en
+// "busca el comprobante de pago nro 2956"). Sirve para el refinamiento de
+// abajo: la búsqueda semántica sola no distingue bien documentos casi
+// idénticos en forma (mismo formato de comprobante, mismo módulo SIAF) que
+// solo cambian en el número.
+export function extractExactCodes(query: string): string[] {
+  return Array.from(new Set(query.match(/\d{3,}/g) ?? []));
+}
+
 // `uploadedBy` (scope "own"): limita los resultados a los expedientes subidos
 // por ese usuario. Se aplica como post-filtro contra la fila de la BD; los hits
 // cuyo expediente no se puede verificar se descartan.
@@ -218,6 +227,28 @@ export async function searchExpedientes(
       ubicacion,
       ubicacionResumen: resumen,
     });
+  }
+
+  // Refinamiento por código exacto: si la consulta menciona un número de 3+
+  // cifras y ALGÚN resultado lo trae literal en su título o serie documental,
+  // se descartan los que no lo traen. Documentos como los comprobantes de
+  // pago son casi idénticos entre sí salvo por ese número, así que el vector
+  // trae de vuelta varios "parecidos" con OTRO número en vez de aislar el que
+  // se pidió — "comprobante de pago nro 2956" mostraba el 2956 enterrado
+  // entre el 2955, 2966 y 2967. Solo actúa si hay al menos un match exacto:
+  // una consulta sin código, o cuyo código no aparece en ningún resultado,
+  // sigue el orden semántico normal sin tocar nada.
+  const exactCodes = extractExactCodes(input.query);
+  if (exactCodes.length > 0) {
+    const exactMatches = results.filter((r) =>
+      exactCodes.some(
+        (code) =>
+          (r.title ?? "").includes(code) ||
+          (r.serieDocumento ?? "").includes(code) ||
+          (r.sgdExpediente ?? "").includes(code),
+      ),
+    );
+    if (exactMatches.length > 0) return exactMatches;
   }
 
   return results;
