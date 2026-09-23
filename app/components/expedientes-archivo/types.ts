@@ -88,6 +88,8 @@ export type ChatAnswer = {
   answer: string;
   sufficient: boolean;
   sources: SearchResult[];
+  /** Avisos de la verificación de fidelidad de citas, si alguna cita [E#] no se sustenta en su fragmento. */
+  warnings?: string[];
 };
 
 /** Sub-modo de búsqueda en la pestaña "Buscar" */
@@ -208,7 +210,6 @@ export type PdfInventory = {
   ocrPartial?: boolean;
   analysisPartial?: boolean;
   numeroExpediente?: string | null;
-  numeroDocumento?: string | null;
   // Denominación oficial literal del documento (ej. "RESOLUCIÓN DE ALCALDÍA N° 004-2024-MDCH-A").
   serieDocumental?: string | null;
   fecha?: string | null;
@@ -296,6 +297,6 @@ export type ChatPanelProps = {
   onClose: () => void;
   onAsk: (text: string) => void | Promise<void>;
   searching: boolean;
-  messages: { role: "user" | "ai"; text: string; sources?: SearchResult[] }[];
+  messages: { role: "user" | "ai"; text: string; sources?: SearchResult[]; warnings?: string[] }[];
   onOpenExpediente: (id: string) => void;
 };

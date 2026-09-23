@@ -4,7 +4,7 @@ import { useState } from "react";
 import { chatWithExpedientes, searchExpedientes } from "@/lib/expedientes-archivo-actions";
 import type { ChatAnswer, SearchMode, SearchResult } from "./types";
 
-export type ChatMessage = { role: "user" | "ai"; text: string; sources?: SearchResult[] };
+export type ChatMessage = { role: "user" | "ai"; text: string; sources?: SearchResult[]; warnings?: string[] };
 
 // Estado y acciones de la pestaña Buscar (búsqueda vectorial + consulta a la IA)
 // y del panel de chat. Extraído del workspace para separar la búsqueda de la
@@ -55,7 +55,7 @@ export function useExpedienteSearch(showToast: (message: string, kind?: "success
         setChatMessages((prev) => [
           ...prev,
           { role: "user", text: query.trim() },
-          { role: "ai", text: data.answer, sources: data.sources },
+          { role: "ai", text: data.answer, sources: data.sources, warnings: data.warnings },
         ]);
       }
     } catch (err) {
@@ -81,7 +81,7 @@ export function useExpedienteSearch(showToast: (message: string, kind?: "success
     setSearching(true);
     try {
       const data = await chatWithExpedientes(text);
-      setChatMessages((prev) => [...prev, { role: "ai", text: data.answer, sources: data.sources }]);
+      setChatMessages((prev) => [...prev, { role: "ai", text: data.answer, sources: data.sources, warnings: data.warnings }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al consultar.";
       setChatMessages((prev) => [...prev, { role: "ai", text: msg }]);

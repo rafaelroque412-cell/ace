@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, FilePlus2 } from "lucide-react";
 import {
   DOC_TIPOS,
   exportRespuestaDocx,
@@ -362,6 +362,33 @@ export function RespuestaPanel({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // "Nueva respuesta": única forma de limpiar el editor a propósito. Sin esto
+  // no había manera de descartar un borrador sin guardarlo — y el borrador de
+  // localStorage resucitaba solo al volver a abrir la pestaña, incluso
+  // después de haber archivado la respuesta (ver el comentario en
+  // BorradorGuardado sobre el correlativo). Pide confirmación solo si hay
+  // algo que se perdería; lo ya guardado sigue intacto en el historial.
+  function handleNueva() {
+    const ejecutar = () => {
+      state.reset();
+      setResult(null);
+    };
+    const hayContenido = Boolean(
+      state.cuerpo.trim() || state.documentoTexto.trim() || state.intencion.trim(),
+    );
+    if (!hayContenido) {
+      ejecutar();
+      return;
+    }
+    setConfirmSave({
+      title: "¿Empezar una respuesta nueva?",
+      message:
+        "Se borra lo que hay en el editor y el documento recibido cargado. Si ya guardaste esta respuesta, queda intacta en el historial de abajo — esto solo limpia lo que ves en pantalla.",
+      confirmLabel: "Empezar de nuevo",
+      onConfirm: ejecutar,
+    });
+  }
+
   // Guía visual para usuarios no técnicos: en qué paso del flujo están.
   // Cada chip lleva a su sección al hacer clic.
   const pasos: Array<{ label: string; done: boolean; anchor: string; ready: boolean }> = [
@@ -431,6 +458,15 @@ export function RespuestaPanel({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={handleNueva}
+          title="Limpia el editor y el documento recibido cargado (lo ya guardado no se toca)"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-exp-line bg-exp-panel px-3 py-1 text-xs font-medium text-exp-muted transition-colors duration-[120ms] ease-linear hover:border-exp-brand hover:text-exp-brand"
+        >
+          <FilePlus2 size={13} />
+          Nueva respuesta
+        </button>
       </div>
 
       <ResumenTecnicoBanner

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { normalizeEntity } from "./entity-utils";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
 import { estimateCostUsd, roundCostUsd } from "./openai-cost";
+import { embedTexts } from "./embeddings";
 import { supabaseRest, writeAuditLog } from "./supabase-server";
 import {
   type PineconeRecord,
@@ -382,6 +383,18 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     }));
     insertedVectorIds = records.map((record) => record._id);
 
+    // Embeddings para pgvector (ver docs/supabase/expedientes-archivo-
+    // pgvector.sql), del MISMO texto enriquecido que se manda a Pinecone
+    // (records[].text: incluye asunto/materia/serie, no solo el chunk pelado),
+    // para que la calidad de la búsqueda no cambie al pasar de un índice a
+    // otro. Pinecone sigue escribiéndose en paralelo mientras se confirma que
+    // esta migración funciona bien en producción — ver la nota en el .sql.
+    const chunkEmbeddings = await embedTexts(records.map((record) => record.text));
+    const insertedChunksConEmbedding = insertedChunks.map((chunk, index) => ({
+      ...chunk,
+      embedding: chunkEmbeddings[index] ?? null,
+    }));
+
     const upsert = await upsertTextRecords(records, namespace);
     const verification = await verifyDocumentIndexedInPinecone({
       documentId: expediente.id,
@@ -430,7 +443,12 @@ export async function processExpedienteDocument(expediente: ExpedienteArchivo, f
     publicationAttempted = true;
     const result = await supabaseRest<{ oldVectorIds: string[] }>("rpc/archivo_publicar_indice", {
       method: "POST",
-      body: JSON.stringify({ p_id: expediente.id, p_base: expediente.updated_at, p_chunks: insertedChunks, p_patch: patch }),
+      body: JSON.stringify({
+        p_id: expediente.id,
+        p_base: expediente.updated_at,
+        p_chunks: insertedChunksConEmbedding,
+        p_patch: patch,
+      }),
     });
     published = true;
     await deleteRecords(result.oldVectorIds, namespace).catch((error) => console.error("[archivo] limpieza de índice anterior", error));
@@ -468,7 +486,6 @@ export type ExpedienteInventory = {
   ocrPartial?: boolean;
   analysisPartial?: boolean;
   numeroExpediente: string | null;
-  numeroDocumento: string | null;
   serieDocumental: string | null;
   fecha: string | null;
   anio: number | null;
@@ -490,7 +507,6 @@ export async function extractExpedienteInventory(
 ): Promise<ExpedienteInventory> {
   const inventory: ExpedienteInventory = {
     numeroExpediente: null,
-    numeroDocumento: null,
     serieDocumental: null,
     fecha: null,
     anio: null,

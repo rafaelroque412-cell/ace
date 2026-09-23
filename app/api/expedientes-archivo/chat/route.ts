@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       ...payload.data,
       oficina: scope === "oficina" ? getOfficeFilter(auth.user) ?? undefined : payload.data.oficina,
       uploadedBy: scope === "own" ? auth.user.id : undefined,
+      accessToken: auth.user.accessToken,
     });
 
     const usage = result.usage;

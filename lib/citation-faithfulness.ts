@@ -59,21 +59,32 @@ function extractSpecificData(claim: string): Array<{ raw: string; digits: string
 
 // Revisa que los datos especificos de cada afirmacion citada existan en alguno de
 // los fragmentos que cita. `sources` se indexa por [F#] (1-based).
+//
+// `markerLetter`: la letra del marcador de cita ("F" del chat legal, "E" de
+// "Preguntar a la IA" en expedientes-archivo — cada modulo cita distinto,
+// pero la logica de fidelidad es la misma). Por defecto "F" para no romper a
+// legal-chat.ts, el primer consumidor.
 export function checkCitationFaithfulness(
   answer: string,
   sources: Array<{ excerpt?: string | null }>,
+  markerLetter: string = "F",
 ): FaithfulnessResult {
   const issues: FaithfulnessIssue[] = [];
   let checked = 0;
 
-  // Divide la respuesta en segmentos por grupos de marcadores [F#], tolerando
-  // separadores entre marcadores ("[F1], [F2]" cuenta como un solo grupo).
-  const parts = answer.split(/((?:\s*,?\s*\[F\d+\])+)/g).filter(Boolean);
+  // Divide la respuesta en segmentos por grupos de marcadores [F#]/[E#],
+  // tolerando separadores entre marcadores ("[F1], [F2]" cuenta como un solo
+  // grupo).
+  const markerGroup = new RegExp(`((?:\\s*,?\\s*\\[${markerLetter}\\d+\\])+)`, "g");
+  const markerOne = new RegExp(`\\[${markerLetter}(\\d+)\\]`, "g");
+  const parts = answer.split(markerGroup).filter(Boolean);
 
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index];
-    const markerMatches = [...part.matchAll(/\[F(\d+)\]/g)];
-    const isMarkerGroup = markerMatches.length > 0 && part.replace(/[\s,]|\[F\d+\]/g, "") === "";
+    const markerMatches = [...part.matchAll(markerOne)];
+    const isMarkerGroup =
+      markerMatches.length > 0 &&
+      part.replace(new RegExp(`[\\s,]|\\[${markerLetter}\\d+\\]`, "g"), "") === "";
     if (!isMarkerGroup) {
       continue;
     }
@@ -98,7 +109,7 @@ export function checkCitationFaithfulness(
           datum: datum.raw,
           markers,
           reason: `El dato "${datum.raw}" no aparece en el/los fragmento(s) citado(s) ${markers
-            .map((m) => `F${m}`)
+            .map((m) => `${markerLetter}${m}`)
             .join(", ")}.`,
         });
       }

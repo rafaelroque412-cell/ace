@@ -110,6 +110,11 @@ export const ChatPanel = memo(function ChatPanel({ query, onClose, onAsk, search
                     )}
                   >
                     <p className="m-0">{m.text}</p>
+                    {m.warnings && m.warnings.length > 0 ? (
+                      <p className="m-0 mt-2 rounded-lg border-l-[3px] border-l-exp-warning bg-exp-warning-soft px-2.5 py-1.5 text-xs text-[#78350f]">
+                        {m.warnings.join(" ")}
+                      </p>
+                    ) : null}
                     {m.sources && m.sources.length > 0 ? (
                       <div className="mt-2.5 flex flex-col gap-1.5">
                         {m.sources.map((s, j) => (

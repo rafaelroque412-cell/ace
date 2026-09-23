@@ -467,6 +467,12 @@ export function BuscarTabContent({
             </div>
           </div>
           <p className="m-0 mb-3 whitespace-pre-wrap text-sm leading-relaxed text-exp-ink">{answer.answer}</p>
+          {answer.warnings && answer.warnings.length > 0 ? (
+            <div className={cn(expMessageClass("warning"), "mb-3")} role="alert">
+              <AlertCircle size={14} />
+              <span>{answer.warnings.join(" ")}</span>
+            </div>
+          ) : null}
           {answer.sources.length > 0 ? (
             <div className="flex flex-col gap-1.5 border-t border-exp-brand/15 pt-3">
               <p className="m-0 mb-1 text-[11px] font-bold uppercase tracking-[0.5px] text-exp-muted">

@@ -47,6 +47,14 @@ type BorradorGuardado = {
   length: "concisa" | "media" | "detallada";
   // Ciudad del encabezado "Lugar, dd de mes de año" (modelo oficial peruano).
   lugar: string;
+  // Número de documento YA asignado (si lo hay) y si quedó asignado. Antes NO
+  // se guardaban: el borrador restaurado traía el cuerpo de una respuesta ya
+  // archivada pero con nroAsignado en false (valor inicial del estado), así
+  // que "Guardar" la confundía con una respuesta nueva y pedía otro
+  // correlativo — un número de serie municipal que "no se puede deshacer ni
+  // reutilizar" (ver saveRespuesta en respuesta-panel.tsx).
+  nroOficio: string;
+  nroAsignado: boolean;
   // REF.: numero del documento anterior al que se responde (opcional).
   referencia: string;
   remitenteDoc: string;
@@ -158,6 +166,8 @@ export function useRespuestaState() {
         intencion,
         length,
         lugar,
+        nroOficio,
+        nroAsignado,
         referencia,
         remitenteDoc,
         savedAt: Date.now(),
@@ -186,6 +196,8 @@ export function useRespuestaState() {
     intencion,
     length,
     lugar,
+    nroOficio,
+    nroAsignado,
     referencia,
     remitenteDoc,
     tipoDocumento,
@@ -209,6 +221,11 @@ export function useRespuestaState() {
       if (data.intencion) setIntencion(data.intencion);
       if (data.length) setLength(data.length);
       if (data.lugar) setLugar(data.lugar);
+      // El correlativo ya asignado se restaura JUNTO con el cuerpo: si no,
+      // "Guardar" trataba una respuesta ya archivada como nueva y pedía otro
+      // número (ver el comentario en BorradorGuardado).
+      if (data.nroOficio) setNroOficio(data.nroOficio);
+      if (data.nroAsignado) setNroAsignado(data.nroAsignado);
       if (data.referencia) setReferencia(data.referencia);
       if (data.remitenteDoc) setRemitenteDoc(data.remitenteDoc);
       if (data.tipoDocumento) setTipoDocumento(data.tipoDocumento);

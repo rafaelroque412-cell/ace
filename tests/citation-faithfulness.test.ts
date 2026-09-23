@@ -51,4 +51,20 @@ describe("checkCitationFaithfulness", () => {
     const r = checkCitationFaithfulness("Hay un tope de 8 UIT en general.", [{ excerpt: "x" }]);
     expect(r.checked).toBe(0);
   });
+
+  it("acepta otra letra de marcador (expedientes-archivo cita con [E#], no [F#])", () => {
+    const answer = "Se pagó el 8% de adelanto [E1].";
+    const sources = [{ excerpt: "Se otorgó un adelanto del 8% del monto contractual." }];
+    const r = checkCitationFaithfulness(answer, sources, "E");
+    expect(r.ok).toBe(true);
+    expect(r.checked).toBe(1);
+  });
+
+  it("con otra letra de marcador, tambien detecta la misatribucion", () => {
+    const answer = "El adelanto fue del 8% [E1].";
+    const sources = [{ excerpt: "El expediente no menciona ningún porcentaje de adelanto." }];
+    const r = checkCitationFaithfulness(answer, sources, "E");
+    expect(r.ok).toBe(false);
+    expect(r.issues[0].reason).toContain("E1");
+  });
 });

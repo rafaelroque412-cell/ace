@@ -1,4 +1,5 @@
-import { embeddingDimensions, embeddingModel, embeddingProvider, embedWithGoogle, getEmbeddingClient } from "./openai-server";
+import { embeddingDimensions } from "./openai-server";
+import { embedTexts } from "./embeddings";
 
 type PineconeIndexInfo = {
   host: string;
@@ -183,46 +184,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-const maxEmbeddingBatchSize = 96;
-
-// Calcula embeddings con OpenAI (reemplaza el modelo integrado de Pinecone para no
-// depender de su cuota mensual de tokens). Devuelve un vector por texto, en orden.
-async function embedTexts(texts: string[]): Promise<number[][]> {
-  if (texts.length === 0) {
-    return [];
-  }
-
-  // El proveedor se elige con EMBEDDING_PROVIDER. Con `google` se usa Gemini a
-  // 1536 dimensiones, que es la del índice. Ver el aviso de embeddingProvider en
-  // openai-server: cambiar de proveedor obliga a reindexar, porque los espacios
-  // vectoriales no son intercambiables aunque coincida la dimensión.
-  if (embeddingProvider === "google") {
-    const vectores: number[][] = [];
-    for (let start = 0; start < texts.length; start += maxEmbeddingBatchSize) {
-      const batch = texts.slice(start, start + maxEmbeddingBatchSize).map((text) => text.slice(0, 8000));
-      vectores.push(...(await embedWithGoogle(batch, embeddingDimensions)));
-    }
-    return vectores;
-  }
-
-  const client = getEmbeddingClient();
-  const vectors: number[][] = [];
-
-  for (let start = 0; start < texts.length; start += maxEmbeddingBatchSize) {
-    const batch = texts.slice(start, start + maxEmbeddingBatchSize).map((text) => text.slice(0, 8000));
-    const response = await client.embeddings.create({
-      model: embeddingModel,
-      input: batch,
-      dimensions: embeddingDimensions,
-    });
-    for (const item of response.data) {
-      vectors.push(item.embedding as number[]);
-    }
-  }
-
-  return vectors;
 }
 
 // Metadata de Pinecone: solo campos definidos (Pinecone rechaza null/undefined) y

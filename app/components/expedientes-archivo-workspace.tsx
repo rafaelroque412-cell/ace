@@ -979,6 +979,33 @@ export function ExpedientesArchivoWorkspace({
     }
   }
 
+  // Reindexado AUTOMÁTICO de lo subido recientemente: antes había que hacer
+  // clic a mano en "Reindexar" para un expediente en error, o esperar al
+  // drainer programado —en Vercel Hobby corre una vez al día, no hay cron más
+  // frecuente— si se quedaba atascado en "uploaded"/"processing" (el `after()`
+  // de la subida murió a mitad, p. ej. por timeout). Ahora la pestaña Subir lo
+  // intenta sola, una vez por expediente (autoReindexedRef evita reintentar en
+  // bucle si vuelve a fallar — para eso sigue estando el botón manual).
+  //
+  // El umbral de 90s antes de tocar un "uploaded"/"processing" es a propósito
+  // más holgado que EXPEDIENTES_CLAIM_SECONDS (120s, el que usa el propio
+  // drainer del servidor): no queremos reindexar por encima de un
+  // procesamiento que todavía está genuinamente en curso.
+  const autoReindexedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const exp of recentUploads) {
+      if (autoReindexedRef.current.has(exp.id) || reindexingId === exp.id) continue;
+      const stuckMs = Date.now() - new Date(exp.created_at).getTime();
+      const enError = exp.status === "error";
+      const atascado = (exp.status === "uploaded" || exp.status === "processing") && stuckMs > 90_000;
+      if (enError || atascado) {
+        autoReindexedRef.current.add(exp.id);
+        void reindexExpediente(exp.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentUploads, reindexingId]);
+
   async function deleteExpediente(exp: ExpedienteItem) {
     showConfirm({
       title: `¿Eliminar "${exp.title}"?`,

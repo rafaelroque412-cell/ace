@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExpedienteArchivo } from "../lib/expedientes-archivo";
-const mocks = vi.hoisted(() => ({ rest: vi.fn(), extract: vi.fn(), ai: vi.fn(), upsert: vi.fn(), verify: vi.fn(), remove: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rest: vi.fn(), extract: vi.fn(), ai: vi.fn(), upsert: vi.fn(), verify: vi.fn(), remove: vi.fn(), embed: vi.fn() }));
 vi.mock("../lib/supabase-server", () => ({ supabaseRest: mocks.rest, writeAuditLog: async () => undefined }));
 vi.mock("../lib/openai-server", () => ({ legalAnswerModel: "test", getOpenAIClient: () => ({ responses: { create: mocks.ai } }) }));
 vi.mock("../lib/pdf-processing", () => ({ extractPdfText: mocks.extract, chunkPages: () => [{ index: 0, content: "contenido ".repeat(40), pageStart: 1, pageEnd: 1 }] }));
 vi.mock("../lib/pinecone", () => ({ upsertTextRecords: mocks.upsert, verifyDocumentIndexedInPinecone: mocks.verify, deleteRecords: mocks.remove }));
+// Embeddings para pgvector (lib/expedientes-archivo-vectors, ver docs/supabase/
+// expedientes-archivo-pgvector.sql): se mockea aparte, igual que Pinecone, para
+// no depender de una API real de embeddings en el test.
+vi.mock("../lib/embeddings", () => ({ embedTexts: mocks.embed }));
 import { extractExpedienteInventory, processExpedienteDocument } from "../lib/expedientes-archivo-processing";
 
 const expediente = { id: "00000000-0000-4000-8000-000000000001", expediente_id: "00000000-0000-4000-8000-000000000002", title: "Prueba", metadata: {}, status: "indexed", updated_at: "2026-09-18T00:00:00Z" } as ExpedienteArchivo;
@@ -17,6 +21,7 @@ beforeEach(() => {
   mocks.upsert.mockResolvedValue({ upserted: 1 });
   mocks.verify.mockResolvedValue({ verified: true });
   mocks.remove.mockResolvedValue(undefined);
+  mocks.embed.mockImplementation(async (texts: string[]) => texts.map(() => [0.1, 0.2, 0.3]));
 });
 describe("autocompletado honesto", () => {
   it("limita el OCR inicial y no guarda esa lectura abreviada en la caché del índice", async () => {

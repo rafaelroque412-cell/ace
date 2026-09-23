@@ -1,6 +1,8 @@
 import { normalizeEntity } from "./entity-utils";
 import { getOpenAIClient, legalAnswerModel } from "./openai-server";
+import { checkCitationFaithfulness } from "./citation-faithfulness";
 import { type SearchFilters, searchTextRecords } from "./pinecone";
+import { buscarVecinosPgvector } from "./expedientes-archivo-vectors";
 import { supabaseRest } from "./supabase-server";
 import { contenedorTipoLabel, getExpedientesNamespace } from "./expedientes-archivo";
 import { type ExpedienteChatInput, type ExpedienteSearchInput } from "./expedientes-archivo-schema";
@@ -125,8 +127,15 @@ export function extractExactCodes(query: string): string[] {
 // `uploadedBy` (scope "own"): limita los resultados a los expedientes subidos
 // por ese usuario. Se aplica como post-filtro contra la fila de la BD; los hits
 // cuyo expediente no se puede verificar se descartan.
+//
+// `accessToken`: si viene, se intenta PRIMERO la búsqueda nativa en pgvector
+// (buscarVecinosPgvector, scopeada por RLS — ver docs/supabase/expedientes-
+// archivo-pgvector.sql). Si la migración de SQL todavía no se aplicó, esa
+// función devuelve null y se cae a Pinecone sin que la búsqueda se rompa.
+// Sin `accessToken` (llamador viejo, o ninguno disponible) va directo a
+// Pinecone, como siempre.
 export async function searchExpedientes(
-  input: ExpedienteSearchInput & { uploadedBy?: string },
+  input: ExpedienteSearchInput & { uploadedBy?: string; accessToken?: string },
 ): Promise<ExpedienteSearchResult[]> {
   const namespace = getExpedientesNamespace();
   const filters: SearchFilters = {};
@@ -135,22 +144,45 @@ export async function searchExpedientes(
   const normalizedOficina = normalizeEntity(input.oficina);
   if (normalizedOficina) filters.sourceEntity = normalizedOficina;
   // Con filtros de metadata (oficina/materia/usuario) se traen más candidatos
-  // porque el filtrado se hace después de recuperar (no es nativo de Pinecone).
+  // porque el filtrado se hace después de recuperar (no es nativo de Pinecone
+  // ni de la función de pgvector, que solo filtra document_id/year).
   const hasMetaFilter = Boolean(input.oficina || input.materia || input.uploadedBy);
   const topK = input.topK ?? (hasMetaFilter ? 24 : 8);
   const oficinaFilter = input.oficina?.toLowerCase().trim() || null;
   const materiaFilter = input.materia?.toLowerCase().trim() || null;
 
-  const hits = await searchTextRecords(input.query, topK, filters, namespace);
+  const pgvectorHits = input.accessToken
+    ? await buscarVecinosPgvector(input.accessToken, input.query, topK, {
+        documentId: input.documentId,
+        year: input.anio,
+      })
+    : null;
+
+  // Normaliza al shape que ya esperaba el resto de la función (el de
+  // searchTextRecords/Pinecone): _id/_score + chunk_id/document_id. Los
+  // campos que solo vivían en metadata de Pinecone (document_number, title,
+  // topic) quedan ausentes — el código de abajo ya prefiere el dato de
+  // Supabase (`exp`) sobre el del hit en todos los casos que importan.
+  const hits: Array<Record<string, unknown>> = pgvectorHits
+    ? pgvectorHits.map((hit) => ({
+        _id: hit.chunkId,
+        _score: hit.score,
+        chunk_id: hit.chunkId,
+        chunk_index: hit.chunkIndex,
+        document_id: hit.documentoId,
+        page_end: hit.pageEnd ?? undefined,
+        page_start: hit.pageStart ?? undefined,
+      }))
+    : await searchTextRecords(input.query, topK, filters, namespace);
   if (hits.length === 0) {
     return [];
   }
 
   const chunkIds = Array.from(
-    new Set(hits.map((hit) => asString((hit as Record<string, unknown>).chunk_id)).filter(Boolean)),
+    new Set(hits.map((hit) => asString(hit.chunk_id)).filter(Boolean)),
   ) as string[];
   const expedienteIds = Array.from(
-    new Set(hits.map((hit) => asString((hit as Record<string, unknown>).document_id)).filter(Boolean)),
+    new Set(hits.map((hit) => asString(hit.document_id)).filter(Boolean)),
   ) as string[];
 
   const [chunkRows, expRows] = await Promise.all([
@@ -176,13 +208,18 @@ export async function searchExpedientes(
     if (!expedienteId) {
       continue;
     }
-    // Post-filtro por serie documental (no es filtro nativo de Pinecone).
-    const hitNumber = asString(record.document_number);
+    const exp = expById.get(expedienteId);
+    // Serie documental: la del hit (metadata de Pinecone) si la trae, si no la
+    // de Supabase. Los hits de pgvector nunca traen document_number (ese campo
+    // solo vivía en metadata de Pinecone), así que sin este fallback el
+    // post-filtro de abajo quedaba mudo —nunca descartaba nada— al buscar por
+    // esta vía.
+    const hitNumber = asString(record.document_number) ?? exp?.serie_documento ?? null;
+    // Post-filtro por serie documental (no es filtro nativo de Pinecone ni de
+    // la función de pgvector).
     if (input.serieDocumento && hitNumber && !hitNumber.includes(input.serieDocumento)) {
       continue;
     }
-
-    const exp = expById.get(expedienteId);
 
     // Scope "own": solo expedientes subidos por el usuario (verificado en BD).
     if (input.uploadedBy && exp?.uploaded_by !== input.uploadedBy) {
@@ -261,6 +298,8 @@ export type ExpedienteAnswer = {
   sufficient: boolean;
   sources: ExpedienteSearchResult[];
   usage?: LlmUsage;
+  /** Avisos de la verificación de fidelidad de citas (ver checkCitationFaithfulness). */
+  warnings?: string[];
 };
 
 function buildContext(sources: ExpedienteSearchResult[]) {
@@ -286,7 +325,7 @@ function buildContext(sources: ExpedienteSearchResult[]) {
 // archivados. Si no hay fuentes, lo dice; no inventa. Cita con [E#] e indica la
 // ubicación física cuando es relevante ("dónde está").
 export async function answerExpedienteQuestion(
-  input: ExpedienteChatInput & { uploadedBy?: string },
+  input: ExpedienteChatInput & { uploadedBy?: string; accessToken?: string },
 ): Promise<ExpedienteAnswer> {
   const sources = await searchExpedientes({
     query: input.query,
@@ -294,6 +333,7 @@ export async function answerExpedienteQuestion(
     anio: input.anio,
     oficina: input.oficina,
     uploadedBy: input.uploadedBy,
+    accessToken: input.accessToken,
     topK: input.uploadedBy ? 24 : 8,
   });
 
@@ -334,9 +374,27 @@ ${input.query}`,
     temperature: 0.2,
   });
 
+  const answerText =
+    response.output_text.trim() || "No pude generar una respuesta a partir de los expedientes.";
+
+  // Red de seguridad anti-misatribución (mismo verificador que legal-chat.ts,
+  // adaptado al marcador [E#] que usa este chat): si un dato numérico
+  // específico citado con [E#] no consta en el fragmento que cita, se avisa
+  // en vez de dejar la cifra pasar como si estuviera confirmada. No bloquea
+  // la respuesta ni la regenera — solo la marca para que se revise contra el
+  // documento original.
+  const faithfulness = checkCitationFaithfulness(answerText, sources, "E");
+  const warnings = faithfulness.ok
+    ? undefined
+    : [
+        `Verificación de citas: ${faithfulness.issues.length} dato(s) citado(s) (${faithfulness.issues
+          .map((issue) => issue.datum)
+          .slice(0, 3)
+          .join(", ")}) no se hallaron en el fragmento citado; confirma en el documento original.`,
+      ];
+
   return {
-    answer:
-      response.output_text.trim() || "No pude generar una respuesta a partir de los expedientes.",
+    answer: answerText,
     sources,
     sufficient: true,
     usage: {
@@ -344,5 +402,6 @@ ${input.query}`,
       model: legalAnswerModel,
       outputTokens: response.usage?.output_tokens ?? 0,
     },
+    warnings,
   };
 }
