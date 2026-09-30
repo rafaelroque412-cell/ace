@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCapability, requireUser } from "@/lib/auth";
-import { type ProcurementProcess, processCreateSchema } from "@/lib/processes";
+import { objectTypeDeNecesidad, type ProcurementProcess, processCreateSchema } from "@/lib/processes";
 import { construirQueryProcesos } from "@/lib/procesos-query";
 import { FASES, type HitosMap, progresoDeFase } from "@/lib/procurement-fases";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
@@ -78,7 +78,8 @@ export async function POST(request: Request) {
           amount: typeof data.amount === "number" ? data.amount : null,
           entity: data.entity || auth.user.entity || null,
           nomenclature: data.nomenclature,
-          object_type: data.objectType,
+          // El copiloto (Mi Yo) puede interpretar "consultoria_obra".
+          object_type: objectTypeDeNecesidad(data.objectType),
           owner_id: auth.user.id,
           procedure_type: data.procedureType || null,
           summary: data.summary || null,

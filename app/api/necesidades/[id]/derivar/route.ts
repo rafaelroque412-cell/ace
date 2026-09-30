@@ -3,7 +3,7 @@ import { idsDeRutaInvalidos, requireCapability } from "@/lib/auth";
 import { type Necesidad } from "@/lib/necesidades";
 import { COLUMNAS_SEED, EMBED_ITEMS, seedHitosFromNecesidad } from "@/lib/fase1-precarga";
 import { nomenclaturaExpediente } from "@/lib/necesidad-denominacion";
-import type { ProcurementProcess } from "@/lib/processes";
+import { objectTypeDeNecesidad, type ProcurementProcess } from "@/lib/processes";
 import { supabaseUserRest, writeAuditLog } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +97,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       {
         body: JSON.stringify({
           nomenclature,
-          object_type: necesidad.tipo_objeto,
+          object_type: objectTypeDeNecesidad(necesidad.tipo_objeto),
           entity: necesidad.entidad || auth.user.entity || null,
           status: "actuaciones_preparatorias",
           summary: necesidad.summary || null,

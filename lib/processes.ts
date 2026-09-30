@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+/**
+ * La Necesidad distingue "consultoria_obra" (Art. 44 Reglamento); el expediente
+ * (`procurement_processes.object_type`) solo conoce "consultoria"
+ * (CHECK procurement_processes_object_type_check). Sin este mapeo, derivar o
+ * crear un expediente de consultoría de obra rompía el INSERT con un 400.
+ */
+export function objectTypeDeNecesidad(tipoObjeto: string): string {
+  return tipoObjeto === "consultoria_obra" ? "consultoria" : tipoObjeto;
+}
+
 // Tipos y validacion del Expediente (procurement_processes) y sus documentos.
 export type ProcurementProcess = {
   id: string;
