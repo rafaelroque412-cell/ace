@@ -548,10 +548,59 @@ const RECTS_III: readonly RectanguloRelativo[] = [
   { dr1: 7, c1: 3, dr2: 8, c2: 3 }, // valor de la fecha
 ];
 
-// Los 4 bloques de "II. SOLO PARA OBRAS" (Art. 154.1) que quedan por debajo
+// Los 10 bloques de "II. SOLO PARA OBRAS" (Art. 154.1) que quedan por debajo
 // del cronograma/roles. No son un simple rótulo vertical de una columna —cada
 // uno tiene su propia mezcla de sub-merges, distinta de las de q)/r)/t)—, así
 // que cada uno lleva su propia tabla en vez de compartir una genérica.
+//
+// a) Tipo de contrato, b) BIM, d) Ejecución rápida, e) Terreno y h) Estructura
+// de costos (más el título "II." en sí) faltaban aquí: solo c), f), g) e i)
+// tenían tabla. Confirmado en producción con datos reales (expediente con
+// cronograma/roles ampliados, consultoría de obra): a partir de la fila del
+// título "II." —justo donde arranca "a) Tipo de contrato"— las celdas salían
+// desincronizadas (repetidas por columna) en vez de combinadas, exactamente el
+// mismo síntoma que ya se reparaba para c)/f)/g)/i) pero sin reparación propia.
+// Los rangos vienen de leer los merges REALES de
+// lib/plantillas-f1/estrategia-contratacion.xlsx (filas 191-242), no de ojo.
+const RECTS_OBRAS_TITULO: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "II. SOLO PARA OBRAS Y CONSULTORÍA DE OBRAS…"
+];
+const RECTS_OBRAS_TIPO_CONTRATO: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Tipo de contrato" (sub-título)
+  { dr1: 1, c1: 7, dr2: 1, c2: 10 }, // columna derecha en blanco junto a SI/NO
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // "De haber seleccionado SI, elegir el tipo…"
+  { dr1: 3, c1: 2, dr2: 3, c2: 3 }, // "Señalar el tipo de contrato…" (label, B:C)
+  { dr1: 3, c1: 4, dr2: 3, c2: 10 }, // valor/desplegable del tipo de contrato
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // "Sustento de la elección del tipo de contrato:"
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor (obra_a_tipo_contrato)
+  { dr1: 6, c1: 2, dr2: 6, c2: 10 }, // "(*)Uso sujeto a aprobación de pilotos…"
+];
+const RECTS_OBRAS_BIM: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Necesidad de emplear la metodología BIM" (sub-título)
+  { dr1: 1, c1: 2, dr2: 1, c2: 6 }, // pregunta + SI/NO (label, B:F)
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // "Sustento de la necesidad de emplear…"
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: valor (obra_b_bim)
+];
+const RECTS_OBRAS_FAST_TRACK: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Posibilidad de ejecutar la obra mediante…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 1, c2: 6 }, // pregunta + SI/NO (label, B:F)
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // "Sustento para ejecutar la obra mediante…"
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: valor (obra_d_fast_track)
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // "NOTA: Solo se puede usar ejecución rápida…"
+];
+const RECTS_OBRAS_TERRENO: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Sustento de la disponibilidad física del terreno…"
+  { dr1: 1, c1: 2, dr2: 1, c2: 10 }, // "Sustento para la disponibilidad física…"
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // sustento: valor (obra_e_terreno)
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // "NOTA: En el caso de usar el sistema solo…"
+];
+const RECTS_OBRAS_ESTRUCTURA_COSTOS: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Estructura de costos, que puede ser actu…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 1, c2: 6 }, // pregunta + SI/NO (label, B:F)
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // "Sustento de la actualización de la estru…"
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: valor (obra_h_estructura_costos)
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // "NOTA: Este sustento solo se utiliza en e…"
+];
 const RECTS_OBRAS_INCENTIVOS: readonly RectanguloRelativo[] = [
   { dr1: 0, c1: 2, dr2: 1, c2: 3 }, // "Cumplimiento anticipado…" (label, B:C)
   { dr1: 0, c1: 4, dr2: 0, c2: 7 },
@@ -737,9 +786,15 @@ const FILA_PLANTILLA_III = 251;
 // combinados así en la plantilla, y quedan igual de expuestos a la
 // desincronización que los de arriba.
 const BLOQUES_OBRAS: ReadonlyArray<{ fila: number; rects: readonly RectanguloRelativo[] }> = [
+  { fila: 191, rects: RECTS_OBRAS_TITULO },
+  { fila: 192, rects: RECTS_OBRAS_TIPO_CONTRATO },
+  { fila: 200, rects: RECTS_OBRAS_BIM },
   { fila: 206, rects: RECTS_OBRAS_INCENTIVOS },
+  { fila: 213, rects: RECTS_OBRAS_FAST_TRACK },
+  { fila: 219, rects: RECTS_OBRAS_TERRENO },
   { fila: 225, rects: RECTS_OBRAS_LICENCIAS },
   { fila: 233, rects: RECTS_OBRAS_RESPONSABLE },
+  { fila: 238, rects: RECTS_OBRAS_ESTRUCTURA_COSTOS },
   { fila: 245, rects: RECTS_OBRAS_METODOLOGIAS },
 ];
 
