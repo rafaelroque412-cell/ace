@@ -298,6 +298,7 @@ export function NecesidadDetail({
   const [gestionTdrAbierta, setGestionTdrAbierta] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const alertaErrorRef = useRef<HTMLDivElement | null>(null);
 
   // Se incrementa tras cada transición para refrescar el historial (timeline).
   const [histRecarga, setHistRecarga] = useState(0);
@@ -1231,6 +1232,17 @@ export function NecesidadDetail({
     (control ?? contenedor).scrollIntoView({ behavior: "smooth", block: "center" });
   }, [fieldErrors]);
 
+  /**
+   * El aviso de error vive arriba de todo, pero casi todas las acciones que lo
+   * disparan (derivar a expediente, eliminar, completar con IA…) están más
+   * abajo en la ficha. Sin este scroll, el usuario hace clic, ve un loader un
+   * instante y "no pasa nada": el error sí se mostró, solo que fuera de vista.
+   */
+  useEffect(() => {
+    if (!error) return;
+    alertaErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
+
 
 
   // ===== Observaciones por campo (D2) =====
@@ -1735,7 +1747,11 @@ export function NecesidadDetail({
         </div>
       </header>
 
-      {error ? <Alert tone="danger">{error}</Alert> : null}
+      {error ? (
+        <div ref={alertaErrorRef}>
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      ) : null}
 
       {/* Sugerencia de procedimiento por cuantía (topes DSEACE-OECE): referencia
           para el área usuaria; la DEC decide en la estrategia del expediente. */}
