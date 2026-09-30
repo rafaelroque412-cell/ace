@@ -91,26 +91,39 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         data: { ...(hitos.A1?.data ?? {}), procedimiento_pac: payload.procedureType },
       };
     }
-    const [process] = await supabaseUserRest<ProcurementProcess[]>(
-      auth.user.accessToken,
-      "procurement_processes?select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,created_at,updated_at",
-      {
-        body: JSON.stringify({
-          nomenclature,
-          object_type: objectTypeDeNecesidad(necesidad.tipo_objeto),
-          entity: necesidad.entidad || auth.user.entity || null,
-          status: "actuaciones_preparatorias",
-          summary: necesidad.summary || null,
-          moneda: necesidad.moneda || null,
-          formula_reajuste: necesidad.formula_reajuste || null,
-          requisitos_calificacion: necesidad.requisitos_calificacion || null,
-          necesidad_id: necesidad.id,
-          owner_id: auth.user.id,
-          ...(Object.keys(hitos).length > 0 ? { hitos } : {}),
-        }),
-        method: "POST",
-      },
-    );
+    let process: ProcurementProcess;
+    try {
+      [process] = await supabaseUserRest<ProcurementProcess[]>(
+        auth.user.accessToken,
+        "procurement_processes?select=id,nomenclature,object_type,procedure_type,amount,entity,status,summary,created_at,updated_at",
+        {
+          body: JSON.stringify({
+            nomenclature,
+            object_type: objectTypeDeNecesidad(necesidad.tipo_objeto),
+            entity: necesidad.entidad || auth.user.entity || null,
+            status: "actuaciones_preparatorias",
+            summary: necesidad.summary || null,
+            moneda: necesidad.moneda || null,
+            formula_reajuste: necesidad.formula_reajuste || null,
+            requisitos_calificacion: necesidad.requisitos_calificacion || null,
+            necesidad_id: necesidad.id,
+            owner_id: auth.user.id,
+            ...(Object.keys(hitos).length > 0 ? { hitos } : {}),
+          }),
+          method: "POST",
+        },
+      );
+    } catch (err) {
+      // `objectTypeDeNecesidad` solo traduce el caso documentado
+      // ("consultoria_obra" → "consultoria"). Si el tipo_objeto real de esta
+      // necesidad es otra cosa (dato legado, variante con otra grafía), el
+      // CHECK igual revienta y el error de Postgres no dice qué valor fue: se
+      // adjunta aquí para no tener que adivinarlo a ciegas la próxima vez.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `${msg} [tipo_objeto de la necesidad: "${necesidad.tipo_objeto}" → mapeado a "${objectTypeDeNecesidad(necesidad.tipo_objeto)}"]`,
+      );
+    }
 
     await supabaseUserRest(auth.user.accessToken, `necesidades?id=eq.${id}`, {
       body: JSON.stringify({ status: "incorporado_cmn", process_id: process.id }),
