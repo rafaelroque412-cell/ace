@@ -131,6 +131,42 @@ describe("II. Solo para obras: merges tras insertar filas de cronograma/roles", 
     assertFilaCombinadaBJ(ws, fila + 1, "SUSTENTO-ESTRUCTURA-COSTOS-XYZ");
   });
 
+  it("c) Incentivos: el sub-título conserva el formato (regresión: no estaba cubierto ni antes de este fix)", async () => {
+    const ws = await hojaObras();
+    const fila = filaConTexto(ws, "Propuesta de incentivos por beneficios");
+    assertFilaCombinadaBJ(
+      ws,
+      fila,
+      "Propuesta de incentivos por beneficios o mejoras de naturaleza técnica, económica, social, ambiental y de plazo para la entidad contratante y para el proyecto",
+    );
+  });
+
+  it("f) Licencias: el sub-título conserva el formato", async () => {
+    const ws = await hojaObras();
+    const fila = filaConTexto(ws, "Plan para la obtención de las licencias");
+    assertFilaCombinadaBJ(
+      ws,
+      fila,
+      "Plan para la obtención de las licencias, autorizaciones, permisos, servidumbre y similares por parte de la entidad contratante.",
+    );
+  });
+
+  it("g) Responsable del expediente técnico: el sub-título conserva el formato", async () => {
+    const ws = await hojaObras();
+    const fila = filaConTexto(ws, "Determinación del responsable de la elaboración");
+    assertFilaCombinadaBJ(ws, fila, "Determinación del responsable de la elaboración del expediente técnico del adicional de obra.");
+  });
+
+  it("i) Metodologías colaborativas: el sub-título conserva el formato", async () => {
+    const ws = await hojaObras();
+    const fila = filaConTexto(ws, "Metodologías colaborativas que contribuyen");
+    assertFilaCombinadaBJ(
+      ws,
+      fila,
+      "Metodologías colaborativas que contribuyen a la optimización de procesos, sostenibilidad y eficiencia en la ejecución de las obras y/o consultorías de obras.",
+    );
+  });
+
   it("el título 'II. SOLO PARA OBRAS…' sigue combinado B:J", async () => {
     const ws = await hojaObras();
     const fila = filaConTexto(ws, "SOLO PARA OBRAS");

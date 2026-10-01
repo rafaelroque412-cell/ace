@@ -602,33 +602,37 @@ const RECTS_OBRAS_ESTRUCTURA_COSTOS: readonly RectanguloRelativo[] = [
   { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // "NOTA: Este sustento solo se utiliza en e…"
 ];
 const RECTS_OBRAS_INCENTIVOS: readonly RectanguloRelativo[] = [
-  { dr1: 0, c1: 2, dr2: 1, c2: 3 }, // "Cumplimiento anticipado…" (label, B:C)
-  { dr1: 0, c1: 4, dr2: 0, c2: 7 },
-  { dr1: 0, c1: 8, dr2: 3, c2: 10 },
-  { dr1: 2, c1: 2, dr2: 2, c2: 3 },
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Propuesta de incentivos por beneficios…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 2, c2: 3 }, // "Cumplimiento anticipado…" (label, B:C)
+  { dr1: 1, c1: 4, dr2: 1, c2: 7 },
+  { dr1: 1, c1: 8, dr2: 4, c2: 10 },
   { dr1: 3, c1: 2, dr2: 3, c2: 3 },
-  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: rótulo
-  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor
+  { dr1: 4, c1: 2, dr2: 4, c2: 3 },
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: rótulo
+  { dr1: 6, c1: 2, dr2: 6, c2: 10 }, // sustento: valor
 ];
 const RECTS_OBRAS_LICENCIAS: readonly RectanguloRelativo[] = [
-  { dr1: 0, c1: 2, dr2: 3, c2: 6 }, // "…licencias, autorizaciones…" (label, B:F, 4 filas)
-  { dr1: 0, c1: 7, dr2: 0, c2: 10 },
-  { dr1: 2, c1: 7, dr2: 2, c2: 10 },
-  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: rótulo
-  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Plan para la obtención de las licencias…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 4, c2: 6 }, // "…licencias, autorizaciones…" (label, B:F, 4 filas)
+  { dr1: 1, c1: 7, dr2: 1, c2: 10 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 10 },
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: rótulo
+  { dr1: 6, c1: 2, dr2: 6, c2: 10 }, // sustento: valor
 ];
 const RECTS_OBRAS_RESPONSABLE: readonly RectanguloRelativo[] = [
-  { dr1: 0, c1: 2, dr2: 1, c2: 4 }, // "Señalar el responsable:" (label, B:D)
-  { dr1: 0, c1: 5, dr2: 0, c2: 10 },
-  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // sustento: rótulo
-  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: valor
-];
-const RECTS_OBRAS_METODOLOGIAS: readonly RectanguloRelativo[] = [
-  { dr1: 0, c1: 2, dr2: 1, c2: 6 }, // "…metodologías colaborativas…" (label, B:F, 2 filas)
-  { dr1: 0, c1: 7, dr2: 0, c2: 10 },
-  { dr1: 2, c1: 7, dr2: 2, c2: 9 },
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Determinación del responsable de la elaboración…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 2, c2: 4 }, // "Señalar el responsable:" (label, B:D)
+  { dr1: 1, c1: 5, dr2: 1, c2: 10 },
   { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // sustento: rótulo
   { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: valor
+];
+const RECTS_OBRAS_METODOLOGIAS: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // "Metodologías colaborativas que contribuyen…" (sub-título)
+  { dr1: 1, c1: 2, dr2: 2, c2: 6 }, // "…metodologías colaborativas…" (label, B:F, 2 filas)
+  { dr1: 1, c1: 7, dr2: 1, c2: 10 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 },
+  { dr1: 4, c1: 2, dr2: 4, c2: 10 }, // sustento: rótulo
+  { dr1: 5, c1: 2, dr2: 5, c2: 10 }, // sustento: valor
 ];
 
 /**
@@ -789,13 +793,13 @@ const BLOQUES_OBRAS: ReadonlyArray<{ fila: number; rects: readonly RectanguloRel
   { fila: 191, rects: RECTS_OBRAS_TITULO },
   { fila: 192, rects: RECTS_OBRAS_TIPO_CONTRATO },
   { fila: 200, rects: RECTS_OBRAS_BIM },
-  { fila: 206, rects: RECTS_OBRAS_INCENTIVOS },
+  { fila: 205, rects: RECTS_OBRAS_INCENTIVOS },
   { fila: 213, rects: RECTS_OBRAS_FAST_TRACK },
   { fila: 219, rects: RECTS_OBRAS_TERRENO },
-  { fila: 225, rects: RECTS_OBRAS_LICENCIAS },
-  { fila: 233, rects: RECTS_OBRAS_RESPONSABLE },
+  { fila: 224, rects: RECTS_OBRAS_LICENCIAS },
+  { fila: 232, rects: RECTS_OBRAS_RESPONSABLE },
   { fila: 238, rects: RECTS_OBRAS_ESTRUCTURA_COSTOS },
-  { fila: 245, rects: RECTS_OBRAS_METODOLOGIAS },
+  { fila: 244, rects: RECTS_OBRAS_METODOLOGIAS },
 ];
 
 /**
