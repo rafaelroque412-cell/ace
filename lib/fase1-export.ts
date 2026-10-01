@@ -476,6 +476,129 @@ function recombinarBloqueDesdeAncla(ws: ExcelJS.Worksheet, filaAncla: number, re
   }
 }
 
+// Coordenadas de h), i), j), k), l), m) y n), relativas a la fila de su
+// título (dr1=0, esa misma fila). Ver el comentario de
+// `recombinarBloqueDesdeAncla`.
+//
+// Están ENTRE f)/g) (Requisitos/Factores, insertan filas) y o) (Cronograma,
+// inserta más abajo): les llega el desplazamiento de f)/g) pero NO el de o)/p),
+// así que se reparan con su propia aritmética (`corrimiento + corrimientoFactores`
+// en `llenarEstrategia`), separada de la de q)/r)/s)/t)/obras/"III." (que sí
+// cargan con los cuatro). Mismo síntoma confirmado por el usuario en producción
+// que el de la sección de obras: con una tabla de Requisitos de calificación
+// ampliada (más de 2 obligatorios o de 3 facultativos — algo habitual, el
+// Art. 72.4 suele exigir más de dos), estos bloques quedaban sin reparar.
+const RECTS_H: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "h) Modalidad de pago:"
+  { dr1: 1, c1: 2, dr2: 7, c2: 2 }, // label vertical B61:B67
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 }, // "Marcar con una (X)…"
+  { dr1: 2, c1: 3, dr2: 2, c2: 5 },
+  { dr1: 2, c1: 7, dr2: 2, c2: 9 },
+  { dr1: 3, c1: 3, dr2: 3, c2: 5 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 },
+  { dr1: 4, c1: 3, dr2: 4, c2: 5 },
+  { dr1: 4, c1: 7, dr2: 4, c2: 9 },
+  { dr1: 5, c1: 3, dr2: 5, c2: 5 },
+  { dr1: 5, c1: 7, dr2: 5, c2: 9 },
+  { dr1: 6, c1: 3, dr2: 6, c2: 5 },
+  { dr1: 6, c1: 7, dr2: 6, c2: 9 },
+  { dr1: 7, c1: 3, dr2: 7, c2: 5 },
+  { dr1: 7, c1: 7, dr2: 7, c2: 10 },
+  { dr1: 8, c1: 2, dr2: 8, c2: 10 }, // "(*) Nota: Estas modalidades…"
+  { dr1: 9, c1: 2, dr2: 9, c2: 10 }, // sustento: rótulo
+  { dr1: 10, c1: 2, dr2: 10, c2: 10 }, // sustento: valor
+];
+const RECTS_I: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "i) Sistema de entrega:"
+  { dr1: 1, c1: 2, dr2: 4, c2: 2 }, // label vertical, bienes/servicios
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 }, // "Marcar con una (X)…"
+  { dr1: 2, c1: 3, dr2: 2, c2: 5 },
+  { dr1: 2, c1: 7, dr2: 2, c2: 9 },
+  { dr1: 3, c1: 3, dr2: 3, c2: 5 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 },
+  { dr1: 4, c1: 3, dr2: 4, c2: 5 },
+  { dr1: 4, c1: 7, dr2: 4, c2: 9 },
+  { dr1: 5, c1: 2, dr2: 8, c2: 2 }, // label vertical, obras
+  { dr1: 5, c1: 3, dr2: 5, c2: 10 }, // "Marcar con una (X)…"
+  { dr1: 6, c1: 3, dr2: 6, c2: 5 },
+  { dr1: 6, c1: 7, dr2: 6, c2: 9 },
+  { dr1: 7, c1: 3, dr2: 7, c2: 5 },
+  { dr1: 7, c1: 7, dr2: 7, c2: 9 },
+  { dr1: 8, c1: 3, dr2: 8, c2: 5 },
+  { dr1: 8, c1: 7, dr2: 8, c2: 9 },
+  { dr1: 10, c1: 2, dr2: 10, c2: 10 }, // sustento: rótulo
+  { dr1: 11, c1: 2, dr2: 11, c2: 10 }, // sustento: valor
+  { dr1: 12, c1: 2, dr2: 12, c2: 10 }, // "(*)Uso sujeto a implementación progresiva…"
+];
+const RECTS_J: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "j) Puntos no negociables…"
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 }, // valor de los puntos no negociables
+  { dr1: 2, c1: 3, dr2: 2, c2: 10 }, // sustento
+  { dr1: 3, c1: 2, dr2: 3, c2: 10 }, // "(*) Esta variable se analiza…"
+];
+const RECTS_K: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "k) Fuente de financiamiento…"
+  { dr1: 1, c1: 2, dr2: 4, c2: 2 }, // label vertical
+  { dr1: 1, c1: 3, dr2: 1, c2: 10 }, // "Marcar con una (X)…"
+  { dr1: 2, c1: 3, dr2: 2, c2: 5 },
+  { dr1: 2, c1: 7, dr2: 2, c2: 9 },
+  { dr1: 3, c1: 3, dr2: 3, c2: 5 },
+  { dr1: 3, c1: 7, dr2: 3, c2: 9 },
+  { dr1: 4, c1: 3, dr2: 4, c2: 5 },
+  { dr1: 4, c1: 7, dr2: 4, c2: 9 },
+  { dr1: 5, c1: 2, dr2: 5, c2: 4 }, // "Señalar si la cuantía…" (label, B:D)
+  { dr1: 5, c1: 9, dr2: 5, c2: 10 }, // columna derecha en blanco
+  { dr1: 6, c1: 2, dr2: 6, c2: 10 }, // sustento: rótulo
+  { dr1: 7, c1: 2, dr2: 7, c2: 10 }, // sustento: valor
+];
+const RECTS_L: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "l) Garantías y adelantos:"
+  { dr1: 1, c1: 2, dr2: 2, c2: 4 }, // "…fiel cumplimiento conforme a la normativa:" (B:D)
+  { dr1: 1, c1: 5, dr2: 1, c2: 8 }, // "Marcar con una (X)…"
+  { dr1: 1, c1: 9, dr2: 6, c2: 10 }, // columna derecha en blanco (abarca las 3 preguntas)
+  { dr1: 3, c1: 2, dr2: 4, c2: 4 }, // "…fiel cumplimiento por prestaciones accesorias:"
+  { dr1: 3, c1: 5, dr2: 3, c2: 8 }, // "Marcar con una (X)…"
+  { dr1: 5, c1: 2, dr2: 6, c2: 4 }, // "…garantía por adelantos directos:"
+  { dr1: 5, c1: 5, dr2: 5, c2: 8 }, // "Marcar con una (X)…"
+  { dr1: 7, c1: 2, dr2: 7, c2: 3 }, // "Seleccionar el tipo de adelanto:"
+  { dr1: 7, c1: 5, dr2: 7, c2: 8 }, // "Mecanismo de garantía a utilizar:"
+  { dr1: 7, c1: 9, dr2: 7, c2: 10 }, // "Ingresar el porcentaje del adelanto:"
+  { dr1: 8, c1: 2, dr2: 8, c2: 3 }, // "Adelanto directo:"
+  { dr1: 8, c1: 5, dr2: 8, c2: 8 },
+  { dr1: 8, c1: 9, dr2: 8, c2: 10 },
+  { dr1: 9, c1: 2, dr2: 9, c2: 3 }, // "Adelanto para materiales…"
+  { dr1: 9, c1: 5, dr2: 9, c2: 8 },
+  { dr1: 9, c1: 9, dr2: 9, c2: 10 },
+  { dr1: 10, c1: 2, dr2: 10, c2: 3 }, // "Adelanto por avance(*):"
+  { dr1: 10, c1: 5, dr2: 10, c2: 8 },
+  { dr1: 10, c1: 9, dr2: 10, c2: 10 },
+  { dr1: 11, c1: 2, dr2: 11, c2: 10 }, // sustento: rótulo
+  { dr1: 12, c1: 2, dr2: 12, c2: 10 }, // sustento: valor
+  { dr1: 13, c1: 2, dr2: 13, c2: 10 }, // "(*) Solo se utilizan en el caso de ejecución de obras…"
+];
+const RECTS_M: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "m) Análisis del consumo histórico…"
+  { dr1: 1, c1: 2, dr2: 1, c2: 4 }, // "Señalar si se contrató anteriormente…" (B:D)
+  { dr1: 1, c1: 9, dr2: 1, c2: 10 }, // columna derecha en blanco
+  { dr1: 2, c1: 2, dr2: 2, c2: 10 }, // sustento: valor
+];
+const RECTS_N: readonly RectanguloRelativo[] = [
+  { dr1: 0, c1: 2, dr2: 0, c2: 10 }, // título "n) Verificación del tipo de interacción…"
+  { dr1: 1, c1: 2, dr2: 7, c2: 2 }, // label vertical B120:B126
+  { dr1: 1, c1: 5, dr2: 1, c2: 6 }, // "Tipo de interacción mínimo…"
+  { dr1: 1, c1: 7, dr2: 1, c2: 10 }, // "Registrar la interacción que corresponda…"
+  { dr1: 2, c1: 5, dr2: 2, c2: 6 }, // "Indagación básica"
+  { dr1: 2, c1: 7, dr2: 7, c2: 10 }, // valor (G121, escrito en `llenarEstrategia`)
+  { dr1: 3, c1: 5, dr2: 3, c2: 6 },
+  { dr1: 4, c1: 5, dr2: 4, c2: 6 },
+  { dr1: 5, c1: 5, dr2: 5, c2: 6 },
+  { dr1: 6, c1: 5, dr2: 6, c2: 6 },
+  { dr1: 7, c1: 5, dr2: 7, c2: 6 },
+  { dr1: 8, c1: 2, dr2: 8, c2: 10 }, // "NOTA: La interacción con el mercado…"
+  { dr1: 9, c1: 2, dr2: 9, c2: 10 }, // sustento: rótulo
+  { dr1: 10, c1: 2, dr2: 10, c2: 10 }, // sustento: valor
+];
+
 // Coordenadas de q), r), s), t) y III), relativas a la fila de su título
 // (dr1=0, esa misma fila). Ver el comentario de `recombinarBloqueDesdeAncla`.
 const RECTS_Q: readonly RectanguloRelativo[] = [
@@ -780,6 +903,25 @@ function volcarCronogramaYRoles(ws: ExcelJS.Worksheet, a4: Record<string, unknow
 
 // Fila de cada título/bloque EN LA PLANTILLA EN BLANCO (sin ninguna
 // inserción todavía) — ver el comentario de `recombinarBloqueDesdeAncla`.
+//
+// h) a n) van ANTES del cronograma: solo cargan con el desplazamiento de f)/g)
+// (ver `BLOQUES_FG` y su uso en `llenarEstrategia`), no con el de o)/p).
+const FILA_PLANTILLA_H = 60;
+const FILA_PLANTILLA_I = 72;
+const FILA_PLANTILLA_J = 86;
+const FILA_PLANTILLA_K = 91;
+const FILA_PLANTILLA_L = 100;
+const FILA_PLANTILLA_M = 115;
+const FILA_PLANTILLA_N = 119;
+const BLOQUES_FG: ReadonlyArray<{ fila: number; rects: readonly RectanguloRelativo[] }> = [
+  { fila: FILA_PLANTILLA_H, rects: RECTS_H },
+  { fila: FILA_PLANTILLA_I, rects: RECTS_I },
+  { fila: FILA_PLANTILLA_J, rects: RECTS_J },
+  { fila: FILA_PLANTILLA_K, rects: RECTS_K },
+  { fila: FILA_PLANTILLA_L, rects: RECTS_L },
+  { fila: FILA_PLANTILLA_M, rects: RECTS_M },
+  { fila: FILA_PLANTILLA_N, rects: RECTS_N },
+];
 const FILA_PLANTILLA_Q = 150;
 const FILA_PLANTILLA_R = 158;
 const FILA_PLANTILLA_S = 165;
@@ -1539,6 +1681,18 @@ function llenarEstrategia(
     precalif,
   );
   const corrimientoFactores = volcarFactores(ws, a4, corrimiento);
+
+  // h) a n) están ENTRE f)/g) y el cronograma: cargan con el desplazamiento de
+  // f)/g) (`corrimiento + corrimientoFactores`), pero NO con el de o)/p) —esos
+  // insertan más abajo y no mueven nada por encima de sí mismos—. Confirmado
+  // por el usuario en producción con la Tabla de requisitos de calificación
+  // ampliada (Art. 72.4 suele exigir más de los 2 obligatorios / 3 facultativos
+  // que trae la plantilla en blanco): sin esta reparación, estos 7 bloques
+  // quedaban con el mismo síntoma que la sección de obras.
+  const desplazamientoFG = corrimiento + corrimientoFactores;
+  for (const { fila: filaFg, rects } of BLOQUES_FG) {
+    recombinarBloqueDesdeAncla(ws, filaFg + desplazamientoFG, rects);
+  }
 
   // p) roles, el cronograma de EJECUCIÓN y su NOTA: por texto (localizan bien
   // incluso con varias inserciones encima, comprobado con datos reales). q),
